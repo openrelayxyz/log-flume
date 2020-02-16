@@ -27,7 +27,7 @@ Parameters:
   S3ECBucketName:
     Default: ethercattle-binaries
     Type: String
-    Description: The bucket containing EtherCattle Binaries
+    Description: The bucket containing Flume Binaries
   InfrastructureStack:
     Type: String
     Description: The infrastructure stack this cluster connects to
@@ -504,7 +504,7 @@ Resources:
 
                 aws s3 cp s3://flume-stage-db/flumeserver /usr/bin/flumeserver
                 chmod +x /usr/bin/flumeserver
-                aws s3 cp s3://flume-stage-db/mainnet/logs-9445076.sqlite.lz4 - | lz4  -d - /var/lib/flume/item.sqlite
+                aws s3 cp s3://flume-stage-db/mainnet/logs-20200216.sqlite.lz4 - | lz4  -d - /var/lib/flume/item.sqlite
                 /usr/bin/flumeserver /var/lib/flume/item.sqlite &
                 sleep 300
                 aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp2 &
@@ -639,7 +639,7 @@ Resources:
 
                 # aws s3 cp s3://flume-stage-db/flumeserver /usr/bin/flumeserver
                 # chmod +x /usr/bin/flumeserver
-                # aws s3 cp s3://flume-stage-db/mainnet/logs-9445076.sqlite.lz4 - | lz4  -d - /var/lib/flume/item.sqlite
+                # aws s3 cp s3://flume-stage-db/mainnet/logs-20200216.sqlite.lz4 - | lz4  -d - /var/lib/flume/item.sqlite
                 # /usr/bin/flumeserver /var/lib/flume/item.sqlite &
 
                 # if ! /usr/bin/flumeserver /var/lib/flume/item.sqlite
