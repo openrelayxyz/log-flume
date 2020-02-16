@@ -1,0 +1,1086 @@
+Description: A master and pool of replicas for Ether Cattle
+
+Parameters:
+  DiskSize:
+    Default: '250'
+    Description: Size of each node's chaindata storage volume in GiB
+    MaxValue: '1024'
+    MinValue: '8'
+    Type: Number
+  FlumeImageAMI:
+    Default: ""
+    Description: Custom AMI to use for the replica servers, empty string for default AWS AMI image
+    Type: String
+  FlumeDiskType:
+    AllowedValues:
+    - standard
+    - gp2
+    - st1
+    - sc1
+    Default: gp2
+    Description: Flume storage volume type
+    Type: String
+  S3FlumeBucketName:
+    Default: flume-stage-db
+    Type: String
+    Description: The bucket containing Flume Binaries
+  S3ECBucketName:
+    Default: ethercattle-binaries
+    Type: String
+    Description: The bucket containing EtherCattle Binaries
+  InfrastructureStack:
+    Type: String
+    Description: The infrastructure stack this cluster connects to
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: The name of the SSH key pair allowed to SSH into the nodes
+  NetworkId:
+    Type: String
+    Description: An identifier for the network this cluster represents. This should be common across all clusters representing the same network.
+  SnapshotId:
+    Type: String
+    Description: A snapshot of the Ethereum folder with a synced blockchain
+  FlumeExtraFlags:
+    Type: String
+    Description: Extra flags for the Geth replica (mainly for running other than mainnet)
+  FlumeTargetCapacity:
+    Type: Number
+    Default: 2
+    Description: Minimum number of instances for replicas
+  FlumeMaxCapacity:
+    Type: Number
+    Default: 5
+    Description: Maximum number of instances for replicas
+  FlumeOnDemandPercentage:
+    Type: Number
+    Default: 0
+    Description: The percentage (0 - 100) of replica that should be on-demand instead of spot instances.
+  FlumeCPUScalingTargetValue:
+    Type: Number
+    Default: 80
+    Description: The percentage (0 - 100) CPU utilization target for auto scaling replicas
+  FlumeSize:
+    Type: String
+    Description: Whether to use full size replicas or smaller ones. "full" will use a pool of large instances from the m5d, m5ad, r5d, and r5ad families. "small" will use a pool of medium instances from the t3 and t3a families. Use "small" if you expect a small request volume.
+    AllowedValues:
+      - full
+      - small
+    Default: full
+  AlternateTargetGroup:
+    Type: String
+    Description: An alternative comma-separated list of target groups that replicas should be assigned to.
+  NotificationEmail:
+    Type: String
+    Description: An optional e-mail address to receive notifications from alarms
+  AlarmSNSTopic:
+    Type: String
+    Description: An optional SNS topic to receive notifications from alarms
+  FlumeExtraSecurityGroup:
+    Type: String
+    Description: An additional security to be assigned to Flumes. Leave this blank unless you need to add additional connectivity rules.
+  SnapshotScheduleExpression:
+    Type: String
+    Description: A schedule expression for the frequency to take snapshots
+    Default: "cron(55 0/6 * * ? *)"
+
+
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Infrastructure
+        Parameters:
+          - InfrastructureStack
+          - AlternateTargetGroup
+          - AlarmSNSTopic
+          - NotificationEmail
+          - KeyName
+          - SnapshotScheduleExpression
+      - Label:
+          default: Cluster
+        Parameters:
+          - NetworkId
+          - S3FlumeBucketName
+          - SnapshotId
+      - Label:
+          default: Flume
+        Parameters:
+          - DiskSize
+          - FlumeSize
+          - FlumeImageAMI
+          - FlumeExtraFlags
+          - FlumeDiskType
+          - FlumeTargetCapacity
+          - FlumeMaxCapacity
+          - FlumeOnDemandPercentage
+          - SnapshotValidationThreshold
+          - FlumeExtraSecurityGroup
+      - Label:
+          default: Fallback
+        Parameters:
+          - FallbackTargetCapacity
+          - FallbackMaxCapacity
+    ParameterLabels:
+      DiskSize:
+        default: Disk Size
+      FlumeImageAMI:
+        default: Flume AMI Image
+      FlumeDiskType:
+        default: Disk Type
+      S3FlumeBucketName:
+        default: S3 Geth Bucket
+
+      InfrastructureStack:
+        default: Infrastructure CloudFormation Stack
+      KeyName:
+        default: SSH Key Pair
+      NetworkId:
+        default: Unique Network ID
+      SnapshotId:
+        default: Chaindata Snapshot ID
+      FlumeExtraFlags:
+        default: Extra Geth Flags
+      FlumeTargetCapacity:
+        default: Target Capacity
+      FlumeOnDemandPercentage:
+        default: On-Demand Percentage
+      FlumeExtraSecurityGroup:
+        default: Flume Extra Security Group
+      AlternateTargetGroup:
+        default: Alternate Target Group
+      NotificationEmail:
+        default: Notification Email Address
+      AlarmSNSTopic:
+        default: SNS Topic for Alarms
+      SnapshotValidationThreshold:
+        default: Snapshot Validation Threshold
+      SnapshotScheduleExpression:
+        default: Snapshot Schedule Expression
+
+Mappings:
+  InstanceSizes:
+    Flume:
+      full:
+        - InstanceType: m5ad.xlarge
+        - InstanceType: m5d.xlarge
+        - InstanceType: r5d.xlarge
+        - InstanceType: r5ad.xlarge
+        # - InstanceType: c5d.xlarge
+        # - InstanceType: c5ad.2xlarge
+      small:
+        - InstanceType: t3.medium
+        - InstanceType: t3a.medium
+  PoolSize:
+    Size:
+      full: 11
+      small: 6
+  RegionMap:
+    us-west-1:
+      AL2AMI: ami-056ee704806822732
+    eu-central-1:
+      AL2AMI: ami-0cc293023f983ed53
+    cn-north-1:
+      AL2AMI: ami-0cad3dea07a7c36f9
+    us-east-1:
+      AL2AMI: ami-0b898040803850657
+    ap-northeast-2:
+      AL2AMI: ami-095ca789e0549777d
+    us-gov-west1:
+      AL2AMI:  ami-6b157f0a
+    sa-east-1:
+      AL2AMI: ami-058943e7d9b9cabfb
+    ap-northeast-3:
+      AL2AMI: ami-088d713d672ed235e
+    ap-northeast-1:
+      AL2AMI: ami-0c3fd0f5d33134a76
+    ap-southeast-1:
+      AL2AMI: ami-01f7527546b557442
+    us-east-2:
+      AL2AMI: ami-0d8f6eb4f641ef691
+    ap-southeast-2:
+      AL2AMI: ami-0dc96254d5535925f
+    cn-northwest-1:
+      AL2AMI: ami-094b7433620966eb5
+    eu-west-1:
+      AL2AMI: ami-0bbc25e23a7640b9b
+    eu-north-1:
+      AL2AMI: ami-d16fe6af
+    us-gov-east1:
+      AL2AMI: ami-1208ee63
+    ap-south-1:
+      AL2AMI: ami-0d2692b6acea72ee6
+    eu-west-3:
+      AL2AMI: ami-0adcddd3324248c4c
+    eu-west-2:
+      AL2AMI: ami-0d8e27447ec2c8410
+    ca-central-1:
+      AL2AMI: ami-0d4ae09ec9361d8ac
+    us-west-2:
+      AL2AMI: ami-082b5a644766e0e6f
+
+Conditions:
+  HasKeyName: !Not [!Equals [!Ref KeyName, '']]
+  HasATG: !Not [!Equals [!Ref AlternateTargetGroup, '']]
+  FlumeHDD: !Or [!Equals [ !Ref FlumeDiskType, "st1"], !Equals [ !Ref FlumeDiskType, "sc1"]]
+  SmallDisk: !Or [
+      !Equals [ !Ref DiskSize, "75" ],
+      !Equals [ !Ref DiskSize, "200" ],
+      !Equals [ !Ref DiskSize, "250" ],
+      !Equals [ !Ref DiskSize, "300" ],
+      !Equals [ !Ref DiskSize, "350" ],
+      !Equals [ !Ref DiskSize, "400" ],
+      !Equals [ !Ref DiskSize, "450" ],
+    ]
+  HasNotificationEmail: !Not [!Equals [ !Ref NotificationEmail, "" ]]
+  HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
+  HasFlumeImageAMI: !Not [!Equals [ !Ref FlumeImageAMI, "" ]]
+  HasExtraSecurityGroup: !Not [!Equals [ !Ref FlumeExtraSecurityGroup, "" ]]
+  SmallFlume: !Equals [ !Ref FlumeSize, "small"]
+
+Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal: {Service: [lambda.amazonaws.com]}
+          Action: ['sts:AssumeRole']
+      Path: "/"
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+  MulMin:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: !Sub |
+          var response = require('./cfn-response');
+          exports.handler = function(event, context) {
+            var result = parseInt(event.ResourceProperties.Op1) * parseInt(event.ResourceProperties.Op2);
+            if(event.ResourceProperties.Max) {
+              result = Math.min(result, parseInt(event.ResourceProperties.Max));
+            }
+            response.send(event, context, response.SUCCESS, {Value: result});
+          };
+      Runtime: nodejs12.x
+  Max:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: !Sub |
+          var response = require('./cfn-response');
+          exports.handler = function(event, context) {
+            var result = Math.max(parseInt(event.ResourceProperties.Op1), parseInt(event.ResourceProperties.Op2));
+            response.send(event, context, response.SUCCESS, {Value: result});
+          };
+      Runtime: nodejs12.x
+  HDDSize:
+    Type: Custom::Max
+    Properties:
+      ServiceToken: !GetAtt Max.Arn
+      Op1: !Ref DiskSize
+      Op2: 500
+  VolumeIOPS:
+    Type: Custom::MulMin
+    Properties:
+      ServiceToken: !GetAtt MulMin.Arn
+      Op1: !Ref DiskSize
+      Op2: 50
+      Max: 5000
+
+  AggregatedNotifications:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Aggregated Notifications
+  AggregatedNotificationsSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasNotificationEmail
+    Properties:
+      Endpoint: !Ref NotificationEmail
+      Protocol: email
+      TopicArn: !Ref AggregatedNotifications
+  FlumeCPUSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Master Disk
+  FlumesCPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref FlumeCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Alarms when the replica CPU > 80%"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value : !Ref FlumeAutoScalingGroup
+      InsufficientDataActions:
+        - !Ref FlumeCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 10
+      DatapointsToAlarm: 7
+      MetricName: "CPUUtilization"
+      Namespace: AWS/EC2
+      OKActions:
+        - !Ref FlumeCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Period: 60
+      Statistic: Maximum
+      Threshold: 80
+      TreatMissingData: missing
+
+  FlumeLG:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 7
+      LogGroupName:
+        "Fn::Sub":
+          - "/${ClusterId}/${AWS::StackName}/replica"
+          - ClusterId:
+              "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+  FlumeNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow internal SSH access and VPC access to RPC
+      VpcId:
+        "Fn::ImportValue": !Sub "${InfrastructureStack}-VpcId"
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '22'
+        ToPort: '22'
+        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
+      - IpProtocol: tcp
+        FromPort: '8000'
+        ToPort: '8000'
+        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
+  FlumeNodeRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+            - autoscaling.amazonaws.com
+        Version: '2012-10-17'
+  FlumeNodePolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref FlumeNodeRole
+      PolicyName: !Sub "FlumeNode${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - logs:CreateLogStream
+              - logs:CreateLogGroup
+              - logs:PutLogEvents
+            Effect: Allow
+            Resource: "*"
+            Sid: Stmt3
+          - Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
+            Resource: !Sub arn:aws:s3:::${S3FlumeBucketName}/*
+            Effect: Allow
+          - Action:
+              - cloudwatch:PutMetricData
+              - ec2:DescribeTags
+              - logs:PutLogEvents
+              - logs:DescribeLogStreams
+              - logs:DescribeLogGroups
+              - logs:CreateLogStream
+              - logs:CreateLogGroup
+            Resource: "*"
+            Effect: Allow
+          # - Action: TODO
+          #     - ssm:GetParameter
+          #   Resource: !Sub "arn:aws:ssm:*:*:parameter/${MetricsConfigParameter}"
+          #   Effect: Allow
+          - Action:
+              - ec2:ModifyVolume
+              - ec2:DescribeVolumes
+            Effect: Allow
+            Resource: "*"
+  FlumeNodeInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: /
+      Roles:
+      - !Ref FlumeNodeRole
+    DependsOn: FlumeNodeRole
+  FlumeLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        ImageId: !If [HasFlumeImageAMI, !Ref FlumeImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
+        InstanceType: m5ad.large
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub "${AWS::StackName}-Flume"
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub "${AWS::StackName}-Flume"
+        SecurityGroupIds:
+          - !Sub ${FlumeNodeSecurityGroup.GroupId}
+          - !If [HasExtraSecurityGroup, !Ref FlumeExtraSecurityGroup, !Ref 'AWS::NoValue']
+        IamInstanceProfile:
+          Name: !Ref FlumeNodeInstanceProfile
+        KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
+        CreditSpecification: !If [SmallFlume, {CpuCredits: standard}, !Ref 'AWS::NoValue']
+        BlockDeviceMappings:
+        - DeviceName: "/dev/xvda"
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp2
+        - DeviceName: "/dev/sdf"
+          Ebs:
+            VolumeSize: !If [FlumeHDD, !GetAtt HDDSize.Value, !Ref DiskSize]
+            VolumeType: !If [FlumeHDD, !Ref FlumeDiskType, "io1"]
+            Iops: !If [FlumeHDD, !Ref 'AWS::NoValue', !GetAtt VolumeIOPS.Value ]
+            # SnapshotId: !Ref SnapshotId
+        - !If [ SmallFlume, {DeviceName: "/dev/sdg", Ebs: {VolumeSize: 25, VolumeType: gp2}}, !Ref 'AWS::NoValue']
+        UserData:
+          "Fn::Base64":
+            "Fn::Sub":
+              - |
+                #!/bin/bash -xe
+                if [ "$(arch)" == "x86_64" ]
+                then
+                  ARCH="amd64"
+                elif [ "$(arch)" == "aarch64" ]
+                then
+                  ARCH="arm64"
+                fi
+                LOGS_BIN="journald-cloudwatch-logs-$ARCH"
+                # chmod +x /usr/local/bin/journald-cloudwatch-logs TODO
+                # mkdir -p /var/lib/journald-cloudwatch-logs/
+                mkfs.ext4 /dev/sdf
+                mkdir -p /var/lib/flume
+                mount -o barrier=0,data=writeback /dev/sdf /var/lib/flume
+                mkdir -p /var/lib/flume/overlay
+                # resize2fs /dev/sdf
+
+                echo "/dev/sdf  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+
+                if [ -e /dev/sdg ]
+                then
+                  mkfs.ext4 /dev/sdg
+                  mount -o barrier=0,data=writeback /dev/sdg /var/lib/flume/overlay
+                  echo "/dev/sdg  /var/lib/flume/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                  OVERLAY_FLAG="--datadir.overlay=/var/lib/flume/overlay"
+                fi
+                ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
+                cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
+                devices="$(ls /dev/nvme* | grep -E 'n1$')"
+                cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
+                localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
+                if [ ! -z "$localnvme" ]
+                then
+                  mkfs.ext4 $localnvme
+                  mount -o barrier=0,data=writeback $localnvme /var/lib/flume/overlay
+                  echo "$localnvme  /var/lib/flume/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                  OVERLAY_FLAG="--datadir.overlay=/var/lib/flume/overlay"
+                fi
+
+                aws s3 cp s3://flume-stage-db/flumeserver /usr/bin/flumeserver
+                chmod +x /usr/bin/flumeserver
+                aws s3 cp s3://flume-stage-db/mainnet/logs-9445076.sqlite.lz4 - | lz4  -d - /var/lib/flume/item.sqlite
+                /usr/bin/flumeserver /var/lib/flume/item.sqlite &
+                sleep 300
+                aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp2 &
+              - ClusterId:
+                  "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                BaseInfrastructure:
+                  "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+  FlumeAutoScalingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      # AdjustmentType: String
+      AutoScalingGroupName: !Ref FlumeAutoScalingGroup
+      # Cooldown: 900
+      EstimatedInstanceWarmup: 600
+      # MetricAggregationType: String
+      # MinAdjustmentMagnitude: Integer
+      PolicyType: TargetTrackingScaling
+      # ScalingAdjustment: Integer
+      # StepAdjustments:
+      #   - StepAdjustment
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: !Ref FlumeCPUScalingTargetValue
+  FlumeAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+        - "Fn::ImportValue":
+            !Sub "${InfrastructureStack}-PublicA"
+        - "Fn::ImportValue":
+            !Sub "${InfrastructureStack}-PublicB"
+        - "Fn::ImportValue":
+            !Sub "${InfrastructureStack}-PublicC"
+      MixedInstancesPolicy:
+        InstancesDistribution:
+          OnDemandPercentageAboveBaseCapacity: !Ref FlumeOnDemandPercentage
+          SpotInstancePools: !FindInMap [PoolSize, Size, !Ref FlumeSize]
+        LaunchTemplate:
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref FlumeLaunchTemplate
+            Version: !Sub ${FlumeLaunchTemplate.LatestVersionNumber}
+          Overrides: !FindInMap [InstanceSizes, Flume, !Ref FlumeSize]
+      MinSize: !Ref FlumeTargetCapacity
+      MaxSize: !Ref FlumeMaxCapacity
+      HealthCheckType: EC2
+      TargetGroupARNs: !Split [ ",", !If [HasATG, !Ref AlternateTargetGroup, {"Fn::ImportValue": !Sub "${InfrastructureStack}-ALBGroupList"}]]
+      MetricsCollection:
+      - Granularity: 1Minute
+        Metrics:
+        - GroupInServiceInstances
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-Flume
+        PropagateAtLaunch: 'true'
+  FlumeSnapshotLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        ImageId: !If [HasFlumeImageAMI, !Ref FlumeImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
+        InstanceType: m5a.large
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub "${AWS::StackName}-FlumeSnapshot"
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub "${AWS::StackName}-FlumeSnapshot"
+        SecurityGroupIds:
+          - !Sub ${FlumeNodeSecurityGroup.GroupId}
+        IamInstanceProfile:
+          Name: !Ref FlumeSnapshotNodeInstanceProfile
+        KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
+        # CreditSpecification:
+        #   CpuCredits: standard
+        InstanceInitiatedShutdownBehavior: terminate
+        BlockDeviceMappings:
+        - DeviceName: "/dev/xvda"
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp2
+        - DeviceName: "/dev/sdf"
+          Ebs:
+            VolumeSize: !Ref DiskSize
+            VolumeType: io1
+            Iops: !GetAtt VolumeIOPS.Value
+            # SnapshotId: !Ref SnapshotId
+        UserData:
+          "Fn::Base64":
+            "Fn::Sub":
+              - |
+                #!/bin/bash -xe
+                if [ "$(arch)" == "x86_64" ]
+                then
+                  ARCH="amd64"
+                elif [ "$(arch)" == "aarch64" ]
+                then
+                  ARCH="arm64"
+                fi
+                LOGS_BIN="journald-cloudwatch-logs-$ARCH"
+                # chmod +x /usr/local/bin/journald-cloudwatch-logs TODO
+                # mkdir -p /var/lib/journald-cloudwatch-logs/
+                mkfs.ext4 /dev/sdf
+                mkdir -p /var/lib/flume
+                mount -o barrier=0,data=writeback /dev/sdf /var/lib/flume
+                mkdir -p /var/lib/flume/overlay
+                # resize2fs /dev/sdf
+
+                echo "/dev/sdf  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+
+                if [ -e /dev/sdg ]
+                then
+                  mkfs.ext4 /dev/sdg
+                  mount -o barrier=0,data=writeback /dev/sdg /var/lib/flume/overlay
+                  echo "/dev/sdg  /var/lib/flume/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                  OVERLAY_FLAG="--datadir.overlay=/var/lib/flume/overlay"
+                fi
+                ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
+                cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
+                devices="$(ls /dev/nvme* | grep -E 'n1$')"
+                cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
+                localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
+                if [ ! -z "$localnvme" ]
+                then
+                  mkfs.ext4 $localnvme
+                  mount -o barrier=0,data=writeback $localnvme /var/lib/flume/overlay
+                  echo "$localnvme  /var/lib/flume/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                  OVERLAY_FLAG="--datadir.overlay=/var/lib/flume/overlay"
+                fi
+
+                # aws s3 cp s3://flume-stage-db/flumeserver /usr/bin/flumeserver
+                # chmod +x /usr/bin/flumeserver
+                # aws s3 cp s3://flume-stage-db/mainnet/logs-9445076.sqlite.lz4 - | lz4  -d - /var/lib/flume/item.sqlite
+                # /usr/bin/flumeserver /var/lib/flume/item.sqlite &
+
+                # if ! /usr/bin/flumeserver /var/lib/flume/item.sqlite
+                # then
+                #   if [ "${AggregatedNotifications}" != "" ]
+                #   then
+                #     aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. This is probably unrecoverable, and you will need to deploy a new cluster from your last good snapshot (probably '${SnapshotId}')"
+                #   fi
+                #   if [ "${AlarmSNSTopic}" != "" ]
+                #   then
+                #     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. This is probably unrecoverable, and you will need to deploy a new cluster from your last good snapshot (probably '${SnapshotId}')"
+                #   fi
+                #   exit poweroff
+                # fi
+                # VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
+
+                # if [ "$VOLUME_ID" == "" ]
+                # then
+                #   if [ "${AggregatedNotifications}" != "" ]
+                #   then
+                #     aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Volume Identification Failed" --message="The snapshotting process for ${AWS::StackName} failed to identify the attached volume. Could not take a snapshot."
+                #   fi
+                #   if [ "${AlarmSNSTopic}" != "" ]
+                #   then
+                #     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Volume Identification Failed" --message="The snapshotting process for ${AWS::StackName} failed to identify the attached volume. Could not take a snapshot."
+                #   fi
+                #   exit poweroff
+                # fi
+
+                # SNAPSHOT_ID=`aws ec2 create-snapshot --volume-id $VOLUME_ID --tag-specification="ResourceType=snapshot,Tags=[{Key=cluster,Value=${AWS::StackName}},{Key=Name,Value=${AWS::StackName}-chaindata-$(date -Isecond -u)}]" | jq '.SnapshotId' -cr`
+
+                # if [ "$SNAPSHOT_ID" == "null" ]; then
+                #   if [ "${AggregatedNotifications}" != "" ]
+                #   then
+                #     aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${AWS::StackName} failed to take a snapshot."
+                #   fi
+                #   if [ "${AlarmSNSTopic}" != "" ]
+                #   then
+                #     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${AWS::StackName} failed to take a snapshot."
+                #   fi
+                #   exit poweroff
+                # fi
+                # echo "Waiting for snapshot to complete"
+                # while [ `aws ec2 describe-snapshots --filters=Name=snapshot-id,Values=$SNAPSHOT_ID | jq '.Snapshots[0].State' -cr` != "completed" ];
+                # do
+                #     sleep 10
+                # done
+
+                # # CFN will set any parameters we don't provide back to their default values,
+                # # so get all of the parameters, update SnapshotID, and update the stack with
+                # # the new parameters.
+                # PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end)' -c)
+                # aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS"
+
+                poweroff
+              - ClusterId:
+                  "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+
+  FlumeSnapshotNodeRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+            - autoscaling.amazonaws.com
+        Version: '2012-10-17'
+  FlumeSnapshotNodePolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref FlumeSnapshotNodeRole
+      PolicyName: !Sub "FlumeSnapshotNode${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - s3:GetObject
+            Resource: !Sub arn:aws:s3:::${S3FlumeBucketName}/*
+            Effect: Allow
+          - Action:
+              - cloudformation:UpdateStack
+            Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*"
+            Effect: Allow
+          - Action:
+              - iam:GetInstanceProfile
+            Resource:
+              - !Sub ${FlumeNodeInstanceProfile.Arn}
+              - !Sub ${FlumeSnapshotNodeInstanceProfile.Arn}
+            Effect: Allow
+          - Action:
+              - lambda:UpdateFunctionConfiguration
+              - lambda:GetFunctionConfiguration
+            Resource:
+              - !Sub ${FlumeSnapshotLambdaFunction.Arn}
+            Effect: Allow
+          - Action:
+              - iam:PassRole
+              - iam:GetRole
+              - iam:PutRolePolicy
+            Resource:
+              - !Sub "${FlumeNodeRole.Arn}"
+              - !Sub "${FlumeSnapshotLambdaRole.Arn}"
+              - !Sub "${FlumeSnapshotNodeRole.Arn}"
+            Effect: Allow
+          - Action:
+              - sns:Publish
+            Resource:
+              - !Ref AggregatedNotifications
+              - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+            Effect: Allow
+          - Action:
+              - autoscaling:EnableMetricsCollection
+              - autoscaling:DisableMetricsCollection
+              - autoscaling:UpdateAutoScalingGroup
+            Resource:
+              - "*"
+            Condition:
+              StringEquals:
+                "autoscaling:ResourceTag/aws:cloudformation:stack-id": !Sub "${AWS::StackId}"
+            Effect: Allow
+          - Action:
+              - cloudformation:DescribeStacks
+              - ec2:DescribeLaunchTemplates
+              - ec2:DescribeSnapshotAttribute
+              - ec2:CreateTags
+              - ec2:DescribeLaunchTemplateVersions
+              - ec2:RunInstances
+              - ec2:DescribeSnapshots
+              - ec2:CreateLaunchTemplateVersion
+              - ec2:DescribeVolumeStatus
+              - autoscaling:DescribeAutoScalingGroups
+              - autoscaling:DescribeScalingActivities
+              - ec2:DescribeVolumes
+              - ec2:CreateSnapshot
+              - ec2:DeleteSnapshot
+              - events:DescribeRule
+              - ec2:DescribeKeyPairs
+            Resource: "*"
+            Effect: Allow
+  FlumeSnapshotNodeInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: /
+      Roles:
+      - !Ref FlumeSnapshotNodeRole
+    DependsOn: FlumeSnapshotNodeRole
+  FlumeSnapshotLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+  FlumeSnapshotLambdaPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref FlumeSnapshotLambdaRole
+      PolicyName: !Sub "FlumeSnapshotLambdaPolicy${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - logs:CreateLogStream
+              - logs:CreateLogGroup
+              - logs:PutLogEvents
+            Effect: Allow
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - iam:PassRole
+            Resource: !Sub "${FlumeSnapshotNodeRole.Arn}"
+          - Effect: Allow
+            Action:
+              - ec2:CreateTags
+              - ec2:RunInstances
+            Resource:
+              - Fn::Sub:
+                - "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PublicA}"
+                - PublicA:
+                    "Fn::ImportValue":
+                      !Sub "${InfrastructureStack}-PublicA"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:key-pair/${KeyName}"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+              - !Sub "arn:aws:ec2:*::snapshot/${SnapshotId}"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:volume/*"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${FlumeNodeSecurityGroup.GroupId}"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/${FlumeSnapshotLaunchTemplate}"
+              - "arn:aws:ec2:*::image/*"
+  FlumeSnapshotLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3ECBucketName
+        S3Key: lambdaPackage-15.zip
+      Description: "Launch instances to snapshot chaindata"
+      Environment:
+        Variables:
+          LAUNCH_TEMPLATE_ID: !Ref FlumeSnapshotLaunchTemplate
+          LAUNCH_TEMPLATE_VERSION: !Sub "${FlumeSnapshotLaunchTemplate.LatestVersionNumber}"
+          SUBNET_ID:
+            "Fn::ImportValue":
+                !Sub "${InfrastructureStack}-PublicA"
+          VOLUME_SIZE: !Ref DiskSize
+      Handler: "getSnapshot.handler"
+      Role: !Sub ${FlumeSnapshotLambdaRole.Arn}
+      Runtime: python3.7
+  SnapshotSchedulerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: !Sub "Take a daily snapshot for the ${AWS::StackName} cluster"
+      ScheduleExpression: !Ref SnapshotScheduleExpression
+      Targets:
+        - Arn: !Sub ${FlumeSnapshotLambdaFunction.Arn}
+          Id: !Sub "snapshot-${AWS::StackName}"
+  FlumeSnapshotInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${FlumeSnapshotLambdaFunction.Arn}
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn: !Sub ${SnapshotSchedulerRule.Arn}
+
+
+  SnapshotGCLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+  SnapshotGCLambdaPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref SnapshotGCLambdaRole
+      PolicyName: !Sub "SnapshotGCLambdaPolicy${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:DescribeSnapshots
+              - ec2:DeleteSnapshot
+            Resource: "*"
+  SnapshotGCLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3ECBucketName
+        S3Key: lambdaPackage-15.zip
+      Description: "Cleanup old chaindata snapshots"
+      Environment:
+        Variables:
+          CLUSTER_ID: PLACEHOLDER #TODO
+      Handler: "gcSnapshot.handler"
+      Role: !Sub ${SnapshotGCLambdaRole.Arn}
+      Runtime: python3.7
+  SnapshotGCSchedulerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: !Sub "Cleanup old snapshots for the the ${AWS::StackName} cluster"
+      ScheduleExpression: "rate(1 hour)"
+      Targets:
+        - Arn: !Sub ${SnapshotGCLambdaFunction.Arn}
+          Id: !Sub "gc-${AWS::StackName}"
+  SnapshotGCInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${SnapshotGCLambdaFunction.Arn}
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn: !Sub ${SnapshotGCSchedulerRule.Arn}
+
+  CloudwatchDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub "${AWS::StackName}"
+      DashboardBody:
+        Fn::Sub:
+          - |
+              {
+                "widgets": [
+                    {
+                        "type": "metric",
+                        "x": 0,
+                        "y": 0,
+                        "width": 6,
+                        "height": 6,
+                        "properties": {
+                            "metrics": [
+                                [ "FlumeData", "num",  "clusterId", "${AWS::StackName}", { "stat": "Average", "label": "Flume Block Number (avg)" } ],
+                                [ "FlumeData", "num",  "clusterId", "${AWS::StackName}", { "stat": "Minimum", "label": "Flume Block Number (min)" } ]
+                            ],
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "region": "${AWS::Region}",
+                            "title": "Block Number"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "x": 12,
+                        "y": 0,
+                        "width": 6,
+                        "height": 6,
+                        "properties": {
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "metrics": [
+                                [ "BlockData", "age", "clusterId", "${AWS::StackName}" ],
+                                [ "FlumeData", "age",  "clusterId", "${AWS::StackName}", { "stat": "Average", "label": "Flume Block Age (avg)" } ],
+                                [ "FlumeData", "age",  "clusterId", "${AWS::StackName}", { "stat": "Maximum", "label": "Flume Block Age (max)" } ]
+                            ],
+                            "region": "${AWS::Region}",
+                            "title": "Block Age"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "x": 18,
+                        "y": 0,
+                        "width": 6,
+                        "height": 6,
+                        "properties": {
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "metrics": [
+                                [ "FlumeData", "offsetAge", "clusterId", "${AWS::StackName}" ]
+                            ],
+                            "region": "${AWS::Region}",
+                            "title": "Offset Age"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "x": 0,
+                        "y": 6,
+                        "width": 6,
+                        "height": 6,
+                        "properties": {
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "metrics": [
+                                [ "AWS/EC2", "CPUUtilization", "AutoScalingGroupName", "${FlumeAutoScalingGroup}", { "stat": "Average", "label": "Flumes (avg)" } ],
+                                [ "AWS/EC2", "CPUUtilization", "AutoScalingGroupName", "${FlumeAutoScalingGroup}", { "stat": "Maximum", "label": "Flumes (max)" } ]
+                            ],
+                            "region": "${AWS::Region}",
+                            "title": "CPU Utilization"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "x": 6,
+                        "y": 0,
+                        "width": 6,
+                        "height": 6,
+                        "properties": {
+                            "metrics": [
+                                [ { "expression": "m1-m2", "label": "Expression1", "id": "e1" } ],
+                                [ "BlockData", "number", "clusterId", "${AWS::StackName}", { "id": "m1", "visible": false } ],
+                                [ "FlumeData", "num", "clusterId", "${AWS::StackName}", { "id": "m2", "visible": false } ]
+                            ],
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "region": "${AWS::Region}",
+                            "title": "Block Lag"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "x": 12,
+                        "y": 6,
+                        "width": 6,
+                        "height": 6,
+                        "properties": {
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "metrics": [
+                                [ "CWAgent", "mem_used_percent", "AutoScalingGroupName", "${FlumeAutoScalingGroup}" , { "stat": "Average", "label": "Flumes (avg)" } ],
+                                [ "CWAgent", "mem_used_percent", "AutoScalingGroupName", "${FlumeAutoScalingGroup}" , { "stat": "Maximum", "label": "Flumes (max)" } ]
+                            ],
+                            "region": "${AWS::Region}",
+                            "title": "Memory Utilization"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "properties": {
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "metrics": [
+                                [ "FlumeData", "delta",  "clusterId", "${AWS::StackName}", { "stat": "Average", "label": "Flume Delta (avg)" } ],
+                                [ "FlumeData", "delta",  "clusterId", "${AWS::StackName}", { "stat": "Maximum", "label": "Flume Delta (max)" } ]
+                            ],
+                            "region": "${AWS::Region}",
+                            "title": "Flumetion Delta"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "properties": {
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "metrics": [
+                                [ "FlumeData", "concurrency",  "clusterId", "${AWS::StackName}", { "stat": "Average", "label": "Concurrent Requests (avg)" } ],
+                                [ "FlumeData", "concurrency",  "clusterId", "${AWS::StackName}", { "stat": "Maximum", "label": "Concurrent Requests (max)" } ]
+                            ],
+                            "region": "${AWS::Region}",
+                            "title": "Flume Concurrency"
+                        }
+                    },
+                    {
+                        "type": "metric",
+                        "properties": {
+                            "view": "timeSeries",
+                            "stacked": false,
+                            "metrics": [
+                                [ "FlumeData", "backend_error",  "clusterId", "${AWS::StackName}", { "stat": "Sum", "label": "Backend Errors (avg)" } ]
+                            ],
+                            "region": "${AWS::Region}",
+                            "title": "Backend Errors"
+                        }
+                    }
+                ]
+              }
+          - ClusterId:
+              "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"

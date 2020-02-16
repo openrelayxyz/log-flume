@@ -1,0 +1,33 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 10
+    commands:
+      - echo Entered the install phase...
+      - apt-get update -y
+      - apt-get install apt-transport-https
+      # Setup for Yarn
+      - curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add -
+      - echo "deb https://dl.yarnpkg.com/debian/ stable main" | tee /etc/apt/sources.list.d/yarn.list
+      # Setup for Chrome
+      # - apt-get install -y software-properties-common
+      # - add-apt-repository -y ppa:canonical-chromium-builds/stage
+      # Do it!
+      - apt-get update -y
+      # - apt-get install -y chromium-browser
+      - apt-get install -y yarn
+  pre_build:
+    commands:
+      - echo Entered the pre_build phase...
+      - yarn install
+  build:
+    commands:
+      # need to do both since I don't have a good way of doing branch testing.
+      -  if test "$(git show-ref --heads -s dev)" =  $CODEBUILD_RESOLVED_SOURCE_VERSION ; then yarn run build ; echo "Pushing to stage" ; aws s3 sync --acl public-read public/ s3://stage-mgmt-sitebucket-b7gey7f6kc8g/ && aws cloudfront create-invalidation --distribution-id E3MZUQ9CR8IZ4K --paths '/*' ; fi
+      -  if test "$(git show-ref --heads -s master)" =  $CODEBUILD_RESOLVED_SOURCE_VERSION ; then echo "building master/prod release"; yarn run build-prod ; echo "pushing to prod"; aws s3 sync --acl public-read public/ s3://prodmgmt-sitebucket-15yy2thg2ihb0/ && aws cloudfront create-invalidation --distribution-id E1TEDZMUYPVQL6 --paths '/*'; fi
+
+cache:
+  paths:
+    - node_modules
