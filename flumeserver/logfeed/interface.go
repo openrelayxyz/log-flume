@@ -7,7 +7,6 @@ import (
 )
 
 type Feed interface {
-  SubscribeBlocks(chan map[string]interface{}) event.Subscription
   SubscribeLogs(chan types.Log) event.Subscription
   Ready() chan struct{}
   Healthy(d time.Duration) bool

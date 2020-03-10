@@ -3,7 +3,7 @@ package indexer
 import (
   "bytes"
   "context"
-  "../logfeed"
+  "github.com/openrelayxyz/flume/flumeserver/logfeed"
   "database/sql"
   "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/common"

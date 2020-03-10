@@ -4,9 +4,9 @@ import (
   "context"
   "github.com/NYTimes/gziphandler"
   "os"
-  "./flumehandler"
-  "./logfeed"
-  "./indexer"
+  "github.com/openrelayxyz/flume/flumeserver/flumehandler"
+  "github.com/openrelayxyz/flume/flumeserver/logfeed"
+  "github.com/openrelayxyz/flume/flumeserver/indexer"
   "net/http"
   "flag"
   "fmt"
@@ -29,10 +29,20 @@ func main() {
   logsdb, err := sql.Open("sqlite3", fmt.Sprintf("file:%v?_sync=0", sqlitePath))
   if err != nil { log.Fatalf(err.Error()) }
 
-  var resumeBlock uint64
-  err = logsdb.QueryRowContext(context.Background(), "SELECT max(blockNumber) FROM event_logs;").Scan(&resumeBlock)
+  var tableName string
+  logsdb.QueryRowContext(context.Background(), "SELECT name FROM sqlite_master WHERE type='table' and name='event_logs';").Scan(&tableName)
+  if tableName != "event_logs" {
+    logsdb.Exec("CREATE TABLE event_logs (address varchar(20), topic0 varchar(32), topic1 varchar(32), topic2 varchar(32), topic3 varchar(32), topic4 varchar(32), data blob, blockNumber BIGINT, transactionHash varchar(32), transactionIndex MEDIUMINT, blockHash varchar(32), logIndex MEDIUMINT, PRIMARY KEY (blockHash, logIndex));")
+    logsdb.Exec("CREATE INDEX address ON event_logs(address);")
+    logsdb.Exec("CREATE INDEX topic0 ON event_logs(topic0);")
+    logsdb.Exec("CREATE INDEX topic1 ON event_logs(topic1);")
+    logsdb.Exec("CREATE INDEX topic2 ON event_logs(topic2);")
+    logsdb.Exec("CREATE INDEX topic3 ON event_logs(topic3);")
+    logsdb.Exec("CREATE INDEX topic4 ON event_logs(topic4);")
+    logsdb.Exec("CREATE INDEX blockNumber ON event_logs(blockNumber);")
+  }
 
-  feed, err := logfeed.ResolveFeed(feedURL, resumeBlock)
+  feed, err := logfeed.ResolveFeed(feedURL, logsdb)
   if err != nil { log.Fatalf(err.Error()) }
 
 

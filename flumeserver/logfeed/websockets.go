@@ -3,6 +3,7 @@ package logfeed
 import (
   "encoding/json"
   "context"
+  "database/sql"
   "github.com/gorilla/websocket"
   "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/event"
@@ -51,7 +52,9 @@ func restructureLogs(input interface{}) ([]types.Log, error) {
   return result, err
 }
 
-func NewETHWSFeed(urlStr string, resumeBlock uint64) Feed {
+func NewETHWSFeed(urlStr string, db *sql.DB) Feed {
+  var resumeBlock uint64
+  db.QueryRowContext(context.Background(), "SELECT max(blockNumber) FROM event_logs;").Scan(&resumeBlock)
   feed := &ethWSFeed{
     urlStr: urlStr,
     lastBlockTime: &atomic.Value{},
