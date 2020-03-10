@@ -57,21 +57,30 @@ func ProcessFeed(feed logfeed.Feed, db *sql.DB) {
     // log.Printf("Processing log")
     counter++
     started = true
-    _, err := logtx.Exec(
-      "INSERT OR IGNORE INTO event_logs(address, topic0, topic1, topic2, topic3, topic4, data, blockNumber, transactionHash, transactionIndex, blockHash, logIndex) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-      trimPrefix(logRecord.Address.Bytes()),
-      trimPrefix(getTopicIndex(logRecord.Topics, 0)),
-      trimPrefix(getTopicIndex(logRecord.Topics, 1)),
-      trimPrefix(getTopicIndex(logRecord.Topics, 2)),
-      trimPrefix(getTopicIndex(logRecord.Topics, 3)),
-      trimPrefix(getTopicIndex(logRecord.Topics, 4)),
-      logRecord.Data,
-      logRecord.BlockNumber,
-      trimPrefix(logRecord.TxHash.Bytes()),
-      logRecord.TxIndex,
-      trimPrefix(logRecord.BlockHash.Bytes()),
-      logRecord.Index,
-    )
-    if err != nil { log.Printf("WARN: %v", err.Error()) }
+    if !logRecord.Removed {
+      _, err := logtx.Exec(
+        "INSERT OR IGNORE INTO event_logs(address, topic0, topic1, topic2, topic3, topic4, data, blockNumber, transactionHash, transactionIndex, blockHash, logIndex) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+        trimPrefix(logRecord.Address.Bytes()),
+        trimPrefix(getTopicIndex(logRecord.Topics, 0)),
+        trimPrefix(getTopicIndex(logRecord.Topics, 1)),
+        trimPrefix(getTopicIndex(logRecord.Topics, 2)),
+        trimPrefix(getTopicIndex(logRecord.Topics, 3)),
+        trimPrefix(getTopicIndex(logRecord.Topics, 4)),
+        logRecord.Data,
+        logRecord.BlockNumber,
+        trimPrefix(logRecord.TxHash.Bytes()),
+        logRecord.TxIndex,
+        trimPrefix(logRecord.BlockHash.Bytes()),
+        logRecord.Index,
+      )
+      if err != nil { log.Printf("WARN: (insert) %v", err.Error()) }
+    } else {
+      _, err := logtx.Exec(
+        "DELETE FROM event_logs WHERE blockHash = ? AND logIndex = ?",
+        logRecord.BlockHash,
+        logRecord.Index,
+      )
+      if err != nil { log.Printf("WARN: (delete) %v", err.Error()) }
+    }
   }
 }
