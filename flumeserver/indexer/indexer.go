@@ -29,7 +29,6 @@ func getTopicIndex(topics []common.Hash, idx int) []byte {
 }
 
 func ProcessFeed(feed logfeed.Feed, db *sql.DB) {
-  log.Printf("Got here")
   logCh := make(chan types.Log, 1000)
   logSub := feed.SubscribeLogs(logCh)
   defer logSub.Unsubscribe()
