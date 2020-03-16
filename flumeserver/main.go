@@ -22,6 +22,7 @@ import (
 func main() {
   // shutdownSync := flag.Bool("shutdownSync", false, "Shutdown server once sync is completed")
   port := flag.Int("port", 8000, "Serving port")
+  shutdownSync := flag.Bool("shutdown.sync", false, "Sync after shutdown")
   flag.CommandLine.Parse(os.Args[1:])
   sqlitePath := flag.CommandLine.Args()[0]
   feedURL := flag.CommandLine.Args()[1]
@@ -59,10 +60,12 @@ func main() {
     MaxHeaderBytes: 1 << 20,
   }
   <-feed.Ready()
-  sigs := make(chan os.Signal, 1)
-  signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-  go s.ListenAndServe()
-  log.Printf("Serving logs on %v", *port)
-  <-sigs
-  time.Sleep(time.Second)
+  if !*shutdownSync {
+    sigs := make(chan os.Signal, 1)
+    signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+    go s.ListenAndServe()
+    log.Printf("Serving logs on %v", *port)
+    <-sigs
+    time.Sleep(time.Second)
+  }
 }
