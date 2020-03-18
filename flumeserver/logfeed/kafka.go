@@ -28,7 +28,7 @@ func NewKafkaFeed(urlStr string, db *sql.DB) (Feed, error) {
   var tableName string
   db.QueryRowContext(context.Background(), "SELECT name FROM sqlite_master WHERE type='table' and name='offsets';").Scan(&tableName)
   if tableName != "offsets" {
-    if _, err := db.Exec("CREATE TABLE offsets (offset BIGINT), PRIMARY KEY (offsets);"); err != nil {
+    if _, err := db.Exec("CREATE TABLE offsets (offset BIGINT, PRIMARY KEY (offset));"); err != nil {
       return nil, fmt.Errorf("Offsets table does not exist and could not create: %v", err.Error())
     }
     db.Exec("INSERT INTO offsets(offest) VALUES (?);", sarama.OffsetOldest)
