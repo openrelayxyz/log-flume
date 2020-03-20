@@ -138,6 +138,8 @@ github.com/notegio/go-ethereum v0.0.0-20200310210653-a10b609d18b7 h1:rcdlwIytrqc
 github.com/notegio/go-ethereum v0.0.0-20200310210653-a10b609d18b7/go.mod h1:PeADrpZG6tALxr/jqwFK/1NkcVyMagmgFBRWtdrfTDU=
 github.com/notegio/go-ethereum v0.0.0-20200310224112-97e8b8f68042 h1:VPz72EZUDsN/nwijgDIudc26Q1T+1mT1wTfynaiZB/k=
 github.com/notegio/go-ethereum v0.0.0-20200310224112-97e8b8f68042/go.mod h1:PeADrpZG6tALxr/jqwFK/1NkcVyMagmgFBRWtdrfTDU=
+github.com/notegio/go-ethereum v0.0.0-20200320163128-a31d8295cdc7 h1:kz/PvFalYjhac2A5BstKFTkLAK3X+A8uy1E6FSk7dEk=
+github.com/notegio/go-ethereum v0.0.0-20200320163128-a31d8295cdc7/go.mod h1:PeADrpZG6tALxr/jqwFK/1NkcVyMagmgFBRWtdrfTDU=
 github.com/oklog/ulid v1.3.1/go.mod h1:CirwcVhetQ6Lv90oh/F+FBtV6XMibvdAFo93nm5qn4U=
 github.com/olekukonko/tablewriter v0.0.1/go.mod h1:vsDQFd/mU46D+Z4whnwzcISnGGzXWMclvtLoiIKAKIo=
 github.com/olekukonko/tablewriter v0.0.2-0.20190409134802-7e037d187b0c h1:1RHs3tNxjXGHeul8z2t6H2N2TlAqpKe5yryJztRx4Jk=
