@@ -7,12 +7,14 @@ import (
   "github.com/openrelayxyz/flume/flumeserver/flumehandler"
   "github.com/openrelayxyz/flume/flumeserver/logfeed"
   "github.com/openrelayxyz/flume/flumeserver/indexer"
+  gethLog "github.com/ethereum/go-ethereum/log"
   "net/http"
   "flag"
   "fmt"
   "time"
   "log"
   _ "github.com/mattn/go-sqlite3"
+  _ "net/http/pprof"
   "database/sql"
   "os/signal"
   "syscall"
@@ -20,6 +22,13 @@ import (
 )
 
 func main() {
+
+
+  glogger := gethLog.NewGlogHandler(gethLog.StreamHandler(os.Stderr, gethLog.TerminalFormat(false)))
+	glogger.Verbosity(gethLog.Lvl(3))
+	glogger.Vmodule("")
+	gethLog.Root().SetHandler(glogger)
+
   // shutdownSync := flag.Bool("shutdownSync", false, "Shutdown server once sync is completed")
   port := flag.Int("port", 8000, "Serving port")
   shutdownSync := flag.Bool("shutdown.sync", false, "Sync after shutdown")
@@ -56,7 +65,13 @@ func main() {
   s := &http.Server{
     Addr: fmt.Sprintf(":%v", *port),
     Handler: gziphandler.GzipHandler(cors.Default().Handler(mux)),
-    ReadHeaderTimeout: time.Second,
+    ReadHeaderTimeout: 5 * time.Second,
+    MaxHeaderBytes: 1 << 20,
+  }
+  p := &http.Server{
+    Addr: ":6969",
+    Handler: http.DefaultServeMux,
+    ReadHeaderTimeout: 5 * time.Second,
     MaxHeaderBytes: 1 << 20,
   }
   <-feed.Ready()
@@ -64,6 +79,7 @@ func main() {
     sigs := make(chan os.Signal, 1)
     signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
     go s.ListenAndServe()
+    go p.ListenAndServe()
     log.Printf("Serving logs on %v", *port)
     <-sigs
     time.Sleep(time.Second)

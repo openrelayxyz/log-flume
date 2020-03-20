@@ -31,13 +31,20 @@ func NewKafkaFeed(urlStr string, db *sql.DB) (Feed, error) {
     if _, err := db.Exec("CREATE TABLE offsets (offset BIGINT, PRIMARY KEY (offset));"); err != nil {
       return nil, fmt.Errorf("Offsets table does not exist and could not create: %v", err.Error())
     }
-    db.Exec("INSERT INTO offsets(offest) VALUES (?);", sarama.OffsetOldest)
+    if _, err := db.Exec("INSERT INTO offsets(offset) VALUES (?);", sarama.OffsetOldest); err != nil {
+      return nil, err
+    }
   }
   var resumeOffset int64
   db.QueryRowContext(context.Background(), "SELECT max(offset) FROM offsets;").Scan(&resumeOffset)
+  if resumeOffset == 0 {
+    resumeOffset = sarama.OffsetOldest
+  }
   parts := strings.Split(urlStr, ";")
+  log.Printf("Parts: %v", parts)
+  log.Printf("Resume offset: %v", resumeOffset)
 
-  consumer, err := replica.NewKafkaEventConsumerFromURLs(parts[0], parts[1], common.Hash{}, resumeOffset)
+  consumer, err := replica.NewKafkaEventConsumerFromURLs(strings.TrimPrefix(parts[0], "kafka://"), parts[1], common.Hash{}, resumeOffset)
   if err != nil { return nil, err }
   feed := &ethKafkaFeed{
     lastBlockTime: &atomic.Value{},
@@ -49,13 +56,14 @@ func NewKafkaFeed(urlStr string, db *sql.DB) (Feed, error) {
 }
 
 func (feeder *ethKafkaFeed) subscribe() {
-  logsEventCh := make(chan []*types.Log, 100)
+  feeder.eventConsumer.Start()
+  logsEventCh := make(chan []*types.Log, 10000)
   logsEventSub := feeder.eventConsumer.SubscribeLogsEvent(logsEventCh)
-  removedLogsEventCh := make(chan core.RemovedLogsEvent, 1000)
+  removedLogsEventCh := make(chan core.RemovedLogsEvent, 10000)
   removedLogsEventSub := feeder.eventConsumer.SubscribeRemovedLogsEvent(removedLogsEventCh)
   chainHeadEventCh := make(chan core.ChainHeadEvent, 100)
   chainHeadEventSub := feeder.eventConsumer.SubscribeChainHeadEvent(chainHeadEventCh)
-  offsetCh := make(chan int64, 100)
+  offsetCh := make(chan int64, 50000)
   offsetSub := feeder.eventConsumer.SubscribeOffsets(offsetCh)
   go func() {
     defer logsEventSub.Unsubscribe()
@@ -66,12 +74,12 @@ func (feeder *ethKafkaFeed) subscribe() {
       select {
       case addLogs := <-logsEventCh:
         for _, log := range addLogs {
-          feeder.logFeed.Send(log)
+          feeder.logFeed.Send(*log)
         }
       case removeLogs := <-removedLogsEventCh:
         for _, log := range removeLogs.Logs {
           log.Removed = true
-          feeder.logFeed.Send(log)
+          feeder.logFeed.Send(*log)
         }
       case <-chainHeadEventCh:
         offset := int64(-1)
@@ -83,7 +91,8 @@ func (feeder *ethKafkaFeed) subscribe() {
           case offset = <-offsetCh:
           default:
             if offset != -1 {
-              feeder.db.Exec("UPDATE offsets SET offset = ? WHERE offset < ?;", offset, offset)
+              _, err := feeder.db.Exec("UPDATE offsets SET offset = ? WHERE offset < ?;", offset, offset)
+              if err != nil { log.Printf("Error updating offset: %v", err.Error())}
             }
             break OUTER
           }
