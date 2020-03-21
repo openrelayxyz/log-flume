@@ -89,21 +89,18 @@ func (feeder *ethKafkaFeed) subscribe() {
 }
 
 func (feeder *ethKafkaFeed) Commit(num uint64) {
-  log.Printf("Starting commit %v", num)
   chainHead := <-feeder.chainHeadEventCh
   count := 1
   for chainHead.Block.NumberU64() < num{
     count++
     chainHead = <-feeder.chainHeadEventCh
   }
-  log.Printf("Pulling %v offsets", count)
   var offset int64
   for i :=0; i < count; i++ {
     offset = <-feeder.offsetCh
   }
   _, err := feeder.db.Exec("UPDATE offsets SET offset = ? WHERE offset < ?;", offset, offset)
   if err != nil { log.Printf("Error updating offset: %v", err.Error())}
-  log.Printf("Committed %v", num)
 }
 
 func (feeder *ethKafkaFeed) SubscribeLogs(ch chan types.Log) event.Subscription {
