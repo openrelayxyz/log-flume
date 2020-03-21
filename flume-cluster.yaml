@@ -20,14 +20,26 @@ Parameters:
     Default: gp2
     Description: Flume storage volume type
     Type: String
-  S3FlumeBucketName:
+  S3FlumeBackup:
+    Default: flume-stage-db/mainnet/logs-20200216.sqlite.lz4
+    Type: String
+    Description: The bucket for Flume to store backups in
+  S3FlumeBackupBucket:
     Default: flume-stage-db
+    Type: String
+    Description: The bucket for Flume to store backups in
+  S3FlumeBackupDirectory:
+    Default: mainnet/logs-20200216.sqlite.lz4
+    Type: String
+    Description: The bucket for Flume to store backups in
+  S3FlumeBinaryDirectory:
+    Default: flume/kafka-feeds-1
     Type: String
     Description: The bucket containing Flume Binaries
   S3ECBucketName:
     Default: ethercattle-binaries
     Type: String
-    Description: The bucket containing Flume Binaries
+    Description: The bucket containing EtherCattle Binaries
   InfrastructureStack:
     Type: String
     Description: The infrastructure stack this cluster connects to
@@ -40,9 +52,10 @@ Parameters:
   SnapshotId:
     Type: String
     Description: A snapshot of the Ethereum folder with a synced blockchain
-  FlumeExtraFlags:
+  FlumeSyncEndpoint:
+    Default: ws://localhost:5654
     Type: String
-    Description: Extra flags for the Geth replica (mainly for running other than mainnet)
+    Description: Endpoint Flume connects to do sync with
   FlumeTargetCapacity:
     Type: Number
     Default: 2
@@ -81,7 +94,7 @@ Parameters:
   SnapshotScheduleExpression:
     Type: String
     Description: A schedule expression for the frequency to take snapshots
-    Default: "cron(55 0/6 * * ? *)"
+    Default: "cron(55 4 * * ? *)"
 
 
 
@@ -101,7 +114,7 @@ Metadata:
           default: Cluster
         Parameters:
           - NetworkId
-          - S3FlumeBucketName
+          - S3FlumeBackup
           - SnapshotId
       - Label:
           default: Flume
@@ -109,7 +122,7 @@ Metadata:
           - DiskSize
           - FlumeSize
           - FlumeImageAMI
-          - FlumeExtraFlags
+          - FlumeSyncEndpoint
           - FlumeDiskType
           - FlumeTargetCapacity
           - FlumeMaxCapacity
@@ -128,8 +141,10 @@ Metadata:
         default: Flume AMI Image
       FlumeDiskType:
         default: Disk Type
-      S3FlumeBucketName:
-        default: S3 Geth Bucket
+      S3FlumeBackup:
+        default: S3 Flume Backup
+      S3ECBucketName:
+        default: S3 EtherCattle Bucket
 
       InfrastructureStack:
         default: Infrastructure CloudFormation Stack
@@ -139,8 +154,8 @@ Metadata:
         default: Unique Network ID
       SnapshotId:
         default: Chaindata Snapshot ID
-      FlumeExtraFlags:
-        default: Extra Geth Flags
+      FlumeSyncEndpoint:
+        default: Flume Sync Endpoint
       FlumeTargetCapacity:
         default: Target Capacity
       FlumeOnDemandPercentage:
@@ -397,7 +412,15 @@ Resources:
               - s3:GetBucketPolicy
               - s3:GetObjectTagging
               - s3:GetBucketLocation
-            Resource: !Sub arn:aws:s3:::${S3FlumeBucketName}/*
+            Resource: !Sub arn:aws:s3:::${S3FlumeBackupBucket}/*
+            Effect: Allow
+          - Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
+            Resource: !Sub arn:aws:s3:::${S3ECBucketName}/*
             Effect: Allow
           - Action:
               - cloudwatch:PutMetricData
@@ -502,11 +525,12 @@ Resources:
                   OVERLAY_FLAG="--datadir.overlay=/var/lib/flume/overlay"
                 fi
 
-                aws s3 cp s3://flume-stage-db/flumeserver /usr/bin/flumeserver
+                aws s3 cp s3://${S3ECBucketName}/${S3FlumeBinaryDirectory}/flumeserver /usr/bin/flumeserver
                 chmod +x /usr/bin/flumeserver
-                aws s3 cp s3://flume-stage-db/mainnet/logs-20200216.sqlite.lz4 - | lz4  -d - /var/lib/flume/item.sqlite
-                /usr/bin/flumeserver /var/lib/flume/item.sqlite &
+                aws s3 cp s3://${S3FlumeBackup} - | lz4  -d - /var/lib/flume/item.sqlite
+                /usr/bin/flumeserver /var/lib/flume/item.sqlite "${FlumeSyncEndpoint}" &
                 sleep 300
+                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
                 aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp2 &
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
@@ -637,23 +661,23 @@ Resources:
                   OVERLAY_FLAG="--datadir.overlay=/var/lib/flume/overlay"
                 fi
 
-                # aws s3 cp s3://flume-stage-db/flumeserver /usr/bin/flumeserver
-                # chmod +x /usr/bin/flumeserver
-                # aws s3 cp s3://flume-stage-db/mainnet/logs-20200216.sqlite.lz4 - | lz4  -d - /var/lib/flume/item.sqlite
-                # /usr/bin/flumeserver /var/lib/flume/item.sqlite &
+                aws s3 cp s3://${S3ECBucketName}/${S3FlumeBinaryDirectory}/flumeserver /usr/bin/flumeserver
+                chmod +x /usr/bin/flumeserver
+                aws s3 cp s3://${S3FlumeBackup} - | lz4  -d - /var/lib/flume/item.sqlite
+                # /usr/bin/flumeserver /var/lib/flume/item.sqlite "${FlumeSyncEndpoint}" --shutdownSync &
 
-                # if ! /usr/bin/flumeserver /var/lib/flume/item.sqlite
-                # then
-                #   if [ "${AggregatedNotifications}" != "" ]
-                #   then
-                #     aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. This is probably unrecoverable, and you will need to deploy a new cluster from your last good snapshot (probably '${SnapshotId}')"
-                #   fi
-                #   if [ "${AlarmSNSTopic}" != "" ]
-                #   then
-                #     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. This is probably unrecoverable, and you will need to deploy a new cluster from your last good snapshot (probably '${SnapshotId}')"
-                #   fi
-                #   exit poweroff
-                # fi
+                if !  /usr/bin/flumeserver -shutdown.sync /var/lib/flume/item.sqlite "${FlumeSyncEndpoint}"
+                then
+                  if [ "${AggregatedNotifications}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. This is possibly unrecoverable, and you will need to deploy a new cluster from your last good snapshot (probably '${SnapshotId}')"
+                  fi
+                  if [ "${AlarmSNSTopic}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} -  Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. This is possibly unrecoverable, and you will need to deploy a new cluster from your last good snapshot (probably '${SnapshotId}')"
+                  fi
+                  exit poweroff
+                fi
                 # VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
 
                 # if [ "$VOLUME_ID" == "" ]
@@ -670,29 +694,32 @@ Resources:
                 # fi
 
                 # SNAPSHOT_ID=`aws ec2 create-snapshot --volume-id $VOLUME_ID --tag-specification="ResourceType=snapshot,Tags=[{Key=cluster,Value=${AWS::StackName}},{Key=Name,Value=${AWS::StackName}-chaindata-$(date -Isecond -u)}]" | jq '.SnapshotId' -cr`
+                # TODO:COMPRESS/UPLOAD
+                export BACKUPNAME=" s3://${S3FlumeBackupBucket}/${S3FlumeBackupDirectory}/logs-$(date '+%Y%m%d-%H%M%S').sqlite.lz4"
 
-                # if [ "$SNAPSHOT_ID" == "null" ]; then
-                #   if [ "${AggregatedNotifications}" != "" ]
-                #   then
-                #     aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${AWS::StackName} failed to take a snapshot."
-                #   fi
-                #   if [ "${AlarmSNSTopic}" != "" ]
-                #   then
-                #     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${AWS::StackName} failed to take a snapshot."
-                #   fi
-                #   exit poweroff
-                # fi
+
+                if ! lz4 /var/lib/flume/item.sqlite | aws s3 cp - $BACKUPNAME ; then
+                  if [ "${AggregatedNotifications}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking Backup Failed" --message="The snapshotting process for ${AWS::StackName} failed to take a snapshot."
+                  fi
+                  if [ "${AlarmSNSTopic}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Taking Backup Failed" --message="The snapshotting process for ${AWS::StackName} failed to take a snapshot."
+                  fi
+                  exit poweroff
+                fi
                 # echo "Waiting for snapshot to complete"
                 # while [ `aws ec2 describe-snapshots --filters=Name=snapshot-id,Values=$SNAPSHOT_ID | jq '.Snapshots[0].State' -cr` != "completed" ];
                 # do
                 #     sleep 10
                 # done
 
-                # # CFN will set any parameters we don't provide back to their default values,
-                # # so get all of the parameters, update SnapshotID, and update the stack with
-                # # the new parameters.
-                # PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end)' -c)
-                # aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS"
+                # CFN will set any parameters we don't provide back to their default values,
+                # so get all of the parameters, update SnapshotID, and update the stack with
+                # the new parameters.
+                PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "S3FlumeBackup" then .ParameterValue="'$BACKUPNAME'" else . end)' -c)
+                aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS"
 
                 poweroff
               - ClusterId:
@@ -722,7 +749,20 @@ Resources:
         Statement:
           - Action:
               - s3:GetObject
-            Resource: !Sub arn:aws:s3:::${S3FlumeBucketName}/*
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
+              - s3:PutObject
+            Resource: !Sub arn:aws:s3:::${S3FlumeBackupBucket}/*
+            Effect: Allow
+          - Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
+            Resource: !Sub arn:aws:s3:::${S3ECBucketName}/*
             Effect: Allow
           - Action:
               - cloudformation:UpdateStack
