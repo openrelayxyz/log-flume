@@ -28,7 +28,7 @@ func getTopicIndex(topics []common.Hash, idx int) []byte {
   return []byte{}
 }
 
-func ProcessFeed(feed logfeed.Feed, db *sql.DB) {
+func ProcessFeed(feed logfeed.Feed, db *sql.DB, quit <-chan struct{}) {
   logCh := make(chan types.Log, 1000)
   logSub := feed.SubscribeLogs(logCh)
   defer logSub.Unsubscribe()
@@ -36,8 +36,11 @@ func ProcessFeed(feed logfeed.Feed, db *sql.DB) {
   var logRecord types.Log
   started := false
   counter := 0
+  var highestBlock uint64
   for {
     select {
+    case <-quit:
+      return
     case logRecord = <- logCh:
     default:
       if started {
@@ -45,13 +48,18 @@ func ProcessFeed(feed logfeed.Feed, db *sql.DB) {
         if err := logtx.Commit(); err != nil {
           log.Printf("WARN: Transaction commit failed: %v", err.Error())
         }
+        feed.Commit(highestBlock)
         counter = 0
         logtx, err = db.BeginTx(context.Background(), nil)
         if err != nil {
           log.Printf("WARN: Failed to start transaction: %v", err.Error())
         }
       }
-      logRecord = <- logCh
+      select{
+      case <-quit:
+        return
+      case logRecord = <- logCh:
+      }
     }
     // log.Printf("Processing log")
     counter++
@@ -73,6 +81,7 @@ func ProcessFeed(feed logfeed.Feed, db *sql.DB) {
         logRecord.Index,
       )
       if err != nil { log.Printf("WARN: (insert) %v", err.Error()) }
+      highestBlock = logRecord.BlockNumber
     } else {
       _, err := logtx.Exec(
         "DELETE FROM event_logs WHERE blockHash = ? AND logIndex = ?",

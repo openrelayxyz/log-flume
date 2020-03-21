@@ -89,6 +89,9 @@ func (f *ethWSFeed) Healthy(d time.Duration) bool {
   return true
 }
 
+// Commit is a noop in websockets - In Kafka this enables offset tracking.
+func (f *ethWSFeed) Commit(num uint64) {}
+
 func (f *ethWSFeed) subscribe() {
   dialer := &websocket.Dialer{
     EnableCompression: true,

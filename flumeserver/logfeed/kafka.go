@@ -21,6 +21,8 @@ type ethKafkaFeed struct {
   eventConsumer replica.EventConsumer
   blockFeed event.Feed
   logFeed event.Feed
+  chainHeadEventCh chan core.ChainHeadEvent
+  offsetCh chan int64
   db *sql.DB
 }
 
@@ -61,10 +63,10 @@ func (feeder *ethKafkaFeed) subscribe() {
   logsEventSub := feeder.eventConsumer.SubscribeLogsEvent(logsEventCh)
   removedLogsEventCh := make(chan core.RemovedLogsEvent, 10000)
   removedLogsEventSub := feeder.eventConsumer.SubscribeRemovedLogsEvent(removedLogsEventCh)
-  chainHeadEventCh := make(chan core.ChainHeadEvent, 100)
-  chainHeadEventSub := feeder.eventConsumer.SubscribeChainHeadEvent(chainHeadEventCh)
-  offsetCh := make(chan int64, 50000)
-  offsetSub := feeder.eventConsumer.SubscribeOffsets(offsetCh)
+  feeder.chainHeadEventCh = make(chan core.ChainHeadEvent, 100)
+  chainHeadEventSub := feeder.eventConsumer.SubscribeChainHeadEvent(feeder.chainHeadEventCh)
+  feeder.offsetCh = make(chan int64, 50000)
+  offsetSub := feeder.eventConsumer.SubscribeOffsets(feeder.offsetCh)
   go func() {
     defer logsEventSub.Unsubscribe()
     defer removedLogsEventSub.Unsubscribe()
@@ -81,25 +83,24 @@ func (feeder *ethKafkaFeed) subscribe() {
           log.Removed = true
           feeder.logFeed.Send(*log)
         }
-      case <-chainHeadEventCh:
-        offset := int64(-1)
-        OUTER:
-        for {
-          // When there's a chainHeadEvent, pull anything off the offset
-          // channel. If we find an offset, update the database.
-          select {
-          case offset = <-offsetCh:
-          default:
-            if offset != -1 {
-              _, err := feeder.db.Exec("UPDATE offsets SET offset = ? WHERE offset < ?;", offset, offset)
-              if err != nil { log.Printf("Error updating offset: %v", err.Error())}
-            }
-            break OUTER
-          }
-        }
       }
     }
   }()
+}
+
+func (feeder *ethKafkaFeed) Commit(num uint64) {
+  chainHead := <-feeder.chainHeadEventCh
+  count := 1
+  for chainHead.Block.NumberU64() < num{
+    count++
+    chainHead = <-feeder.chainHeadEventCh
+  }
+  var offset int64
+  for i :=0; i < count; i++ {
+    offset = <-feeder.offsetCh
+  }
+  _, err := feeder.db.Exec("UPDATE offsets SET offset = ? WHERE offset < ?;", offset, offset)
+  if err != nil { log.Printf("Error updating offset: %v", err.Error())}
 }
 
 func (feeder *ethKafkaFeed) SubscribeLogs(ch chan types.Log) event.Subscription {
