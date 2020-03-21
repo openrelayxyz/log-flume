@@ -82,6 +82,7 @@ func main() {
     go p.ListenAndServe()
     log.Printf("Serving logs on %v", *port)
     <-sigs
-    time.Sleep(time.Second)
   }
+  logsdb.Close()
+  time.Sleep(time.Second)
 }
