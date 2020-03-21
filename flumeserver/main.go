@@ -31,6 +31,7 @@ func main() {
 
   // shutdownSync := flag.Bool("shutdownSync", false, "Shutdown server once sync is completed")
   port := flag.Int("port", 8000, "Serving port")
+  minSafeBlock := flag.Int("min-safe-block", 1000000, "Do not start serving if the smallest block exceeds this value")
   shutdownSync := flag.Bool("shutdown.sync", false, "Sync after shutdown")
   flag.CommandLine.Parse(os.Args[1:])
   sqlitePath := flag.CommandLine.Args()[0]
@@ -55,8 +56,8 @@ func main() {
   feed, err := logfeed.ResolveFeed(feedURL, logsdb)
   if err != nil { log.Fatalf(err.Error()) }
 
-
-  go indexer.ProcessFeed(feed, logsdb)
+  quit := make(chan struct{})
+  go indexer.ProcessFeed(feed, logsdb, quit)
 
   handler := flumehandler.GetHandler(logsdb)
 
@@ -75,6 +76,11 @@ func main() {
     MaxHeaderBytes: 1 << 20,
   }
   <-feed.Ready()
+  var minBlock int
+  logsdb.QueryRowContext(context.Background(), "SELECT min(blockNumber) FROM event_logs;").Scan(&minBlock)
+  if minBlock > *minSafeBlock {
+    log.Fatalf("Earliest log found on block %v. Should be less than or equal to %v", minBlock, *minSafeBlock)
+  }
   if !*shutdownSync {
     sigs := make(chan os.Signal, 1)
     signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
@@ -82,7 +88,9 @@ func main() {
     go p.ListenAndServe()
     log.Printf("Serving logs on %v", *port)
     <-sigs
+    time.Sleep(time.Second)
   }
+  quit <- struct{}{}
   logsdb.Close()
   time.Sleep(time.Second)
 }

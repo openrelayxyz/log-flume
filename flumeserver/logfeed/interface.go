@@ -10,4 +10,5 @@ type Feed interface {
   SubscribeLogs(chan types.Log) event.Subscription
   Ready() chan struct{}
   Healthy(d time.Duration) bool
+  Commit(uint64)
 }
