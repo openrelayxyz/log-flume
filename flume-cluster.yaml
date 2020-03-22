@@ -433,6 +433,7 @@ Resources:
             Resource:
               - !Ref AggregatedNotifications
               - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+            Effect: Allow
           - Action:
               - ec2:ModifyVolume
               - ec2:DescribeVolumes
@@ -488,6 +489,7 @@ Resources:
                 fi
                 useradd -r flume
                 LOGS_BIN="journald-cloudwatch-logs-$ARCH"
+                aws s3 cp s3://${S3ECBucketName}/$LOGS_BIN /usr/local/bin/journald-cloudwatch-logs
                 chmod +x /usr/local/bin/journald-cloudwatch-logs
                 mkdir -p /var/lib/journald-cloudwatch-logs/
                 yum install -y https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/$ARCH/latest/amazon-cloudwatch-agent.rpm jq
@@ -1070,7 +1072,7 @@ Resources:
                             "view": "timeSeries",
                             "stacked": false,
                             "metrics": [
-                                [ "CWAgent", "disk_used_percent", "path", "/var/lib/flume", "AutoScalingGroupName", "${MasterAutoScalingGroup}", "device", "nvme1n1", "fstype", "ext4" ]
+                                [ "CWAgent", "disk_used_percent", "path", "/var/lib/flume", "AutoScalingGroupName", "${FlumeAutoScalingGroup}", "device", "nvme1n1", "fstype", "ext4" ]
                             ],
                             "region": "${AWS::Region}",
                             "title": "Disk Usage"
