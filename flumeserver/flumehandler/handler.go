@@ -100,6 +100,7 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
   crit := filters.FilterCriteria{}
   if len(call.Params) < 1 {
     handleError(w, "missing value for required argument 0", call.ID, 400)
+    return
   }
   if err := json.Unmarshal(call.Params[0], &crit); err != nil {
     log.Printf("Error unmarshalling into criteria: %v", err.Error())
