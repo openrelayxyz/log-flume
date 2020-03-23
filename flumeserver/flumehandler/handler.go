@@ -7,6 +7,7 @@ import (
   "net/http"
   "database/sql"
   "github.com/ethereum/go-ethereum/common"
+  "github.com/ethereum/go-ethereum/common/hexutil"
   "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/eth/filters"
   "io/ioutil"
@@ -79,6 +80,10 @@ func GetHandler(db *sql.DB) func(http.ResponseWriter, *http.Request) {
     switch call.Method {
     case "eth_getLogs":
       getLogs(r.Context(), w, call, db)
+    case "eth_blockNumber":
+      getBlockNumber(r.Context(), w, call, db)
+    case "rivet_addressTokens":
+      getTokens(r.Context(), w, call, db)
     default:
       handleError(w, "unsupported method", call.ID, 400)
     }
@@ -91,6 +96,21 @@ func getLatestBlock(ctx context.Context, db *sql.DB) (int64, error) {
   return result, err
 }
 
+func getBlockNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  blockNo, err := getLatestBlock(ctx, db)
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  responseBytes, err := json.Marshal(formatResponse(hexutil.Uint64(blockNo), call))
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  w.WriteHeader(200)
+  w.Write(responseBytes)
+}
+
 func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
   latestBlock, err := getLatestBlock(ctx, db)
   if err != nil {
@@ -100,6 +120,7 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
   crit := filters.FilterCriteria{}
   if len(call.Params) < 1 {
     handleError(w, "missing value for required argument 0", call.ID, 400)
+    return
   }
   if err := json.Unmarshal(call.Params[0], &crit); err != nil {
     log.Printf("Error unmarshalling into criteria: %v", err.Error())
@@ -152,7 +173,7 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
   rows, err := db.QueryContext(ctx, query, params...)
   if err != nil {
     log.Printf("Error selecting: %v - '%v'", err.Error(), query)
-    handleError(w, err.Error(), call.ID, 500)
+    handleError(w, "database error", call.ID, 500)
     return
   }
   defer rows.Close()
@@ -163,7 +184,8 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
     var transactionIndex, logIndex uint
     err := rows.Scan(&address, &topic0, &topic1, &topic2, &topic3, &topic4, &data, &blockNumber, &transactionHash, &transactionIndex, &blockHash, &logIndex)
     if err != nil {
-      handleError(w, err.Error(), call.ID, 500)
+      log.Printf("Error scanning: %v", err.Error())
+      handleError(w, "database error", call.ID, 500)
       return
     }
     topics := []common.Hash{}
@@ -183,8 +205,45 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
       Index: logIndex,
     })
   }
-  response := formatResponse(logs, call)
-  responseBytes, err := json.Marshal(response)
+  responseBytes, err := json.Marshal(formatResponse(logs, call))
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  w.WriteHeader(200)
+  w.Write(responseBytes)
+}
+
+func getTokens(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  if len(call.Params) != 1 {
+    handleError(w, "expected exactly one parameter", call.ID, 400)
+    return
+  }
+  addr := &common.Address{}
+  if err := json.Unmarshal(call.Params[0], addr); err != nil {
+    handleError(w, err.Error(), call.ID, 400)
+    return
+  }
+  topic0 := common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
+  // topic0 must match ERC20, topic3 must be empty (to exclude ERC721) and topic2 is the recipient address
+  rows, err := db.QueryContext(ctx, `SELECT distinct(address) FROM event_logs WHERE topic0 = ? AND topic2 = ? AND topic3 = zeroblob(0);`, trimPrefix(topic0.Bytes()), trimPrefix(addr.Bytes()))
+  if err != nil {
+    log.Printf("Error getting account addresses: %v", err.Error())
+    handleError(w, "database error", call.ID, 500)
+  }
+  defer rows.Close()
+  addresses := []common.Address{}
+  for rows.Next() {
+    address := common.Address{}
+    err := rows.Scan(&address)
+    if err != nil {
+      log.Printf("Error scanning: %v", err.Error())
+      handleError(w, "database error", call.ID, 500)
+      return
+    }
+    addresses = append(addresses, address)
+  }
+  responseBytes, err := json.Marshal(formatResponse(addresses, call))
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
     return
