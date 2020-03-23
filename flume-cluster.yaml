@@ -310,7 +310,71 @@ Resources:
   FlumeCPUSNS:
     Type: AWS::SNS::Topic
     Properties:
+      DisplayName: Flume CPU
+  FlumeDiskSNS:
+    Type: AWS::SNS::Topic
+    Properties:
       DisplayName: Flume Disk
+
+  FlumeDiskAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref FlumeDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Alarms when the overlay data directory > 95% full"
+      ComparisonOperator: "GreaterThanThreshold"
+      Metrics:
+        - Id: nvme
+          MetricStat:
+            Metric:
+              MetricName: "disk_used_percent"
+              Namespace: CWAgent
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value : !Ref FlumeAutoScalingGroup
+                - Name: device
+                  Value : "nvme2n1"
+                - Name: fstype
+                  Value : "ext4"
+                - Name: path
+                  Value : "/var/lib/flume"
+            Period: 60
+            Stat: Maximum
+          Label: NVME Flume Disk Usage
+          ReturnData: false
+        - Id: ebs
+          MetricStat:
+            Metric:
+              MetricName: "disk_used_percent"
+              Namespace: CWAgent
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value : !Ref FlumeAutoScalingGroup
+                - Name: device
+                  Value : "nvme1n1"
+                - Name: fstype
+                  Value : "ext4"
+                - Name: path
+                  Value : "/var/lib/flume"
+            Period: 60
+            Stat: Maximum
+          Label: EBS Flume Disk Usage
+          ReturnData: false
+        - Id: delta
+          Expression: "(ebs + nvme)"
+      InsufficientDataActions:
+        - !Ref FlumeDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 5
+      OKActions:
+        - !Ref FlumeDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Threshold: 95
+      TreatMissingData: missing
   FlumesCPUAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
@@ -557,7 +621,7 @@ Resources:
                 Environment=HOME=/var/lib/flume
                 Type=simple
                 LimitNOFILE=655360
-                ExecStart=/usr/bin/flumeserver /var/lib/flume/item.sqlite "${FlumeSyncEndpoint}"
+                ExecStart=/usr/bin/flumeserver /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"
                 CPUSchedulingPolicy=fifo
                 CPUSchedulingPriority=20
                 KillMode=process
@@ -662,7 +726,7 @@ Resources:
     Properties:
       LaunchTemplateData:
         ImageId: !If [HasFlumeImageAMI, !Ref FlumeImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
-        InstanceType: m5a.large
+        InstanceType: i3en.large
         TagSpecifications:
           - ResourceType: instance
             Tags:
@@ -753,16 +817,20 @@ Resources:
                   exit poweroff
                 fi
 
+                #Deal with double escapes in url if exist
+                printf "/usr/bin/flumeserver -shutdown.sync /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"" > /tmp/flumesync.sh
+                chmod +x /tmp/flumesync.sh
+
                 # sync and shutdown
-                if !  /usr/bin/flumeserver -shutdown.sync /var/lib/flume/item.sqlite "${FlumeSyncEndpoint}"
+                if ! /tmp/flumesync.sh
                 then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
-                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. This is possibly unrecoverable."
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Snapshot Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. This is possibly unrecoverable."
                   fi
                   if [ "${AlarmSNSTopic}" != "" ]
                   then
-                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} -  Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. This is possibly unrecoverable."
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} -  Snapshot Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. This is possibly unrecoverable."
                   fi
                   exit poweroff
                 fi
@@ -772,11 +840,11 @@ Resources:
                 if ! lz4 /var/lib/flume/item.sqlite | aws s3 cp - $BACKUPNAME ; then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
-                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking Backup Failed" --message="The snapshotting process for ${AWS::StackName} failed to take a snapshot."
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking Backup Failed" --message="The snapshotting process for ${AWS::StackName} failed to upload the backup."
                   fi
                   if [ "${AlarmSNSTopic}" != "" ]
                   then
-                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Taking Backup Failed" --message="The snapshotting process for ${AWS::StackName} failed to take a snapshot."
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Taking Backup Failed" --message="The snapshotting process for ${AWS::StackName} failed to upload the backup."
                   fi
                   exit poweroff
                 fi
