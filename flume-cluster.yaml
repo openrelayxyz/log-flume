@@ -776,6 +776,7 @@ Resources:
                   echo "/dev/sdf  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
                 fi
 
+                export AWS_DEFAULT_REGION=${AWS::Region}
                 ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
                 cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
                 devices="$(ls /dev/nvme* | grep -E 'n1$')"
