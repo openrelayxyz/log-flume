@@ -1,7 +1,7 @@
 Description: A  pool of flume servers for Ether Cattle
 
 Parameters:
-  DiskSize:
+  FlumeDiskSize:
     Default: '250'
     Description: Size of each node's chaindata storage volume in GiB
     MaxValue: '1024'
@@ -10,15 +10,6 @@ Parameters:
   FlumeImageAMI:
     Default: ""
     Description: Custom AMI to use for the flume servers, empty string for default AWS AMI image
-    Type: String
-  FlumeDiskType:
-    AllowedValues:
-    - standard
-    - gp2
-    - st1
-    - sc1
-    Default: gp2
-    Description: Flume storage volume type
     Type: String
   S3FlumeBackup:
     Default: flume-stage-db/mainnet/logs-20200216.sqlite.lz4
@@ -72,7 +63,7 @@ Parameters:
       - full
       - small
     Default: full
-  AlternateTargetGroup:
+  FlumeAlternateTargetGroup:
     Type: String
     Description: An alternative comma-separated list of target groups that flume should be assigned to.
   NotificationEmail:
@@ -84,7 +75,7 @@ Parameters:
   FlumeExtraSecurityGroup:
     Type: String
     Description: An additional security to be assigned to Flumes. Leave this blank unless you need to add additional connectivity rules.
-  SnapshotScheduleExpression:
+  FlumeSnapshotScheduleExpression:
     Type: String
     Description: A schedule expression for the frequency to take snapshots
     Default: "cron(55 4 * * ? *)"
@@ -98,11 +89,11 @@ Metadata:
           default: Infrastructure
         Parameters:
           - InfrastructureStack
-          - AlternateTargetGroup
+          - FlumeAlternateTargetGroup
           - AlarmSNSTopic
           - NotificationEmail
           - KeyName
-          - SnapshotScheduleExpression
+          - FlumeSnapshotScheduleExpression
       - Label:
           default: Cluster
         Parameters:
@@ -112,11 +103,10 @@ Metadata:
       - Label:
           default: Flume
         Parameters:
-          - DiskSize
+          - FlumeDiskSize
           - FlumeSize
           - FlumeImageAMI
           - FlumeSyncEndpoint
-          - FlumeDiskType
           - FlumeTargetCapacity
           - FlumeMaxCapacity
           - FlumeOnDemandPercentage
@@ -128,12 +118,10 @@ Metadata:
           - FallbackTargetCapacity
           - FallbackMaxCapacity
     ParameterLabels:
-      DiskSize:
+      FlumeDiskSize:
         default: Disk Size
       FlumeImageAMI:
         default: Flume AMI Image
-      FlumeDiskType:
-        default: Disk Type
       S3FlumeBackup:
         default: S3 Flume Backup
       S3ECBucketName:
@@ -152,7 +140,7 @@ Metadata:
         default: On-Demand Percentage
       FlumeExtraSecurityGroup:
         default: Flume Extra Security Group
-      AlternateTargetGroup:
+      FlumeAlternateTargetGroup:
         default: Alternate Target Group
       NotificationEmail:
         default: Notification Email Address
@@ -160,7 +148,7 @@ Metadata:
         default: SNS Topic for Alarms
       SnapshotValidationThreshold:
         default: Snapshot Validation Threshold
-      SnapshotScheduleExpression:
+      FlumeSnapshotScheduleExpression:
         default: Snapshot Schedule Expression
 
 Mappings:
@@ -223,17 +211,7 @@ Mappings:
 
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
-  HasATG: !Not [!Equals [!Ref AlternateTargetGroup, '']]
-  FlumeHDD: !Or [!Equals [ !Ref FlumeDiskType, "st1"], !Equals [ !Ref FlumeDiskType, "sc1"]]
-  SmallDisk: !Or [
-      !Equals [ !Ref DiskSize, "75" ],
-      !Equals [ !Ref DiskSize, "200" ],
-      !Equals [ !Ref DiskSize, "250" ],
-      !Equals [ !Ref DiskSize, "300" ],
-      !Equals [ !Ref DiskSize, "350" ],
-      !Equals [ !Ref DiskSize, "400" ],
-      !Equals [ !Ref DiskSize, "450" ],
-    ]
+  HasATG: !Not [!Equals [!Ref FlumeAlternateTargetGroup, '']]
   HasNotificationEmail: !Not [!Equals [ !Ref NotificationEmail, "" ]]
   HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
   HasFlumeImageAMI: !Not [!Equals [ !Ref FlumeImageAMI, "" ]]
@@ -286,13 +264,13 @@ Resources:
     Type: Custom::Max
     Properties:
       ServiceToken: !GetAtt Max.Arn
-      Op1: !Ref DiskSize
+      Op1: !Ref FlumeDiskSize
       Op2: 500
   VolumeIOPS:
     Type: Custom::MulMin
     Properties:
       ServiceToken: !GetAtt MulMin.Arn
-      Op1: !Ref DiskSize
+      Op1: !Ref FlumeDiskSize
       Op2: 50
       Max: 5000
 
@@ -538,7 +516,7 @@ Resources:
             VolumeSize: 8
             VolumeType: gp2
 
-        - !If [ SmallFlume, {DeviceName: "/dev/sdf", Ebs: {VolumeSize: !Ref 'DiskSize', VolumeType: gp2}}, !Ref 'AWS::NoValue']
+        - !If [ SmallFlume, {DeviceName: "/dev/sdf", Ebs: {VolumeSize: !Ref 'FlumeDiskSize', VolumeType: gp2}}, !Ref 'AWS::NoValue']
         UserData:
           "Fn::Base64":
             "Fn::Sub":
@@ -712,7 +690,7 @@ Resources:
       MinSize: !Ref FlumeTargetCapacity
       MaxSize: !Ref FlumeMaxCapacity
       HealthCheckType: EC2
-      TargetGroupARNs: !Split [ ",", !If [HasATG, !Ref AlternateTargetGroup, {"Fn::ImportValue": !Sub "${InfrastructureStack}-ALBGroupList"}]]
+      TargetGroupARNs: !Split [ ",", !If [HasATG, !Ref FlumeAlternateTargetGroup, {"Fn::ImportValue": !Sub "${InfrastructureStack}-ALBGroupList"}]]
       MetricsCollection:
       - Granularity: 1Minute
         Metrics:
@@ -749,7 +727,7 @@ Resources:
           Ebs:
             VolumeSize: 8
             VolumeType: gp2
-        - !If [ SmallFlume, {DeviceName: "/dev/sdf", Ebs: {VolumeSize: !Ref 'DiskSize', VolumeType: gp2}}, !Ref 'AWS::NoValue']
+        - !If [ SmallFlume, {DeviceName: "/dev/sdf", Ebs: {VolumeSize: !Ref 'FlumeDiskSize', VolumeType: gp2}}, !Ref 'AWS::NoValue']
 
         UserData:
           "Fn::Base64":
@@ -1028,7 +1006,7 @@ Resources:
           SUBNET_ID:
             "Fn::ImportValue":
                 !Sub "${InfrastructureStack}-PublicA"
-          VOLUME_SIZE: !Ref DiskSize
+          VOLUME_SIZE: !Ref FlumeDiskSize
       Handler: "getSnapshot.handler"
       Role: !Sub ${FlumeSnapshotLambdaRole.Arn}
       Runtime: python3.7
@@ -1036,7 +1014,7 @@ Resources:
     Type: AWS::Events::Rule
     Properties:
       Description: !Sub "Take a daily snapshot for the ${AWS::StackName} cluster"
-      ScheduleExpression: !Ref SnapshotScheduleExpression
+      ScheduleExpression: !Ref FlumeSnapshotScheduleExpression
       Targets:
         - Arn: !Sub ${FlumeSnapshotLambdaFunction.Arn}
           Id: !Sub "snapshot-${AWS::StackName}"
