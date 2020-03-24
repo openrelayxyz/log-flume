@@ -66,6 +66,16 @@ var (
 
 func GetHandler(db *sql.DB) func(http.ResponseWriter, *http.Request) {
   return func(w http.ResponseWriter, r *http.Request) {
+    if r.Method == "GET" {
+      if _, err := getLatestBlock(r.Context(), db); err != nil {
+        w.WriteHeader(500)
+        w.Write([]byte(`{"ok":false}`))
+        return
+      }
+      w.WriteHeader(200)
+      w.Write([]byte(`{"ok":true}`))
+      return
+    }
     body, err := ioutil.ReadAll(r.Body)
     if err != nil {
       handleError(w, "error reading body", &fallbackId, 400)
