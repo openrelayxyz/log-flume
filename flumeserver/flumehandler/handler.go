@@ -168,6 +168,7 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
   }
   defer rows.Close()
   logs := []*types.Log{}
+  blockNumbersInResponse := make(map[uint64]struct{})
   for rows.Next() {
     var address, topic0, topic1, topic2, topic3, topic4, data, transactionHash, blockHash []byte
     var blockNumber uint64
@@ -177,6 +178,7 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
       handleError(w, err.Error(), call.ID, 500)
       return
     }
+    blockNumbersInResponse[blockNumber] = struct{}{}
     topics := []common.Hash{}
     if len(topic0) > 0 { topics = append(topics, bytesToHash(topic0)) }
     if len(topic1) > 0 { topics = append(topics, bytesToHash(topic1)) }
@@ -193,6 +195,10 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
       BlockHash: bytesToHash(blockHash),
       Index: logIndex,
     })
+    if len(logs) > 10000 && len(blockNumbersInResponse) > 1 {
+      handleError(w, "query returned more than 10,000 results spanning multiple blocks", call.ID, 413)
+      return
+    }
   }
   response := formatResponse(logs, call)
   responseBytes, err := json.Marshal(response)
