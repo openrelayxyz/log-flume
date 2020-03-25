@@ -59,13 +59,13 @@ func NewKafkaFeed(urlStr string, db *sql.DB) (Feed, error) {
 
 func (feeder *ethKafkaFeed) subscribe() {
   feeder.eventConsumer.Start()
-  logsEventCh := make(chan []*types.Log, 10000)
+  logsEventCh := make(chan []*types.Log)
   logsEventSub := feeder.eventConsumer.SubscribeLogsEvent(logsEventCh)
-  removedLogsEventCh := make(chan core.RemovedLogsEvent, 10000)
+  removedLogsEventCh := make(chan core.RemovedLogsEvent)
   removedLogsEventSub := feeder.eventConsumer.SubscribeRemovedLogsEvent(removedLogsEventCh)
-  feeder.chainHeadEventCh = make(chan core.ChainHeadEvent, 100)
+  feeder.chainHeadEventCh = make(chan core.ChainHeadEvent, 1000)
   chainHeadEventSub := feeder.eventConsumer.SubscribeChainHeadEvent(feeder.chainHeadEventCh)
-  feeder.offsetCh = make(chan int64, 50000)
+  feeder.offsetCh = make(chan int64, 1000)
   offsetSub := feeder.eventConsumer.SubscribeOffsets(feeder.offsetCh)
   go func() {
     defer logsEventSub.Unsubscribe()
