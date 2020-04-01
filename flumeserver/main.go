@@ -75,6 +75,7 @@ func main() {
     ReadHeaderTimeout: 5 * time.Second,
     MaxHeaderBytes: 1 << 20,
   }
+  go p.ListenAndServe()
   <-feed.Ready()
   var minBlock int
   logsdb.QueryRowContext(context.Background(), "SELECT min(blockNumber) FROM event_logs;").Scan(&minBlock)
@@ -85,7 +86,6 @@ func main() {
     sigs := make(chan os.Signal, 1)
     signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
     go s.ListenAndServe()
-    go p.ListenAndServe()
     log.Printf("Serving logs on %v", *port)
     <-sigs
     time.Sleep(time.Second)

@@ -85,7 +85,7 @@ func ProcessFeed(feed logfeed.Feed, db *sql.DB, quit <-chan struct{}) {
     } else {
       _, err := logtx.Exec(
         "DELETE FROM event_logs WHERE blockHash = ? AND logIndex = ?",
-        logRecord.BlockHash,
+        trimPrefix(logRecord.BlockHash.Bytes()),
         logRecord.Index,
       )
       if err != nil { log.Printf("WARN: (delete) %v", err.Error()) }
