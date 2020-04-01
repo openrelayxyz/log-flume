@@ -14,7 +14,7 @@ Parameters:
   S3FlumeBackup:
     Default: flume-stage-db/mainnet/logs-20200216.sqlite.lz4
     Type: String
-    Description: The bucket for Flume to store backups in
+    Description: "The backup bucket wtih path for the current backup. Do not include s3:// as that is provided in code"
   S3FlumeBackupBucket:
     Default: flume-stage-db
     Type: String
@@ -815,8 +815,8 @@ Resources:
                 fi
 
                 # upload Backup
-                export BACKUPNAME="s3://${S3FlumeBackupBucket}/${NetworkId}/logs-$(date '+%Y%m%d-%H%M%S').sqlite.lz4"
-                if ! lz4 /var/lib/flume/item.sqlite | aws s3 cp - $BACKUPNAME --expected-size=175000000000; then
+                export BACKUPNAME="${S3FlumeBackupBucket}/${NetworkId}/logs-$(date '+%Y%m%d-%H%M%S').sqlite.lz4"
+                if ! lz4 /var/lib/flume/item.sqlite | aws s3 cp - s3://$BACKUPNAME --expected-size=175000000000; then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
                     aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking Backup Failed" --message="The snapshotting process for ${AWS::StackName} failed to upload the backup."
@@ -876,6 +876,14 @@ Resources:
               - s3:GetObjectTagging
               - s3:GetBucketLocation
             Resource: !Sub arn:aws:s3:::${S3ECBucketName}/*
+            Effect: Allow
+          - Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
+            Resource: !Sub arn:aws:s3:::${S3FlumeBackup}
             Effect: Allow
           - Action:
               - cloudformation:UpdateStack
