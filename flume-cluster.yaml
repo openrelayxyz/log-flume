@@ -79,7 +79,12 @@ Parameters:
     Type: String
     Description: A schedule expression for the frequency to take snapshots
     Default: "cron(55 4 * * ? *)"
-
+  FlumeSpotAllocationStrategy:
+    Type: String
+    AllowedValues:
+      - "lowest-price"
+      - "capacity-optimized"
+    Default: "capacity-optimized"
 
 
 Metadata:
@@ -156,8 +161,14 @@ Mappings:
     Flume:
       full:
         - InstanceType: i3en.large
-        - InstanceType: m5ad.2xlarge
-        - InstanceType: m5d.2xlarge
+        - InstanceType: m5.xlarge
+        - InstanceType: m5a.xlarge
+        - InstanceType: m5ad.xlarge
+        - InstanceType: m5d.xlarge
+        - InstanceType: r5.large
+        - InstanceType: r5a.large
+        - InstanceType: r5ad.large
+        - InstanceType: r5d.large
       small:
         - InstanceType: t3.medium
         - InstanceType: t3a.medium
@@ -217,6 +228,7 @@ Conditions:
   HasFlumeImageAMI: !Not [!Equals [ !Ref FlumeImageAMI, "" ]]
   HasExtraSecurityGroup: !Not [!Equals [ !Ref FlumeExtraSecurityGroup, "" ]]
   SmallFlume: !Equals [ !Ref FlumeSize, "small"]
+  FlumeSpotLowestPrice: !Equals [!Ref FlumeSpotAllocationStrategy, "lowest-price"]
 
 Resources:
   LambdaExecutionRole:
@@ -515,8 +527,14 @@ Resources:
           Ebs:
             VolumeSize: 8
             VolumeType: gp2
+        BlockDeviceMappings:
+        - DeviceName: "/dev/sdf"
+          Ebs:
+            VolumeSize: !Ref FlumeDiskSize
+            VolumeType: io1
+            Iops: !GetAtt VolumeIOPS.Value
+            # SnapshotId: !Ref SnapshotId
 
-        - !If [ SmallFlume, {DeviceName: "/dev/sdf", Ebs: {VolumeSize: !Ref 'FlumeDiskSize', VolumeType: gp2}}, !Ref 'AWS::NoValue']
         UserData:
           "Fn::Base64":
             "Fn::Sub":
@@ -549,17 +567,18 @@ Resources:
                   echo "/dev/sdf  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
                 fi
 
-                ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
-                cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
-                devices="$(ls /dev/nvme* | grep -E 'n1$')"
-                cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
-                localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
-                if [ ! -z "$localnvme" ]
-                then
-                  mkfs.ext4 $localnvme
-                  mount -o barrier=0,data=writeback $localnvme /var/lib/flume
-                  echo "$localnvme  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
-                fi
+                # Disable NVME logic for now
+                # ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
+                # cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
+                # devices="$(ls /dev/nvme* | grep -E 'n1$')"
+                # cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
+                # localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
+                # if [ ! -z "$localnvme" ]
+                # then
+                #   mkfs.ext4 $localnvme
+                #   mount -o barrier=0,data=writeback $localnvme /var/lib/flume
+                #   echo "$localnvme  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                # fi
 
                 #Copy Down flumeserver
                 if ! aws s3 cp s3://${S3ECBucketName}/${S3FlumeBinaryDirectory}/flumeserver /usr/bin/flumeserver
@@ -644,9 +663,9 @@ Resources:
                 systemctl start journald-cloudwatch-logs
                 systemctl start flume.service
 
-                sleep 300
-                # VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
-                # aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp2 &
+                # sleep 300
+                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
+                aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp2 &
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 BaseInfrastructure:
@@ -680,8 +699,9 @@ Resources:
             !Sub "${InfrastructureStack}-PublicC"
       MixedInstancesPolicy:
         InstancesDistribution:
+          SpotAllocationStrategy: !Ref FlumeSpotAllocationStrategy
           OnDemandPercentageAboveBaseCapacity: !Ref FlumeOnDemandPercentage
-          SpotInstancePools: !FindInMap [PoolSize, Size, !Ref FlumeSize]
+          SpotInstancePools: !If [ FlumeSpotLowestPrice, !FindInMap [PoolSize, Size, !Ref FlumeSize], !Ref "AWS::NoValue"]
         LaunchTemplate:
           LaunchTemplateSpecification:
             LaunchTemplateId: !Ref FlumeLaunchTemplate
@@ -727,7 +747,13 @@ Resources:
           Ebs:
             VolumeSize: 8
             VolumeType: gp2
-        - !If [ SmallFlume, {DeviceName: "/dev/sdf", Ebs: {VolumeSize: !Ref 'FlumeDiskSize', VolumeType: gp2}}, !Ref 'AWS::NoValue']
+        BlockDeviceMappings:
+        - DeviceName: "/dev/sdf"
+          Ebs:
+            VolumeSize: !Ref FlumeDiskSize
+            VolumeType: gp2
+            # Iops: !GetAtt VolumeIOPS.Value
+            # SnapshotId: !Ref SnapshotId
 
         UserData:
           "Fn::Base64":
@@ -753,19 +779,20 @@ Resources:
                   mount -o barrier=0,data=writeback /dev/sdf /var/lib/flume
                   echo "/dev/sdf  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
                 fi
-
                 export AWS_DEFAULT_REGION=${AWS::Region}
-                ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
-                cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
-                devices="$(ls /dev/nvme* | grep -E 'n1$')"
-                cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
-                localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
-                if [ ! -z "$localnvme" ]
-                then
-                  mkfs.ext4 $localnvme
-                  mount -o barrier=0,data=writeback $localnvme /var/lib/flume
-                  echo "$localnvme  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
-                fi
+
+                # Ignore NVME for now
+                # ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
+                # cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
+                # devices="$(ls /dev/nvme* | grep -E 'n1$')"
+                # cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
+                # localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
+                # if [ ! -z "$localnvme" ]
+                # then
+                #   mkfs.ext4 $localnvme
+                #   mount -o barrier=0,data=writeback $localnvme /var/lib/flume
+                #   echo "$localnvme  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                # fi
 
                 #Copy Down flumeserver
                 if ! aws s3 cp s3://${S3ECBucketName}/${S3FlumeBinaryDirectory}/flumeserver /usr/bin/flumeserver
