@@ -14,7 +14,7 @@ Parameters:
   S3FlumeBackup:
     Default: flume-stage-db/mainnet/logs-20200216.sqlite.lz4
     Type: String
-    Description: "The backup bucket wtih path for the current backup. Do not include s3:// as that is provided in code"
+    Description: "The backup bucket with path for the current backup. Do not include s3:// as that is provided in code"
   S3FlumeBackupBucket:
     Default: flume-stage-db
     Type: String
@@ -117,6 +117,7 @@ Metadata:
           - FlumeOnDemandPercentage
           - SnapshotValidationThreshold
           - FlumeExtraSecurityGroup
+          - FlumeSpotAllocationStrategy
       - Label:
           default: Fallback
         Parameters:
@@ -788,6 +789,7 @@ Resources:
                   mount -o barrier=0,data=writeback /dev/sdf /var/lib/flume
                   echo "/dev/sdf  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
                 fi
+
                 export AWS_DEFAULT_REGION=${AWS::Region}
 
                 # Ignore NVME for now
