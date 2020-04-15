@@ -466,6 +466,14 @@ Resources:
               - s3:GetBucketPolicy
               - s3:GetObjectTagging
               - s3:GetBucketLocation
+            Resource: !Sub arn:aws:s3:::${S3FlumeBackup}
+            Effect: Allow
+          - Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
             Resource: !Sub arn:aws:s3:::${S3ECBucketName}/*
             Effect: Allow
           - Action:
