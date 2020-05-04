@@ -1,7 +1,7 @@
 Description: A  pool of flume servers for Ether Cattle
 
 Parameters:
-  DiskSize:
+  FlumeDiskSize:
     Default: '250'
     Description: Size of each node's chaindata storage volume in GiB
     MaxValue: '1024'
@@ -11,19 +11,10 @@ Parameters:
     Default: ""
     Description: Custom AMI to use for the flume servers, empty string for default AWS AMI image
     Type: String
-  FlumeDiskType:
-    AllowedValues:
-    - standard
-    - gp2
-    - st1
-    - sc1
-    Default: gp2
-    Description: Flume storage volume type
-    Type: String
   S3FlumeBackup:
     Default: flume-stage-db/mainnet/logs-20200216.sqlite.lz4
     Type: String
-    Description: The bucket for Flume to store backups in
+    Description: "The backup bucket with path for the current backup. Do not include s3:// as that is provided in code"
   S3FlumeBackupBucket:
     Default: flume-stage-db
     Type: String
@@ -72,7 +63,7 @@ Parameters:
       - full
       - small
     Default: full
-  AlternateTargetGroup:
+  FlumeAlternateTargetGroup:
     Type: String
     Description: An alternative comma-separated list of target groups that flume should be assigned to.
   NotificationEmail:
@@ -84,11 +75,16 @@ Parameters:
   FlumeExtraSecurityGroup:
     Type: String
     Description: An additional security to be assigned to Flumes. Leave this blank unless you need to add additional connectivity rules.
-  SnapshotScheduleExpression:
+  FlumeSnapshotScheduleExpression:
     Type: String
     Description: A schedule expression for the frequency to take snapshots
     Default: "cron(55 4 * * ? *)"
-
+  FlumeSpotAllocationStrategy:
+    Type: String
+    AllowedValues:
+      - "lowest-price"
+      - "capacity-optimized"
+    Default: "capacity-optimized"
 
 
 Metadata:
@@ -98,11 +94,11 @@ Metadata:
           default: Infrastructure
         Parameters:
           - InfrastructureStack
-          - AlternateTargetGroup
+          - FlumeAlternateTargetGroup
           - AlarmSNSTopic
           - NotificationEmail
           - KeyName
-          - SnapshotScheduleExpression
+          - FlumeSnapshotScheduleExpression
       - Label:
           default: Cluster
         Parameters:
@@ -112,28 +108,26 @@ Metadata:
       - Label:
           default: Flume
         Parameters:
-          - DiskSize
+          - FlumeDiskSize
           - FlumeSize
           - FlumeImageAMI
           - FlumeSyncEndpoint
-          - FlumeDiskType
           - FlumeTargetCapacity
           - FlumeMaxCapacity
           - FlumeOnDemandPercentage
           - SnapshotValidationThreshold
           - FlumeExtraSecurityGroup
+          - FlumeSpotAllocationStrategy
       - Label:
           default: Fallback
         Parameters:
           - FallbackTargetCapacity
           - FallbackMaxCapacity
     ParameterLabels:
-      DiskSize:
+      FlumeDiskSize:
         default: Disk Size
       FlumeImageAMI:
         default: Flume AMI Image
-      FlumeDiskType:
-        default: Disk Type
       S3FlumeBackup:
         default: S3 Flume Backup
       S3ECBucketName:
@@ -152,7 +146,7 @@ Metadata:
         default: On-Demand Percentage
       FlumeExtraSecurityGroup:
         default: Flume Extra Security Group
-      AlternateTargetGroup:
+      FlumeAlternateTargetGroup:
         default: Alternate Target Group
       NotificationEmail:
         default: Notification Email Address
@@ -160,7 +154,7 @@ Metadata:
         default: SNS Topic for Alarms
       SnapshotValidationThreshold:
         default: Snapshot Validation Threshold
-      SnapshotScheduleExpression:
+      FlumeSnapshotScheduleExpression:
         default: Snapshot Schedule Expression
 
 Mappings:
@@ -168,8 +162,14 @@ Mappings:
     Flume:
       full:
         - InstanceType: i3en.large
-        - InstanceType: m5ad.2xlarge
-        - InstanceType: m5d.2xlarge
+        - InstanceType: m5.xlarge
+        - InstanceType: m5a.xlarge
+        - InstanceType: m5ad.xlarge
+        - InstanceType: m5d.xlarge
+        - InstanceType: r5.large
+        - InstanceType: r5a.large
+        - InstanceType: r5ad.large
+        - InstanceType: r5d.large
       small:
         - InstanceType: t3.medium
         - InstanceType: t3a.medium
@@ -223,22 +223,13 @@ Mappings:
 
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
-  HasATG: !Not [!Equals [!Ref AlternateTargetGroup, '']]
-  FlumeHDD: !Or [!Equals [ !Ref FlumeDiskType, "st1"], !Equals [ !Ref FlumeDiskType, "sc1"]]
-  SmallDisk: !Or [
-      !Equals [ !Ref DiskSize, "75" ],
-      !Equals [ !Ref DiskSize, "200" ],
-      !Equals [ !Ref DiskSize, "250" ],
-      !Equals [ !Ref DiskSize, "300" ],
-      !Equals [ !Ref DiskSize, "350" ],
-      !Equals [ !Ref DiskSize, "400" ],
-      !Equals [ !Ref DiskSize, "450" ],
-    ]
+  HasATG: !Not [!Equals [!Ref FlumeAlternateTargetGroup, '']]
   HasNotificationEmail: !Not [!Equals [ !Ref NotificationEmail, "" ]]
   HasSNSTopic: !Not [!Equals [ !Ref AlarmSNSTopic, "" ]]
   HasFlumeImageAMI: !Not [!Equals [ !Ref FlumeImageAMI, "" ]]
   HasExtraSecurityGroup: !Not [!Equals [ !Ref FlumeExtraSecurityGroup, "" ]]
   SmallFlume: !Equals [ !Ref FlumeSize, "small"]
+  FlumeSpotLowestPrice: !Equals [!Ref FlumeSpotAllocationStrategy, "lowest-price"]
 
 Resources:
   LambdaExecutionRole:
@@ -286,13 +277,13 @@ Resources:
     Type: Custom::Max
     Properties:
       ServiceToken: !GetAtt Max.Arn
-      Op1: !Ref DiskSize
+      Op1: !Ref FlumeDiskSize
       Op2: 500
   VolumeIOPS:
     Type: Custom::MulMin
     Properties:
       ServiceToken: !GetAtt MulMin.Arn
-      Op1: !Ref DiskSize
+      Op1: !Ref FlumeDiskSize
       Op2: 50
       Max: 5000
 
@@ -310,7 +301,71 @@ Resources:
   FlumeCPUSNS:
     Type: AWS::SNS::Topic
     Properties:
+      DisplayName: Flume CPU
+  FlumeDiskSNS:
+    Type: AWS::SNS::Topic
+    Properties:
       DisplayName: Flume Disk
+
+  FlumeDiskAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref FlumeDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      AlarmDescription: "Alarms when the overlay data directory > 95% full"
+      ComparisonOperator: "GreaterThanThreshold"
+      Metrics:
+        - Id: nvme
+          MetricStat:
+            Metric:
+              MetricName: "disk_used_percent"
+              Namespace: CWAgent
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value : !Ref FlumeAutoScalingGroup
+                - Name: device
+                  Value : "nvme2n1"
+                - Name: fstype
+                  Value : "ext4"
+                - Name: path
+                  Value : "/var/lib/flume"
+            Period: 60
+            Stat: Maximum
+          Label: NVME Flume Disk Usage
+          ReturnData: false
+        - Id: ebs
+          MetricStat:
+            Metric:
+              MetricName: "disk_used_percent"
+              Namespace: CWAgent
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value : !Ref FlumeAutoScalingGroup
+                - Name: device
+                  Value : "nvme1n1"
+                - Name: fstype
+                  Value : "ext4"
+                - Name: path
+                  Value : "/var/lib/flume"
+            Period: 60
+            Stat: Maximum
+          Label: EBS Flume Disk Usage
+          ReturnData: false
+        - Id: delta
+          Expression: "(ebs + nvme)"
+      InsufficientDataActions:
+        - !Ref FlumeDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      EvaluationPeriods: 5
+      OKActions:
+        - !Ref FlumeDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+      Threshold: 95
+      TreatMissingData: missing
   FlumesCPUAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
@@ -412,6 +467,14 @@ Resources:
               - s3:GetBucketPolicy
               - s3:GetObjectTagging
               - s3:GetBucketLocation
+            Resource: !Sub arn:aws:s3:::${S3FlumeBackup}
+            Effect: Allow
+          - Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
             Resource: !Sub arn:aws:s3:::${S3ECBucketName}/*
             Effect: Allow
           - Action:
@@ -473,8 +536,14 @@ Resources:
           Ebs:
             VolumeSize: 8
             VolumeType: gp2
+        BlockDeviceMappings:
+        - DeviceName: "/dev/sdf"
+          Ebs:
+            VolumeSize: !Ref FlumeDiskSize
+            VolumeType: io1
+            Iops: !GetAtt VolumeIOPS.Value
+            # SnapshotId: !Ref SnapshotId
 
-        - !If [ SmallFlume, {DeviceName: "/dev/sdf", Ebs: {VolumeSize: !Ref 'DiskSize', VolumeType: gp2}}, !Ref 'AWS::NoValue']
         UserData:
           "Fn::Base64":
             "Fn::Sub":
@@ -507,17 +576,18 @@ Resources:
                   echo "/dev/sdf  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
                 fi
 
-                ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
-                cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
-                devices="$(ls /dev/nvme* | grep -E 'n1$')"
-                cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
-                localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
-                if [ ! -z "$localnvme" ]
-                then
-                  mkfs.ext4 $localnvme
-                  mount -o barrier=0,data=writeback $localnvme /var/lib/flume
-                  echo "$localnvme  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
-                fi
+                # Disable NVME logic for now
+                # ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
+                # cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
+                # devices="$(ls /dev/nvme* | grep -E 'n1$')"
+                # cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
+                # localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
+                # if [ ! -z "$localnvme" ]
+                # then
+                #   mkfs.ext4 $localnvme
+                #   mount -o barrier=0,data=writeback $localnvme /var/lib/flume
+                #   echo "$localnvme  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                # fi
 
                 #Copy Down flumeserver
                 if ! aws s3 cp s3://${S3ECBucketName}/${S3FlumeBinaryDirectory}/flumeserver /usr/bin/flumeserver
@@ -530,7 +600,7 @@ Resources:
                     then
                     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - CRITICAL Failure to pull binary" --message="Flume failed to pull down the binary for cluster '${AWS::StackName}'. Correct permssions/upload as soon as possible."
                   fi
-                  exit poweroff
+                  poweroff
                 fi
                 chmod +x /usr/bin/flumeserver
 
@@ -545,7 +615,7 @@ Resources:
                     then
                     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - CRITICAL Failure to pull backup" --message="Flume failed to pull down the database backup for cluster '${AWS::StackName}'. Correct permssions/upload as soon as possible."
                   fi
-                  exit poweroff
+                  poweroff
                 fi
 
                 printf "[Unit]
@@ -557,7 +627,7 @@ Resources:
                 Environment=HOME=/var/lib/flume
                 Type=simple
                 LimitNOFILE=655360
-                ExecStart=/usr/bin/flumeserver /var/lib/flume/item.sqlite "${FlumeSyncEndpoint}"
+                ExecStart=/usr/bin/flumeserver /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"
                 CPUSchedulingPolicy=fifo
                 CPUSchedulingPriority=20
                 KillMode=process
@@ -603,8 +673,9 @@ Resources:
                 systemctl start flume.service
 
                 sleep 300
-                # VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
-                # aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp2 &
+                export AWS_DEFAULT_REGION=${AWS::Region}
+                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
+                aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp2 &
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 BaseInfrastructure:
@@ -615,7 +686,7 @@ Resources:
       # AdjustmentType: String
       AutoScalingGroupName: !Ref FlumeAutoScalingGroup
       # Cooldown: 900
-      EstimatedInstanceWarmup: 600
+      EstimatedInstanceWarmup: 900
       # MetricAggregationType: String
       # MinAdjustmentMagnitude: Integer
       PolicyType: TargetTrackingScaling
@@ -638,8 +709,9 @@ Resources:
             !Sub "${InfrastructureStack}-PublicC"
       MixedInstancesPolicy:
         InstancesDistribution:
+          SpotAllocationStrategy: !Ref FlumeSpotAllocationStrategy
           OnDemandPercentageAboveBaseCapacity: !Ref FlumeOnDemandPercentage
-          SpotInstancePools: !FindInMap [PoolSize, Size, !Ref FlumeSize]
+          SpotInstancePools: !If [ FlumeSpotLowestPrice, !FindInMap [PoolSize, Size, !Ref FlumeSize], !Ref "AWS::NoValue"]
         LaunchTemplate:
           LaunchTemplateSpecification:
             LaunchTemplateId: !Ref FlumeLaunchTemplate
@@ -648,7 +720,7 @@ Resources:
       MinSize: !Ref FlumeTargetCapacity
       MaxSize: !Ref FlumeMaxCapacity
       HealthCheckType: EC2
-      TargetGroupARNs: !Split [ ",", !If [HasATG, !Ref AlternateTargetGroup, {"Fn::ImportValue": !Sub "${InfrastructureStack}-ALBGroupList"}]]
+      TargetGroupARNs: !Split [ ",", !If [HasATG, !Ref FlumeAlternateTargetGroup, {"Fn::ImportValue": !Sub "${InfrastructureStack}-ALBGroupList"}]]
       MetricsCollection:
       - Granularity: 1Minute
         Metrics:
@@ -662,7 +734,7 @@ Resources:
     Properties:
       LaunchTemplateData:
         ImageId: !If [HasFlumeImageAMI, !Ref FlumeImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
-        InstanceType: m5a.large
+        InstanceType: i3en.large
         TagSpecifications:
           - ResourceType: instance
             Tags:
@@ -685,7 +757,13 @@ Resources:
           Ebs:
             VolumeSize: 8
             VolumeType: gp2
-        - !If [ SmallFlume, {DeviceName: "/dev/sdf", Ebs: {VolumeSize: !Ref 'DiskSize', VolumeType: gp2}}, !Ref 'AWS::NoValue']
+        BlockDeviceMappings:
+        - DeviceName: "/dev/sdf"
+          Ebs:
+            VolumeSize: !Ref FlumeDiskSize
+            VolumeType: gp2
+            # Iops: !GetAtt VolumeIOPS.Value
+            # SnapshotId: !Ref SnapshotId
 
         UserData:
           "Fn::Base64":
@@ -712,17 +790,20 @@ Resources:
                   echo "/dev/sdf  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
                 fi
 
-                ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
-                cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
-                devices="$(ls /dev/nvme* | grep -E 'n1$')"
-                cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
-                localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
-                if [ ! -z "$localnvme" ]
-                then
-                  mkfs.ext4 $localnvme
-                  mount -o barrier=0,data=writeback $localnvme /var/lib/flume
-                  echo "$localnvme  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
-                fi
+                export AWS_DEFAULT_REGION=${AWS::Region}
+
+                # Ignore NVME for now
+                # ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
+                # cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
+                # devices="$(ls /dev/nvme* | grep -E 'n1$')"
+                # cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
+                # localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
+                # if [ ! -z "$localnvme" ]
+                # then
+                #   mkfs.ext4 $localnvme
+                #   mount -o barrier=0,data=writeback $localnvme /var/lib/flume
+                #   echo "$localnvme  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                # fi
 
                 #Copy Down flumeserver
                 if ! aws s3 cp s3://${S3ECBucketName}/${S3FlumeBinaryDirectory}/flumeserver /usr/bin/flumeserver
@@ -735,7 +816,7 @@ Resources:
                     then
                     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - CRITICAL Failure to pull binary" --message="Flume failed to pull down the binary for cluster '${AWS::StackName}'. Correct permssions/upload as soon as possible."
                   fi
-                  exit poweroff
+                  poweroff
                 fi
                 chmod +x /usr/bin/flumeserver
 
@@ -750,35 +831,39 @@ Resources:
                     then
                     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - CRITICAL Failure to pull backup" --message="Flume failed to pull down the database backup for cluster '${AWS::StackName}'. Correct permssions/upload as soon as possible."
                   fi
-                  exit poweroff
+                  poweroff
                 fi
 
+                #Deal with double escapes in url if exist
+                printf "/usr/bin/flumeserver -shutdown.sync /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"" > /tmp/flumesync.sh
+                chmod +x /tmp/flumesync.sh
+
                 # sync and shutdown
-                if !  /usr/bin/flumeserver -shutdown.sync /var/lib/flume/item.sqlite "${FlumeSyncEndpoint}"
+                if ! /tmp/flumesync.sh
                 then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
-                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. This is possibly unrecoverable."
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Snapshot Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. This is possibly unrecoverable."
                   fi
                   if [ "${AlarmSNSTopic}" != "" ]
                   then
-                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} -  Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. This is possibly unrecoverable."
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} -  Snapshot Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. This is possibly unrecoverable."
                   fi
-                  exit poweroff
+                  poweroff
                 fi
 
                 # upload Backup
-                export BACKUPNAME="s3://${S3FlumeBackupBucket}/${NetworkId}/logs-$(date '+%Y%m%d-%H%M%S').sqlite.lz4"
-                if ! lz4 /var/lib/flume/item.sqlite | aws s3 cp - $BACKUPNAME ; then
+                export BACKUPNAME="${S3FlumeBackupBucket}/${NetworkId}/logs-$(date '+%Y%m%d-%H%M%S').sqlite.lz4"
+                if ! lz4 /var/lib/flume/item.sqlite | aws s3 cp - s3://$BACKUPNAME --expected-size=175000000000; then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
-                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking Backup Failed" --message="The snapshotting process for ${AWS::StackName} failed to take a snapshot."
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking Backup Failed" --message="The snapshotting process for ${AWS::StackName} failed to upload the backup."
                   fi
                   if [ "${AlarmSNSTopic}" != "" ]
                   then
-                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Taking Backup Failed" --message="The snapshotting process for ${AWS::StackName} failed to take a snapshot."
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Taking Backup Failed" --message="The snapshotting process for ${AWS::StackName} failed to upload the backup."
                   fi
-                  exit poweroff
+                  poweroff
                 fi
 
                 # CFN will set any parameters we don't provide back to their default values,
@@ -829,6 +914,14 @@ Resources:
               - s3:GetObjectTagging
               - s3:GetBucketLocation
             Resource: !Sub arn:aws:s3:::${S3ECBucketName}/*
+            Effect: Allow
+          - Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
+            Resource: !Sub arn:aws:s3:::${S3FlumeBackup}
             Effect: Allow
           - Action:
               - cloudformation:UpdateStack
@@ -960,7 +1053,7 @@ Resources:
           SUBNET_ID:
             "Fn::ImportValue":
                 !Sub "${InfrastructureStack}-PublicA"
-          VOLUME_SIZE: !Ref DiskSize
+          VOLUME_SIZE: !Ref FlumeDiskSize
       Handler: "getSnapshot.handler"
       Role: !Sub ${FlumeSnapshotLambdaRole.Arn}
       Runtime: python3.7
@@ -968,7 +1061,7 @@ Resources:
     Type: AWS::Events::Rule
     Properties:
       Description: !Sub "Take a daily snapshot for the ${AWS::StackName} cluster"
-      ScheduleExpression: !Ref SnapshotScheduleExpression
+      ScheduleExpression: !Ref FlumeSnapshotScheduleExpression
       Targets:
         - Arn: !Sub ${FlumeSnapshotLambdaFunction.Arn}
           Id: !Sub "snapshot-${AWS::StackName}"

@@ -55,6 +55,7 @@ func restructureLogs(input interface{}) ([]types.Log, error) {
 func NewETHWSFeed(urlStr string, db *sql.DB) Feed {
   var resumeBlock uint64
   db.QueryRowContext(context.Background(), "SELECT max(blockNumber) FROM event_logs;").Scan(&resumeBlock)
+  if resumeBlock > 0 { resumeBlock-- }
   feed := &ethWSFeed{
     urlStr: urlStr,
     lastBlockTime: &atomic.Value{},
