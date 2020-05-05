@@ -219,7 +219,7 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
       BlockHash: bytesToHash(blockHash),
       Index: logIndex,
     })
-    if len(logs) > 10000 && len(blockNumbersInResponse) > 1 {
+      if len(logs) > 10000 && len(blockNumbersInResponse) > 1 {
       handleError(w, "query returned more than 10,000 results spanning multiple blocks", call.ID, 413)
       return
     }
@@ -235,7 +235,7 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
 
 type paginator struct {
   Items interface{} `json:"items"`
-  Token interface{} `json:"continuation,omitempty"`
+  Token interface{} `json:"next,omitempty"`
 }
 
 func getERC20ByAccount(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
@@ -248,9 +248,9 @@ func getERC20ByAccount(ctx context.Context, w http.ResponseWriter, call *rpcCall
     handleError(w, err.Error(), call.ID, 400)
     return
   }
-  token := &common.Address{}
+  offset := 0
   if len(call.Params) > 1 {
-    if err := json.Unmarshal(call.Params[1], token); err != nil {
+    if err := json.Unmarshal(call.Params[1], &offset); err != nil {
       handleError(w, err.Error(), call.ID, 400)
       return
     }
@@ -258,7 +258,7 @@ func getERC20ByAccount(ctx context.Context, w http.ResponseWriter, call *rpcCall
 
   topic0 := common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
   // topic0 must match ERC20, topic3 must be empty (to exclude ERC721) and topic2 is the recipient address
-  rows, err := db.QueryContext(ctx, `SELECT distinct(address) FROM event_logs WHERE address > ? AND topic0 = ? AND topic2 = ? AND topic3 = zeroblob(0) ORDER BY address LIMIT 10000;`, trimPrefix(token.Bytes()), trimPrefix(topic0.Bytes()), trimPrefix(addr.Bytes()))
+  rows, err := db.QueryContext(ctx, `SELECT distinct(address) FROM event_logs INDEXED BY topic2 WHERE topic0 = ? AND topic2 = ? AND topic3 = zeroblob(0) LIMIT 10000 OFFSET ?;`, trimPrefix(topic0.Bytes()), trimPrefix(addr.Bytes()), offset)
   if err != nil {
     log.Printf("Error getting account addresses: %v", err.Error())
     handleError(w, "database error", call.ID, 500)
@@ -276,11 +276,11 @@ func getERC20ByAccount(ctx context.Context, w http.ResponseWriter, call *rpcCall
     }
     addresses = append(addresses, bytesToAddress(addrBytes))
   }
-  var resumptionToken interface{}
+  result := paginator{Items: addresses}
   if len(addresses) == 10000 {
-    resumptionToken = addresses[9999]
+    result.Token = offset + len(addresses)
   }
-  responseBytes, err := json.Marshal(formatResponse(paginator{Items: addresses, Token: resumptionToken}, call))
+  responseBytes, err := json.Marshal(formatResponse(result, call))
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
     return
@@ -299,9 +299,9 @@ func getERC20Holders(ctx context.Context, w http.ResponseWriter, call *rpcCall, 
     handleError(w, err.Error(), call.ID, 400)
     return
   }
-  token := &common.Address{}
+  offset := 0
   if len(call.Params) > 1 {
-    if err := json.Unmarshal(call.Params[1], token); err != nil {
+    if err := json.Unmarshal(call.Params[1], &offset); err != nil {
       handleError(w, err.Error(), call.ID, 400)
       return
     }
@@ -309,7 +309,7 @@ func getERC20Holders(ctx context.Context, w http.ResponseWriter, call *rpcCall, 
 
   topic0 := common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
   // topic0 must match ERC20, topic3 must be empty (to exclude ERC721) and topic2 is the recipient address
-  rows, err := db.QueryContext(ctx, `SELECT distinct(topic2) FROM event_logs WHERE topic2 > ? AND topic0 = ? AND address = ? AND topic3 = zeroblob(0) ORDER BY topic2 LIMIT 10000;`, trimPrefix(token.Bytes()), trimPrefix(topic0.Bytes()), trimPrefix(addr.Bytes()))
+  rows, err := db.QueryContext(ctx, `SELECT distinct(topic2) FROM event_logs INDEXED BY address WHERE topic0 = ? AND address = ? AND topic3 = zeroblob(0) LIMIT 10000 OFFSET ?;`, trimPrefix(topic0.Bytes()), trimPrefix(addr.Bytes()), offset)
   if err != nil {
     log.Printf("Error getting account addresses: %v", err.Error())
     handleError(w, "database error", call.ID, 500)
@@ -326,11 +326,11 @@ func getERC20Holders(ctx context.Context, w http.ResponseWriter, call *rpcCall, 
     }
     addresses = append(addresses, bytesToAddress(addrBytes))
   }
-  var resumptionToken interface{}
+  result := paginator{Items: addresses}
   if len(addresses) == 10000 {
-    resumptionToken = addresses[9999]
+    result.Token = offset + len(addresses)
   }
-  responseBytes, err := json.Marshal(formatResponse(paginator{Items: addresses, Token: resumptionToken}, call))
+  responseBytes, err := json.Marshal(formatResponse(result, call))
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
     return
