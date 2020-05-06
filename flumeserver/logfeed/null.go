@@ -1,9 +1,10 @@
 package logfeed
 
 import(
-  "time"
+  "database/sql"
   "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/event"
+  "time"
 )
 
 type NullSubscription struct {}
@@ -27,4 +28,4 @@ func (f* NullFeed) Ready() chan struct{} {
 func (f* NullFeed) Healthy(d time.Duration) bool {
   return true
 }
-func (f* NullFeed) Commit(uint64) {}
+func (f* NullFeed) Commit(uint64, *sql.Tx) {}

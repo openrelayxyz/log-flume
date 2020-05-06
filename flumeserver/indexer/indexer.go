@@ -8,6 +8,7 @@ import (
   "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/common"
   "log"
+  "time"
 )
 
 func trimPrefix(data []byte) ([]byte) {
@@ -45,50 +46,65 @@ func ProcessFeed(feed logfeed.Feed, db *sql.DB, quit <-chan struct{}) {
     default:
       if started {
         log.Printf("Committing %v logs", counter)
+        feed.Commit(highestBlock, logtx)
         if err := logtx.Commit(); err != nil {
-          log.Printf("WARN: Transaction commit failed: %v", err.Error())
+          // TODO: Consider implementing a feed.Rollback() to roll the feed back
+          // to a previous commit. For now crashing and restarting will have a
+          // similar effect for indexing, with the downside of serving errors to
+          // queries.
+          log.Fatalf("Transaction commit failed: %v", err.Error())
         }
-        feed.Commit(highestBlock)
         counter = 0
-        logtx, err = db.BeginTx(context.Background(), nil)
-        if err != nil {
-          log.Printf("WARN: Failed to start transaction: %v", err.Error())
-        }
       }
       select{
       case <-quit:
         return
       case logRecord = <- logCh:
+        logtx, err = db.BeginTx(context.Background(), nil)
+        if err != nil {
+          log.Printf("WARN: Failed to start transaction: %v", err.Error())
+        }
       }
     }
     // log.Printf("Processing log")
     counter++
     started = true
-    if !logRecord.Removed {
-      _, err := logtx.Exec(
-        "INSERT OR IGNORE INTO event_logs(address, topic0, topic1, topic2, topic3, topic4, data, blockNumber, transactionHash, transactionIndex, blockHash, logIndex) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-        trimPrefix(logRecord.Address.Bytes()),
-        trimPrefix(getTopicIndex(logRecord.Topics, 0)),
-        trimPrefix(getTopicIndex(logRecord.Topics, 1)),
-        trimPrefix(getTopicIndex(logRecord.Topics, 2)),
-        trimPrefix(getTopicIndex(logRecord.Topics, 3)),
-        trimPrefix(getTopicIndex(logRecord.Topics, 4)),
-        logRecord.Data,
-        logRecord.BlockNumber,
-        trimPrefix(logRecord.TxHash.Bytes()),
-        logRecord.TxIndex,
-        trimPrefix(logRecord.BlockHash.Bytes()),
-        logRecord.Index,
-      )
-      if err != nil { log.Printf("WARN: (insert) %v", err.Error()) }
-      highestBlock = logRecord.BlockNumber
-    } else {
-      _, err := logtx.Exec(
-        "DELETE FROM event_logs WHERE blockHash = ? AND logIndex = ?",
-        trimPrefix(logRecord.BlockHash.Bytes()),
-        logRecord.Index,
-      )
-      if err != nil { log.Printf("WARN: (delete) %v", err.Error()) }
+    for {
+      if !logRecord.Removed {
+        _, err := logtx.Exec(
+          "INSERT OR IGNORE INTO event_logs(address, topic0, topic1, topic2, topic3, topic4, data, blockNumber, transactionHash, transactionIndex, blockHash, logIndex) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+          trimPrefix(logRecord.Address.Bytes()),
+          trimPrefix(getTopicIndex(logRecord.Topics, 0)),
+          trimPrefix(getTopicIndex(logRecord.Topics, 1)),
+          trimPrefix(getTopicIndex(logRecord.Topics, 2)),
+          trimPrefix(getTopicIndex(logRecord.Topics, 3)),
+          trimPrefix(getTopicIndex(logRecord.Topics, 4)),
+          logRecord.Data,
+          logRecord.BlockNumber,
+          trimPrefix(logRecord.TxHash.Bytes()),
+          logRecord.TxIndex,
+          trimPrefix(logRecord.BlockHash.Bytes()),
+          logRecord.Index,
+        )
+        if err != nil {
+          log.Printf("WARN: (insert) %v", err.Error())
+          time.Sleep(time.Millisecond)
+          continue
+        }
+        highestBlock = logRecord.BlockNumber
+        break
+        } else {
+          _, err := logtx.Exec(
+            "DELETE FROM event_logs WHERE blockHash = ? AND logIndex = ?",
+            trimPrefix(logRecord.BlockHash.Bytes()),
+            logRecord.Index,
+          )
+          if err != nil {
+            log.Printf("WARN: (delete) %v", err.Error())
+            continue
+          }
+          break
+        }
     }
   }
 }

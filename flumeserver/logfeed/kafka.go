@@ -88,7 +88,7 @@ func (feeder *ethKafkaFeed) subscribe() {
   }()
 }
 
-func (feeder *ethKafkaFeed) Commit(num uint64) {
+func (feeder *ethKafkaFeed) Commit(num uint64, tx *sql.Tx) {
   chainHead := <-feeder.chainHeadEventCh
   count := 1
   for chainHead.Block.NumberU64() < num{
@@ -99,7 +99,7 @@ func (feeder *ethKafkaFeed) Commit(num uint64) {
   for offset.Hash != chainHead.Block.Hash() {
     offset = <-feeder.offsetCh
   }
-  _, err := feeder.db.Exec("UPDATE offsets SET offset = ? WHERE offset < ?;", offset.Offset, offset.Offset)
+  _, err := tx.Exec("UPDATE offsets SET offset = ? WHERE offset < ?;", offset.Offset, offset.Offset)
   if err != nil { log.Printf("Error updating offset: %v", err.Error())}
 }
 
