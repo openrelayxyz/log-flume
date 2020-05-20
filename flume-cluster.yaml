@@ -1044,7 +1044,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3ECBucketName
-        S3Key: lambdaPackage-15.zip
+        S3Key: lambdaPackage-17.zip
       Description: "Launch instances to snapshot chaindata"
       Environment:
         Variables:
@@ -1072,6 +1072,75 @@ Resources:
       Action: 'lambda:InvokeFunction'
       Principal: events.amazonaws.com
       SourceArn: !Sub ${SnapshotSchedulerRule.Arn}
+
+
+  FlumeLogMetricsFunctionLG:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 7
+      LogGroupName: !Join ["", ["/aws/lambda/", !Ref FlumeLogMetricsFunction]]
+
+  LogMetricsRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+  LogMetricsFunctionPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref LogMetricsRole
+      PolicyName: !Sub "FlumeLogMetrics${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - "logs:CreateLogStream"
+              - "logs:PutLogEvents"
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - "cloudwatch:PutMetricData"
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - "logs:CreateLogGroup"
+            Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+  FlumeLogMetricsFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3ECBucketName
+        S3Key: flumeLambdaPackage-1.zip
+      Description: "A lambda function to process Geth logs into metrics"
+      Environment:
+        Variables:
+          CLUSTER_ID: !Sub ${NetworkId}
+      Handler: "logMonitor.flumeHandler"
+      Role: !Sub ${LogMetricsRole.Arn}
+      Runtime: python3.7
+  FlumeLogMetricsSubscription:
+    Type: AWS::Logs::SubscriptionFilter
+    Properties:
+      DestinationArn: !Sub ${FlumeLogMetricsFunction.Arn}
+      FilterPattern: '{$.systemdUnit = "flume.service"}'
+      LogGroupName: !Ref FlumeLG
+  FlumeLogMetricFunctionInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${FlumeLogMetricsFunction.Arn}
+      Action: 'lambda:InvokeFunction'
+      Principal: !Sub logs.${AWS::Region}.amazonaws.com
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !Sub ${FlumeLG.Arn}
 
   # TODO
   # SnapshotGCLambdaRole:
@@ -1105,7 +1174,7 @@ Resources:
   #   Properties:
   #     Code:
   #       S3Bucket: !Ref S3ECBucketName
-  #       S3Key: lambdaPackage-15.zip
+  #       S3Key: lambdaPackage-17.zip
   #     Description: "Cleanup old chaindata snapshots"
   #     Environment:
   #       Variables:

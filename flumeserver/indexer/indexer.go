@@ -45,7 +45,7 @@ func ProcessFeed(feed logfeed.Feed, db *sql.DB, quit <-chan struct{}) {
     case logRecord = <- logCh:
     default:
       if started {
-        log.Printf("Committing %v logs", counter)
+        log.Printf("Committing %v logs up to block %v", counter, highestBlock)
         feed.Commit(highestBlock, logtx)
         if err := logtx.Commit(); err != nil {
           // TODO: Consider implementing a feed.Rollback() to roll the feed back
