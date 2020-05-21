@@ -1,12 +1,18 @@
+// TODO: Check context error before returning results
+// TODO: More testing of large result sets for new APIs
+
+
 package flumehandler
 
 import (
   "bytes"
   "strings"
+  "time"
   "encoding/json"
   "net/http"
   "database/sql"
   "github.com/ethereum/go-ethereum/common"
+  "github.com/ethereum/go-ethereum/common/hexutil"
   "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/eth/filters"
   "io/ioutil"
@@ -66,6 +72,16 @@ var (
 
 func GetHandler(db *sql.DB) func(http.ResponseWriter, *http.Request) {
   return func(w http.ResponseWriter, r *http.Request) {
+    if r.Method == "GET" {
+      if _, err := getLatestBlock(r.Context(), db); err != nil {
+        w.WriteHeader(500)
+        w.Write([]byte(`{"ok":false}`))
+        return
+      }
+      w.WriteHeader(200)
+      w.Write([]byte(`{"ok":true}`))
+      return
+    }
     body, err := ioutil.ReadAll(r.Body)
     if err != nil {
       handleError(w, "error reading body", &fallbackId, 400)
@@ -79,9 +95,16 @@ func GetHandler(db *sql.DB) func(http.ResponseWriter, *http.Request) {
     switch call.Method {
     case "eth_getLogs":
       getLogs(r.Context(), w, call, db)
+    case "eth_blockNumber":
+      getBlockNumber(r.Context(), w, call, db)
+    case "flume_erc20ByAccount":
+      getERC20ByAccount(r.Context(), w, call, db)
+    case "flume_erc20Holders":
+      getERC20Holders(r.Context(), w, call, db)
     default:
       handleError(w, "unsupported method", call.ID, 400)
     }
+    w.Write([]byte("\n"))
   }
 }
 
@@ -89,6 +112,21 @@ func getLatestBlock(ctx context.Context, db *sql.DB) (int64, error) {
   var result int64
   err := db.QueryRowContext(ctx, "SELECT max(blockNumber) FROM event_logs;").Scan(&result)
   return result, err
+}
+
+func getBlockNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  blockNo, err := getLatestBlock(ctx, db)
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  responseBytes, err := json.Marshal(formatResponse(hexutil.Uint64(blockNo), call))
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  w.WriteHeader(200)
+  w.Write(responseBytes)
 }
 
 func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
@@ -100,6 +138,7 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
   crit := filters.FilterCriteria{}
   if len(call.Params) < 1 {
     handleError(w, "missing value for required argument 0", call.ID, 400)
+    return
   }
   if err := json.Unmarshal(call.Params[0], &crit); err != nil {
     log.Printf("Error unmarshalling into criteria: %v", err.Error())
@@ -152,20 +191,23 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
   rows, err := db.QueryContext(ctx, query, params...)
   if err != nil {
     log.Printf("Error selecting: %v - '%v'", err.Error(), query)
-    handleError(w, err.Error(), call.ID, 500)
+    handleError(w, "database error", call.ID, 500)
     return
   }
   defer rows.Close()
   logs := []*types.Log{}
+  blockNumbersInResponse := make(map[uint64]struct{})
   for rows.Next() {
     var address, topic0, topic1, topic2, topic3, topic4, data, transactionHash, blockHash []byte
     var blockNumber uint64
     var transactionIndex, logIndex uint
     err := rows.Scan(&address, &topic0, &topic1, &topic2, &topic3, &topic4, &data, &blockNumber, &transactionHash, &transactionIndex, &blockHash, &logIndex)
     if err != nil {
-      handleError(w, err.Error(), call.ID, 500)
+      log.Printf("Error scanning: %v", err.Error())
+      handleError(w, "database error", call.ID, 500)
       return
     }
+    blockNumbersInResponse[blockNumber] = struct{}{}
     topics := []common.Hash{}
     if len(topic0) > 0 { topics = append(topics, bytesToHash(topic0)) }
     if len(topic1) > 0 { topics = append(topics, bytesToHash(topic1)) }
@@ -182,11 +224,142 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
       BlockHash: bytesToHash(blockHash),
       Index: logIndex,
     })
+      if len(logs) > 10000 && len(blockNumbersInResponse) > 1 {
+      handleError(w, "query returned more than 10,000 results spanning multiple blocks", call.ID, 413)
+      return
+    }
   }
-  response := formatResponse(logs, call)
-  responseBytes, err := json.Marshal(response)
+  if err := rows.Err(); err != nil {
+    log.Printf("Error scanning: %v", err.Error())
+    handleError(w, "database error", call.ID, 500)
+    return
+  }
+  responseBytes, err := json.Marshal(formatResponse(logs, call))
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  w.WriteHeader(200)
+  w.Write(responseBytes)
+}
+
+type paginator struct {
+  Items interface{} `json:"items"`
+  Token interface{} `json:"next,omitempty"`
+}
+
+func getERC20ByAccount(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  if len(call.Params) < 1 || len(call.Params) > 2 {
+    handleError(w, "expected 1 - 2 parameters", call.ID, 400)
+    return
+  }
+  addr := &common.Address{}
+  if err := json.Unmarshal(call.Params[0], addr); err != nil {
+    handleError(w, err.Error(), call.ID, 400)
+    return
+  }
+  offset := 0
+  if len(call.Params) > 1 {
+    if err := json.Unmarshal(call.Params[1], &offset); err != nil {
+      handleError(w, err.Error(), call.ID, 400)
+      return
+    }
+  }
+
+  tctx, cancel := context.WithTimeout(ctx, 2 * time.Second)
+  defer cancel()
+
+  topic0 := common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
+  // topic0 must match ERC20, topic3 must be empty (to exclude ERC721) and topic2 is the recipient address
+  rows, err := db.QueryContext(tctx, `SELECT distinct(address) FROM event_logs INDEXED BY topic2 WHERE topic0 = ? AND topic2 = ? AND topic3 = zeroblob(0) LIMIT 10000 OFFSET ?;`, trimPrefix(topic0.Bytes()), trimPrefix(addr.Bytes()), offset)
+  if err != nil {
+    log.Printf("Error getting account addresses: %v", err.Error())
+    handleError(w, "database error", call.ID, 500)
+    return
+  }
+  defer rows.Close()
+  addresses := []common.Address{}
+  for rows.Next() {
+    var addrBytes []byte
+    err := rows.Scan(&addrBytes)
+    if err != nil {
+      log.Printf("Error scanning: %v", err.Error())
+      handleError(w, "database error", call.ID, 500)
+      return
+    }
+    addresses = append(addresses, bytesToAddress(addrBytes))
+  }
+  if err := rows.Err(); err != nil {
+    log.Printf("Error scanning: %v", err.Error())
+    handleError(w, "database error", call.ID, 500)
+    return
+  }
+  result := paginator{Items: addresses}
+  if len(addresses) == 10000 {
+    result.Token = offset + len(addresses)
+  }
+  responseBytes, err := json.Marshal(formatResponse(result, call))
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  w.WriteHeader(200)
+  w.Write(responseBytes)
+}
+
+func getERC20Holders(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  if len(call.Params) < 1 || len(call.Params) > 2 {
+    handleError(w, "expected 1 - 2 parameters", call.ID, 400)
+    return
+  }
+  addr := &common.Address{}
+  if err := json.Unmarshal(call.Params[0], addr); err != nil {
+    handleError(w, err.Error(), call.ID, 400)
+    return
+  }
+  offset := 0
+  if len(call.Params) > 1 {
+    if err := json.Unmarshal(call.Params[1], &offset); err != nil {
+      handleError(w, err.Error(), call.ID, 400)
+      return
+    }
+  }
+
+  tctx, cancel := context.WithTimeout(ctx, 2 * time.Second)
+  defer cancel()
+
+  topic0 := common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
+  // topic0 must match ERC20, topic3 must be empty (to exclude ERC721) and topic2 is the recipient address
+  rows, err := db.QueryContext(tctx, `SELECT distinct(topic2) FROM event_logs INDEXED BY address WHERE topic0 = ? AND address = ? AND topic3 = zeroblob(0) LIMIT 10000 OFFSET ?;`, trimPrefix(topic0.Bytes()), trimPrefix(addr.Bytes()), offset)
+  if err != nil {
+    log.Printf("Error getting account addresses: %v", err.Error())
+    handleError(w, "database error", call.ID, 500)
+  }
+  defer rows.Close()
+  addresses := []common.Address{}
+  for rows.Next() {
+    var addrBytes []byte
+    err := rows.Scan(&addrBytes)
+    if err != nil {
+      log.Printf("Error scanning: %v", err.Error())
+      handleError(w, "database error", call.ID, 500)
+      return
+    }
+    addresses = append(addresses, bytesToAddress(addrBytes))
+  }
+  if err := rows.Err(); err != nil {
+    log.Printf("Error scanning: %v", err.Error())
+    handleError(w, "database error", call.ID, 500)
+    return
+  }
+  result := paginator{Items: addresses}
+  if len(addresses) == 10000 {
+    result.Token = offset + len(addresses)
+  }
+  responseBytes, err := json.Marshal(formatResponse(result, call))
+  if err != nil {
+    log.Printf("Error scanning: %v", err.Error())
+    handleError(w, "database error", call.ID, 500)
     return
   }
   w.WriteHeader(200)
