@@ -52,7 +52,7 @@ For now, we've added two new RPC calls:
 
   ```
   curl http://flumehost/ --data '{"id": 1, "method": "flume_erc20ByAccount", "params": ["0x0a65659b64573628ff7f90226b5a8bcbd3abf075"]}'
-{"jsonrpc":"","id":1,"result":{"items":["0x0027449bf0887ca3e431d263ffdefb244d95b555", "0xdde19c145c1ee51b48f7a28e8df125da0cc440be"]}}
+  {"jsonrpc":"","id":1,"result":{"items":["0x0027449bf0887ca3e431d263ffdefb244d95b555", "0xdde19c145c1ee51b48f7a28e8df125da0cc440be"]}}
   ```
 
   *Note*: This API will return any ERC20 tokens the address has ever received;
@@ -67,7 +67,7 @@ subsequent call to get more results.
 
   ```
   curl http://flumehost/ --data '{"id": 1, "method": "flume_erc20Holders", "params": ["0xdde19c145c1ee51b48f7a28e8df125da0cc440be"]}'
-{"jsonrpc":"","id":1,"result":{"items":["0xaa461d363125ad5ce27b3941ed6a2b1cf2c7cdf3","0x08409de58f3ad94c5e2c53dbe60ae01be472a820","0x0a65659b64573628ff7f90226b5a8bcbd3abf075","0x18e4ff99ee82f4a38292f1a5d5b2951a5d2a6f2d",["..."]]}}
+  {"jsonrpc":"","id":1,"result":{"items":["0xaa461d363125ad5ce27b3941ed6a2b1cf2c7cdf3","0x08409de58f3ad94c5e2c53dbe60ae01be472a820","0x0a65659b64573628ff7f90226b5a8bcbd3abf075","0x18e4ff99ee82f4a38292f1a5d5b2951a5d2a6f2d",["..."]]}}
   ```
   *Note*: This API will return any accounts that have ever received the token;
   it is possible that those tokens are not currently present in the wallet.
