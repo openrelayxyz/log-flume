@@ -52,6 +52,8 @@ func ProcessFeed(feed logfeed.Feed, db *sql.DB, quit <-chan struct{}) {
           // to a previous commit. For now crashing and restarting will have a
           // similar effect for indexing, with the downside of serving errors to
           // queries.
+          stats := db.Stats()
+          log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
           log.Fatalf("Transaction commit failed: %v", err.Error())
         }
         counter = 0
@@ -62,7 +64,9 @@ func ProcessFeed(feed logfeed.Feed, db *sql.DB, quit <-chan struct{}) {
       case logRecord = <- logCh:
         logtx, err = db.BeginTx(context.Background(), nil)
         if err != nil {
+          stats := db.Stats()
           log.Printf("WARN: Failed to start transaction: %v", err.Error())
+          log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
         }
       }
     }
@@ -87,7 +91,9 @@ func ProcessFeed(feed logfeed.Feed, db *sql.DB, quit <-chan struct{}) {
           logRecord.Index,
         )
         if err != nil {
+          stats := db.Stats()
           log.Printf("WARN: (insert) %v", err.Error())
+          log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
           time.Sleep(time.Millisecond)
           continue
         }
@@ -100,7 +106,9 @@ func ProcessFeed(feed logfeed.Feed, db *sql.DB, quit <-chan struct{}) {
             logRecord.Index,
           )
           if err != nil {
+            stats := db.Stats()
             log.Printf("WARN: (delete) %v", err.Error())
+            log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
             continue
           }
           break

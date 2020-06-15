@@ -41,6 +41,14 @@ func main() {
   if err != nil { log.Fatalf(err.Error()) }
   logsdb.SetConnMaxLifetime(0)
   logsdb.SetMaxIdleConns(32)
+  go func() {
+    ticker := time.NewTicker(30 * time.Second)
+    defer ticker.Stop()
+    for _ = range ticker.C {
+      stats := logsdb.Stats()
+      log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
+    }
+  }()
 
   var tableName string
   logsdb.QueryRowContext(context.Background(), "SELECT name FROM sqlite_master WHERE type='table' and name='event_logs';").Scan(&tableName)
