@@ -37,7 +37,7 @@ func main() {
   sqlitePath := flag.CommandLine.Args()[0]
   feedURL := flag.CommandLine.Args()[1]
 
-  logsdb, err := sql.Open("sqlite3", fmt.Sprintf("file:%v?_sync=0&journal_mode=WAL", sqlitePath))
+  logsdb, err := sql.Open("sqlite3", fmt.Sprintf("file:%v?_sync=0&_journal_mode=WAL", sqlitePath))
   if err != nil { log.Fatalf(err.Error()) }
   logsdb.SetConnMaxLifetime(0)
   logsdb.SetMaxIdleConns(32)

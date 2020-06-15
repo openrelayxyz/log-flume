@@ -833,6 +833,8 @@ Resources:
                   poweroff
                 fi
 
+                sleep 60
+
                 #Deal with double escapes in url if exist
                 printf "/usr/bin/flumeserver -shutdown.sync /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"" > /tmp/flumesync.sh
                 chmod +x /tmp/flumesync.sh
