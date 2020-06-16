@@ -146,22 +146,31 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
     return
   }
   whereClause := []string{}
+  indexClause := ""
   params := []interface{}{}
   if crit.BlockHash != nil {
     whereClause = append(whereClause, "blockHash = ?")
     params = append(params, trimPrefix(crit.BlockHash.Bytes()))
   }
-  whereClause = append(whereClause, "blockNumber >= ?")
+  var fromBlock, toBlock int64
   if crit.FromBlock == nil || crit.FromBlock.Int64() < 0 {
-    params = append(params, latestBlock)
+    fromBlock = latestBlock
   } else {
-    params = append(params, crit.FromBlock.Int64())
+    fromBlock = crit.FromBlock.Int64()
+  }
+  whereClause = append(whereClause, "blockNumber >= ?")
+  params = append(params, fromBlock)
+  if crit.ToBlock == nil || crit.ToBlock.Int64() < 0{
+    toBlock = latestBlock
+  } else {
+    toBlock = crit.ToBlock.Int64()
   }
   whereClause = append(whereClause, "blockNumber <= ?")
-  if crit.ToBlock == nil || crit.ToBlock.Int64() < 0{
-    params = append(params, latestBlock)
-  } else {
-    params = append(params, crit.ToBlock.Int64())
+  params = append(params, toBlock)
+  if crit.BlockHash == nil && toBlock - fromBlock < 10000 {
+    // If the block range is smaller than 10k, that's probably the best index
+    // otherwise we'll lean on the query planner.
+    indexClause = "INDEXED BY blockNumber"
   }
   addressClause := []string{}
   for _, address := range crit.Addresses {
@@ -187,7 +196,7 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
   if len(topicsClause) > 0 {
     whereClause = append(whereClause, fmt.Sprintf("(%v)", strings.Join(topicsClause, " AND ")))
   }
-  query := fmt.Sprintf("SELECT address, topic0, topic1, topic2, topic3, topic4, data, blockNumber, transactionHash, transactionIndex, blockHash, logIndex FROM event_logs WHERE %v;", strings.Join(whereClause, " AND "))
+  query := fmt.Sprintf("SELECT address, topic0, topic1, topic2, topic3, topic4, data, blockNumber, transactionHash, transactionIndex, blockHash, logIndex FROM event_logs %v WHERE %v;", indexClause, strings.Join(whereClause, " AND "))
   rows, err := db.QueryContext(ctx, query, params...)
   if err != nil {
     log.Printf("Error selecting: %v - '%v'", err.Error(), query)
