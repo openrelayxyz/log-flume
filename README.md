@@ -1,17 +1,128 @@
-## About
-Our mission is to make ETH nodes operationally manageable. Flume, the log indexing service makes getting log data, simple and fast. It gives people access to same core functionality of proprietary services while running your own nodes.
+## About Our mission is to make ETH nodes operationally manageable. Flume, the
+#log indexing service makes getting log data, simple and fast. It gives people
+#access to same core functionality of proprietary services while running your
+#own nodes.
 
 ## MVP
 
-This repo contains an MVP based on our EtherCattle deployment infrastructure. It contains a basic gatsby website that will be able to connect to a running instance of flume, which is connected to a websocket endpoint.
+This repo contains an MVP based on our EtherCattle deployment infrastructure. It
+contains a basic gatsby website that will be able to connect to a running
+instance of flume, which is connected to a websocket endpoint.
 
 To build the original flume database:
 - `geth`
 - `massive eth gethLogs --fromBlock 0 --toBlock $RECENT_BLOCK_NUMBER http://localhost:8545 | gzip > logs.gz # https://github.com/NoteGio/massive`
 - `zcat logs.gz | sqliteload.py mainnet.db`
 
-Once database is built, compile and run the flume server, pointing at the database, and then compile and open the static javascript flume-interface example site.
+Once database is built, compile and run the flume server, pointing at the
+database, and then compile and open the static javascript flume-interface
+example site.
 
+## Architecture
+
+Flume is designed to organize Ethereum log data to make it more accessible than
+a conventional Ethereum node. The flume server is separated into three modules:
+
+### The Log Feed
+
+The log feed pulls logs from some source, and enables other components to
+subscribe via Go channels. At present, we support three sources for logs:
+
+#### Null
+
+This isn't really a log source, but it matches the interface. You need a log
+source to start up a flume server, so if you want to start Flume without a
+source of logs, you can use the null log feed.
+
+#### Websockets
+
+If you're running Flume outside of an EtherCattle deployment, you probably want
+the websockets log feed. It will resume from the most recent log in the database
+and catch up with the network, then it will subscribe to a websocket feed for
+updates. Point this to a standard Web3 RPC Websocket provider.
+
+#### Kafka
+
+If you are running an EtherCattle deployment, you have one or more masters that
+feeds updates to its replicas via Kafka. The master can also feed event data to
+Flume via Kafka, and the Kafka log feed knows how to interpret that. Note that
+the logic for interpreting the log feed is fairly complicated to allow for
+multiple masters and chain reorgs.
+
+### The Indexer
+
+The indexer pulls from a log feed and commits to a sqlite database. Commits
+happen in large transactions whenever there's a lull in the log feed (meaning
+the indexer checks the log feed and doesn't find any new logs to process). Once
+the indexer is caught up with the chain, this happens every time a block comes
+in, but while catching up it might process several blocks worth of logs in a
+single transaction.
+
+### The Request Handler
+
+The request handler listens for requests on HTTP, translates RPC calls into SQL
+queries, and SQL results back into web3 RPC responses. Right now, with the
+limited set of RPC methods we support, the handler is implemented somewhat
+naively; if we add a significant number of supported RPC methods we may want to
+revisit.
+
+#### Supported RPC Methods
+
+* `eth_blockNumber`: The standard Web3 block number request, just like a normal
+  Ethereum node. This helps with monitoring where Flume sits relative to nodes.
+* `eth_getLogs`: The standard Web3 getLogs request, just like a normal Ethereum
+  node except running from the sqlite database rather than leveldb / ancients
+  database.
+* `flume_erc20ByAccount`: Flume extended API to get all ERC20 tokens held by an
+  account. Full details below.
+* `flume_erc20Holders`: Flume extended API to to get all holders of a given
+  ERC20 token. Full details below.
+
+### General Design
+
+We considered several potential models for how to manage the index relative to
+other data in the EtherCattle system. Early on we considered having this index
+live with replica, populating the index and searching it within the replica
+process. There were a few problems with this approach:
+
+* It adds around 300 GB of disk that needed to live with replicas. Disk is one
+  of the major costs of running a replica, so nearly doubling the required disk
+  was undesirable. Since only a small portion of traffic would access the event
+  log index, we don't need one copy of the event logs per replica.
+* Our snapshotting approach works well for LevelDB, but terribly for SQLite. AWS
+  snapshots start up with poor performance and improve over time; with LevelDB
+  we use an overlay systems so we can populate leveldb quickly, but SQLite is
+  not conducive to comparable overlays. This makes startups much slower.
+
+Ruling out having a SQLite database with each replica, our next thought was to
+put the data into a conventional relational database such as PostgreSQL.
+Cost-wise, this was better than having a copy per replica (and we could scale
+read replicas to meet demand). But the cost of a managed database in AWS seemed
+a bit steep, and there were some challenges around managing the database
+reliably in a multi-master multi-replica setup.
+
+Ultimately, we decided to mirror the replica setup from EtherCattle and put log
+data onto its own servers. By pulling log data from Kafka, we can maintain the
+local database very efficiently, and it makes our snapshotting process easy. By
+putting Flume on separate servers we've separated our scaling needs - we can
+scale Flume servers when they reach a certain threshold independently of scaling
+our replica servers, and avoid doubling up on disk costs.
+
+#### Why SQLite?
+
+Some people are surprised when we tell them we're running a large scale
+production system on SQLite. Isn't that for embedded systems and testing?
+
+SQLite is actually a rock solid relational database, with performance in the
+same class as MySQL and PostgreSQL. Its shortcomings are that it is not a
+networked database, and can run into locking issues with multiple readers and
+writers. Since all of the data being written to Flume is a function of the
+peer-to-peer network, having a networked database is not especially important;
+we can keep our copies of the database sufficiently in sync simply by pulling
+from the Kafka feed. Concerns about locking with multiple readers and writers
+are easily handled; with just one thread for writing to the database we can use
+SQLite's Write Ahead Log mode, which allows us to have as many readers as we
+need concurrent with a single writer without any locking issues.
 
 ## Build
 
