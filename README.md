@@ -1,7 +1,9 @@
-## About Our mission is to make ETH nodes operationally manageable. Flume, the
-#log indexing service makes getting log data, simple and fast. It gives people
-#access to same core functionality of proprietary services while running your
-#own nodes.
+## About 
+
+Our mission is to make ETH nodes operationally manageable. Flume, the
+log indexing service, makes getting log data simple and fast. It gives people
+access to same core functionality of proprietary services while running your
+own nodes.
 
 ## MVP
 
