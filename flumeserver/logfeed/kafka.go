@@ -67,11 +67,14 @@ func (feeder *ethKafkaFeed) subscribe() {
   chainHeadEventSub := feeder.eventConsumer.SubscribeChainHeadEvent(feeder.chainHeadEventCh)
   feeder.offsetCh = make(chan replica.OffsetHash, 1000)
   offsetSub := feeder.eventConsumer.SubscribeOffsets(feeder.offsetCh)
+  chainHeadEventCh := make(chan core.ChainHeadEvent, 1000)
+  chainHeadEventSub2 := feeder.eventConsumer.SubscribeChainHeadEvent(chainHeadEventCh)
   go func() {
     defer logsEventSub.Unsubscribe()
     defer removedLogsEventSub.Unsubscribe()
     defer chainHeadEventSub.Unsubscribe()
     defer offsetSub.Unsubscribe()
+    defer chainHeadEventSub2.Unsubscribe()
     for {
       select {
       case addLogs := <-logsEventCh:
@@ -82,6 +85,13 @@ func (feeder *ethKafkaFeed) subscribe() {
         for _, log := range removeLogs.Logs {
           log.Removed = true
           feeder.logFeed.Send(*log)
+        }
+      case chainHead := <-chainHeadEventCh:
+        // For metrics gathering, we need to log the block number more often on
+        // chains with low log volume. If we have a head event and the log
+        // channels are empty, log a 0 log message.
+        if len(logsEventCh) == 0 && len(removedLogsEventCh) == 0 {
+          log.Printf("Committing 0 logs up to block %v", chainHead.Block.NumberU64())
         }
       }
     }
