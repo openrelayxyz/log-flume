@@ -115,6 +115,7 @@ func (feeder *ethKafkaFeed) Commit(num uint64, tx *sql.Tx) {
     case offset = <-feeder.offsetCh:
     default:
       log.Printf("No offset matching block. Using latest.")
+      break
     }
   }
   _, err := tx.Exec("UPDATE offsets SET offset = ? WHERE offset < ?;", offset.Offset, offset.Offset)
