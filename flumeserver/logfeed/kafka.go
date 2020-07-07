@@ -110,12 +110,13 @@ func (feeder *ethKafkaFeed) Commit(num uint64, tx *sql.Tx) {
     }
   }
   offset := <-feeder.offsetCh
+  offsetLoop:
   for offset.Hash != chainHead.Block.Hash() {
     select {
     case offset = <-feeder.offsetCh:
     default:
       log.Printf("No offset matching block. Using latest.")
-      break
+      break offsetLoop
     }
   }
   _, err := tx.Exec("UPDATE offsets SET offset = ? WHERE offset < ?;", offset.Offset, offset.Offset)
