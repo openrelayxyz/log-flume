@@ -92,6 +92,7 @@ func (feeder *ethKafkaFeed) subscribe() {
         // channels are empty, log a 0 log message.
         if len(logsEventCh) == 0 && len(removedLogsEventCh) == 0 {
           log.Printf("Committing 0 logs up to block %v", chainHead.Block.NumberU64())
+          feeder.Commit(chainHead.Block.NumberU64(), nil)
         }
       }
     }
@@ -101,12 +102,14 @@ func (feeder *ethKafkaFeed) subscribe() {
 func (feeder *ethKafkaFeed) Commit(num uint64, tx *sql.Tx) {
   chainHead := <-feeder.chainHeadEventCh
   count := 1
+  chainHeadLoop:
   for chainHead.Block.NumberU64() < num{
     count++
     select {
     case chainHead = <-feeder.chainHeadEventCh:
     default:
       log.Printf("No chainheads matching commit. Using latest.")
+      break chainHeadLoop
     }
   }
   offset := <-feeder.offsetCh
@@ -119,8 +122,10 @@ func (feeder *ethKafkaFeed) Commit(num uint64, tx *sql.Tx) {
       break offsetLoop
     }
   }
-  _, err := tx.Exec("UPDATE offsets SET offset = ? WHERE offset < ?;", offset.Offset, offset.Offset)
-  if err != nil { log.Printf("Error updating offset: %v", err.Error())}
+  if tx != nil {
+    _, err := tx.Exec("UPDATE offsets SET offset = ? WHERE offset < ?;", offset.Offset, offset.Offset)
+    if err != nil { log.Printf("Error updating offset: %v", err.Error())}
+  }
 }
 
 func (feeder *ethKafkaFeed) SubscribeLogs(ch chan types.Log) event.Subscription {
