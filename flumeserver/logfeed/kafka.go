@@ -95,10 +95,10 @@ func (feeder *ethKafkaFeed) subscribe() {
         // channels are empty, log a 0 log message.
         //
         // We wait 30 seconds so that the log processor has a chance to catch up
+        log.Printf("Committing 0 logs up to block %v", chainHead.Block.NumberU64())
         go func(blockNumber uint64) {
           <-time.NewTimer(30 * time.Second).C
           if len(logsEventCh) == 0 && len(removedLogsEventCh) == 0 && lastLogBlock < blockNumber {
-            log.Printf("Committing 0 logs up to block %v", blockNumber)
             feeder.Commit(blockNumber, nil)
           }
         }(chainHead.Block.NumberU64())
