@@ -33,7 +33,8 @@ jobs:
           command: |
             export GOPATH=$HOME/go
             export GOARCH=amd64
-            go build ./flumeserver
+            cd flumeserver
+            go build
       # - run:
       #     name: build image
       #     command: |
