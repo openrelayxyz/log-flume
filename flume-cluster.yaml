@@ -815,6 +815,7 @@ Resources:
                     then
                     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - CRITICAL Failure to pull binary" --message="Flume failed to pull down the binary for cluster '${AWS::StackName}'. Correct permssions/upload as soon as possible."
                   fi
+                  lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3FlumeBackupBucket}/snapshot-logs/${NetworkId}/$(date '+%Y%m%d-%H%M%S').log.lz4 || true
                   poweroff
                 fi
                 chmod +x /usr/bin/flumeserver
@@ -830,6 +831,7 @@ Resources:
                     then
                     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - CRITICAL Failure to pull backup" --message="Flume failed to pull down the database backup for cluster '${AWS::StackName}'. Correct permssions/upload as soon as possible."
                   fi
+                  lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3FlumeBackupBucket}/snapshot-logs/${NetworkId}/$(date '+%Y%m%d-%H%M%S').log.lz4 || true
                   poweroff
                 fi
 
@@ -840,7 +842,20 @@ Resources:
                 chmod +x /tmp/flumesync.sh
 
                 # sync and shutdown
-                if ! /tmp/flumesync.sh
+                /tmp/flumesync.sh &
+                bg_job=$!
+                t=0
+                while [ t < 60 -a ps | grep -q " $bg_job " ]
+                do
+                  ((var++))
+                  sleep 30
+                done
+                if grep -q " $bg_job "
+                then kill -9 $bg_job
+                fi
+                wait $bg_job
+
+                if [ $? -ne 0 ]
                 then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
@@ -850,12 +865,26 @@ Resources:
                   then
                     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} -  Snapshot Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. This is possibly unrecoverable."
                   fi
+                  lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3FlumeBackupBucket}/snapshot-logs/${NetworkId}/$(date '+%Y%m%d-%H%M%S').log.lz4 || true
                   poweroff
                 fi
 
                 # upload Backup
                 export BACKUPNAME="${S3FlumeBackupBucket}/${NetworkId}/logs-$(date '+%Y%m%d-%H%M%S').sqlite.lz4"
-                if ! lz4 /var/lib/flume/item.sqlite | aws s3 cp - s3://$BACKUPNAME --expected-size=175000000000; then
+                lz4 /var/lib/flume/item.sqlite | aws s3 cp - s3://$BACKUPNAME --expected-size=175000000000 &
+                bg_job=$!
+                t=0
+                while [ t < 60 -a ps | grep -q " $bg_job " ]
+                do
+                  ((var++))
+                  sleep 30
+                done
+                if grep -q " $bg_job "
+                then kill -9 $bg_job
+                fi
+                wait $bg_job
+
+                if [ $? -ne 0 ] ; then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
                     aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking Backup Failed" --message="The snapshotting process for ${AWS::StackName} failed to upload the backup."
@@ -864,6 +893,7 @@ Resources:
                   then
                     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Taking Backup Failed" --message="The snapshotting process for ${AWS::StackName} failed to upload the backup."
                   fi
+                  lz4 /var/log/cloud-init-output.log | aws s3 cp - s3://${S3FlumeBackupBucket}/snapshot-logs/${NetworkId}/$(date '+%Y%m%d-%H%M%S').log.lz4 || true
                   poweroff
                 fi
 
