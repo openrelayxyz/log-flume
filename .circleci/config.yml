@@ -1,0 +1,65 @@
+orbs:
+  aws-cli: circleci/aws-cli@1.0.0 #See: https://circleci.com/orbs/registry/orb/circleci/aws-cli
+
+version: 2.1
+jobs:
+  # TODO: tests
+  # test:
+  #   docker:
+  #     - image: cimg/go:1.13
+  #   steps:
+  #     - checkout
+  #     - run:
+  #         name: Test ethdb/cdc
+  #         command: go test ./ethdb/cdc
+  #     - run:
+  #         name: Test replica
+  #         command: go test ./replica
+  build_push:
+    docker: # run the steps with Docker
+      - image: cimg/go:1.13 # ...with this image as the primary container
+      # this is where all `steps` will run
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Prep env
+          command: |
+            mkdir -p /home/circleci/go/src
+            go get
+      - run:
+          name: build image
+          command: |
+            export GOPATH=$HOME/go
+            export GOARCH=amd64
+            go build ./flumeserver
+      # - run:
+      #     name: build image
+      #     command: |
+      #       export GOPATH=$HOME/go
+      #       make geth-linux-amd64
+      - aws-cli/setup: #See: https://circleci.com/orbs/registry/orb/circleci/aws-cli
+          aws-access-key-id: ACCESS_KEY_ID
+          aws-secret-access-key: SECRET_ACCESS_KEY
+          aws-region: AWS_REGION
+      - run:
+          name: push to s3
+          command: aws s3 cp ./flumeserver s3://ethercattle-binaries/flume/$CIRCLE_TAG/flumeserver
+
+
+workflows:
+  version: 2
+  build_and_test:
+    jobs:
+      # - test:
+      #     filters:  # required since `deploy` has tag filters AND requires `build`
+      #       tags:
+      #         only: /.*/
+      - build_push:
+          # requires:
+          #   - test
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
