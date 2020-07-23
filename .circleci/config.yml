@@ -45,6 +45,10 @@ jobs:
       - run:
           name: push to s3
           command: aws s3 cp ./flumeserver s3://ethercattle-binaries/flume/$CIRCLE_TAG/flumeserver
+      - run:
+          name: Message Slack
+          command: |
+              ./slack-post.sh -w $SlackWebhook -m "*flume*:\nTag: $CIRCLE_TAG"
 
 
 workflows:
