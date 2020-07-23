@@ -845,12 +845,12 @@ Resources:
                 /tmp/flumesync.sh &
                 bg_job=$!
                 t=0
-                while [ t < 60 -a ps | grep -q " $bg_job " ]
+                while [ t < 60 -a ps | kill -0 $bg_job ]
                 do
                   ((t++))
                   sleep 30
                 done
-                if grep -q " $bg_job "
+                if kill -0 $bg_job
                 then kill -9 $bg_job
                 fi
                 wait $bg_job
@@ -874,12 +874,12 @@ Resources:
                 lz4 /var/lib/flume/item.sqlite | aws s3 cp - s3://$BACKUPNAME --expected-size=175000000000 &
                 bg_job=$!
                 t=0
-                while [ t < 60 -a ps | grep -q " $bg_job " ]
+                while [ t < 60 -a ps | kill -0 $bg_job ]
                 do
                   ((t++))
                   sleep 30
                 done
-                if grep -q " $bg_job "
+                if kill -0 $bg_job
                 then kill -9 $bg_job
                 fi
                 wait $bg_job
