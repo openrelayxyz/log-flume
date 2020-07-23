@@ -26,6 +26,7 @@ jobs:
           name: Prep env
           command: |
             mkdir -p /home/circleci/go/src
+            cd flumeserver
             go get
       - run:
           name: build image
