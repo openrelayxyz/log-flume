@@ -847,7 +847,7 @@ Resources:
                 t=0
                 while [ t < 60 -a ps | grep -q " $bg_job " ]
                 do
-                  ((var++))
+                  ((t++))
                   sleep 30
                 done
                 if grep -q " $bg_job "
@@ -876,7 +876,7 @@ Resources:
                 t=0
                 while [ t < 60 -a ps | grep -q " $bg_job " ]
                 do
-                  ((var++))
+                  ((t++))
                   sleep 30
                 done
                 if grep -q " $bg_job "
