@@ -66,7 +66,7 @@ func (feed *ethWSFeed) Close() {
   feed.quit <- struct{}{}
 }
 
-func (feed *ethWSFeed) emitFromHeader(header *types.Header) error {
+func (feed *ethWSFeed) getFromHeader(header *types.Header) (*ChainEvent, error) {
   ce := &ChainEvent{
     receiptMeta: make(map[common.Hash]*receiptMeta),
     logs: make( map[common.Hash][]*types.Log),
@@ -74,7 +74,7 @@ func (feed *ethWSFeed) emitFromHeader(header *types.Header) error {
   }
   var err error
   ce.Block, err = feed.conn.BlockByNumber(context.Background(), header.Number)
-  if err != nil { return err }
+  if err != nil { return nil, err }
   txhash := make(chan common.Hash, 10)
   txreceipts := make(chan *types.Receipt, 10)
   errch := make(chan error)
@@ -123,11 +123,10 @@ func (feed *ethWSFeed) emitFromHeader(header *types.Header) error {
       ce.logs[receipt.TxHash] = receipt.Logs
     case err := <- errch:
       if err == nil { break }
-      return err
+      return nil, err
     }
   }
-  go feed.feed.Send(ce)
-  return nil
+  return ce, nil
 }
 
 // Connection re-establishes itself, but subscriptions may not. We'll need to
@@ -157,25 +156,33 @@ func (feed *ethWSFeed) subscribe() {
   } else {
     tx.Rollback()
   }
-  for header != nil {
-    select {
-    case <-feed.quit:
-      return
-    default:
-    }
-    header, err = feed.conn.HeaderByNumber(context.Background(), big.NewInt(1).Add(header.Number, big.NewInt(1)))
-    if header != nil {
-      i := 0
-      for ; i < 3; i++{
-        if err := feed.emitFromHeader(header); err == nil {
-          break
+  OrderedProcessor(header.Number.Uint64(), 10, func(number uint64, ch chan<- interface{}, quit func()) {
+    i := 0
+    for ; i < 3; i++ {
+      header, _ := feed.conn.HeaderByNumber(context.Background(), big.NewInt(int64(number + 1)))
+      if header != nil {
+        j := 0
+        for ; j < 3; j++{
+          if ce, err := feed.getFromHeader(header); err == nil {
+            ch <- ce
+            return
+          }
+        }
+        if j == 3 {
+          quit()
+          panic("Failed to get chain event from headers")
         }
       }
-      if i == 3 { panic("Could not construct header") }
-      feed.lastBlockHash = header.Hash()
-      feed.lastBlockNumber = header.Number
     }
-  }
+    if i == 3 {
+      quit()
+      // panic("Failed to get header")
+    }
+  }, func(ce interface{}) {
+    feed.feed.Send(ce)
+    feed.lastBlockHash = ce.(*ChainEvent).Block.Hash()
+    feed.lastBlockNumber = ce.(*ChainEvent).Block.Number()
+  })
   // At this point we've emitted all chain events from where the DB left off up
   // through the latest the node has. Now we switch over to subscriptions.
 
@@ -197,7 +204,8 @@ func (feed *ethWSFeed) subscribe() {
         i := 0
         for ; i < 3; i++{
           // Try 3 times to emit the header
-          if err := feed.emitFromHeader(header); err == nil {
+          if ce, err := feed.getFromHeader(header); err == nil {
+            go feed.feed.Send(ce)
             break
           }
         }

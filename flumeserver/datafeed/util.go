@@ -1,17 +1,25 @@
 package datafeed
 
-func Counter(buffer int) (<-chan uint64, func()) {
-  ch := make(chan uint64, buffer)
+func OrderedProcessor(start uint64, buffer int, itemGetter func(uint64, chan<- interface{}, func()), orderedProcessor func(interface{})) {
+  orderedResults := make(chan chan interface{}, buffer)
+  semaphore := make(chan struct{}, buffer)
   quit := make(chan struct{})
   go func() {
-    for i := 0; ; i++ {
+    for i := start ; ; i++ {
+      // Add quit chan
       select {
       case <-quit:
-        close(ch)
-        return
-      case ch <- i:
+        close(orderedResults)
+        break
+      case semaphore <- struct{}{}:
       }
+      ch := make(chan interface{})
+      orderedResults <- ch
+      go itemGetter(i, ch, func() { quit <- struct{}{} })
     }
+  }()
+  for ch := range orderedResults {
+    <-semaphore
+    orderedProcessor(<-ch)
   }
-  return ch, func() { quit <- struct{}{} }
 }
