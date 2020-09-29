@@ -74,3 +74,10 @@ type DataFeed interface{
   Subscribe(chan *ChainEvent) event.Subscription
   Ready() <-chan struct{}
 }
+
+type NullDataFeed struct {}
+
+
+func (*NullDataFeed) Close() {}
+func (*NullDataFeed) Subscribe(chan *ChainEvent) event.Subscription { return nil }
+func (*NullDataFeed) Ready() <-chan struct{} { return make(chan struct{}) }

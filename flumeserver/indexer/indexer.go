@@ -3,13 +3,13 @@ package indexer
 import (
   "bytes"
   "context"
-  "github.com/openrelayxyz/flume/flumeserver/logfeed"
+  // "github.com/openrelayxyz/flume/flumeserver/logfeed"
   "github.com/openrelayxyz/flume/flumeserver/datafeed"
   "database/sql"
   "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/common"
   "log"
-  "time"
+  // "time"
   "compress/zlib"
   "io/ioutil"
 )
@@ -30,94 +30,6 @@ func getTopicIndex(topics []common.Hash, idx int) []byte {
     return topics[idx].Bytes()
   }
   return []byte{}
-}
-
-func ProcessFeed(feed logfeed.Feed, db *sql.DB, quit <-chan struct{}) {
-  logCh := make(chan types.Log, 1000)
-  logSub := feed.SubscribeLogs(logCh)
-  defer logSub.Unsubscribe()
-  logtx, err := db.BeginTx(context.Background(), nil)
-  var logRecord types.Log
-  started := false
-  counter := 0
-  var highestBlock uint64
-  for {
-    select {
-    case <-quit:
-      return
-    case logRecord = <- logCh:
-    default:
-      if started {
-        log.Printf("Committing %v logs up to block %v", counter, highestBlock)
-        feed.Commit(highestBlock, logtx)
-        if err := logtx.Commit(); err != nil {
-          // TODO: Consider implementing a feed.Rollback() to roll the feed back
-          // to a previous commit. For now crashing and restarting will have a
-          // similar effect for indexing, with the downside of serving errors to
-          // queries.
-          stats := db.Stats()
-          log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
-          log.Fatalf("Transaction commit failed: %v", err.Error())
-        }
-        counter = 0
-      }
-      select{
-      case <-quit:
-        return
-      case logRecord = <- logCh:
-        logtx, err = db.BeginTx(context.Background(), nil)
-        if err != nil {
-          stats := db.Stats()
-          log.Printf("WARN: Failed to start transaction: %v", err.Error())
-          log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
-        }
-      }
-    }
-    // log.Printf("Processing log")
-    counter++
-    started = true
-    for {
-      if !logRecord.Removed {
-        _, err := logtx.Exec(
-          "INSERT OR IGNORE INTO event_logs(address, topic0, topic1, topic2, topic3, topic4, data, blockNumber, transactionHash, transactionIndex, blockHash, logIndex) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-          trimPrefix(logRecord.Address.Bytes()),
-          trimPrefix(getTopicIndex(logRecord.Topics, 0)),
-          trimPrefix(getTopicIndex(logRecord.Topics, 1)),
-          trimPrefix(getTopicIndex(logRecord.Topics, 2)),
-          trimPrefix(getTopicIndex(logRecord.Topics, 3)),
-          trimPrefix(getTopicIndex(logRecord.Topics, 4)),
-          logRecord.Data,
-          logRecord.BlockNumber,
-          trimPrefix(logRecord.TxHash.Bytes()),
-          logRecord.TxIndex,
-          trimPrefix(logRecord.BlockHash.Bytes()),
-          logRecord.Index,
-        )
-        if err != nil {
-          stats := db.Stats()
-          log.Printf("WARN: (insert) %v", err.Error())
-          log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
-          time.Sleep(time.Millisecond)
-          continue
-        }
-        highestBlock = logRecord.BlockNumber
-        break
-      } else {
-        _, err := logtx.Exec(
-          "DELETE FROM event_logs WHERE blockHash = ? AND logIndex = ?",
-          trimPrefix(logRecord.BlockHash.Bytes()),
-          logRecord.Index,
-        )
-        if err != nil {
-          stats := db.Stats()
-          log.Printf("WARN: (delete) %v", err.Error())
-          log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
-          continue
-        }
-        break
-      }
-    }
-  }
 }
 
 func compress(data []byte) []byte {
@@ -156,6 +68,13 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
       BLOCKLOOP:
       for {
         dbtx, _ := db.BeginTx(context.Background(), nil)
+        if err := chainEvent.Commit(dbtx); err != nil {
+          dbtx.Rollback()
+          stats := db.Stats()
+          log.Printf("WARN: Failed to commit chainEvent: %v", err.Error())
+          log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
+          continue BLOCKLOOP
+        }
         _, err := dbtx.Exec("DELETE FROM transactions WHERE blockNumber = ? AND blockHash != ?;", chainEvent.Block.NumberU64(), trimPrefix(chainEvent.Block.Hash().Bytes()))
         if err != nil {
           dbtx.Rollback()

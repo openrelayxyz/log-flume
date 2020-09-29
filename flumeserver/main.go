@@ -84,7 +84,7 @@ func main() {
   migrations.Migrate(logsdb)
 
 
-  feed, err := datafeed.NewETHWSFeed(feedURL, logsdb)
+  feed, err := datafeed.ResolveFeed(feedURL, logsdb)
   if err != nil { log.Fatalf(err.Error()) }
 
   quit := make(chan struct{})
