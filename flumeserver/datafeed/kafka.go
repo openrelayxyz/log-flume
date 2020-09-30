@@ -52,6 +52,7 @@ type kafkaDataFeed struct {
   lastBlockTime *atomic.Value
   feed event.Feed
   consumer replica.EventConsumer
+  topic string
 }
 
 func (kdf *kafkaDataFeed) Close() {
@@ -79,28 +80,29 @@ func (kdf *kafkaDataFeed) Healthy(d time.Duration) bool {
 func NewKafkaDataFeed(urlStr string, db *sql.DB) (DataFeed, error) {
   var tableName string
   db.QueryRowContext(context.Background(), "SELECT name FROM sqlite_master WHERE type='table' and name='event_offsets';").Scan(&tableName)
-  if tableName != "offsets" {
-    if _, err := db.Exec("CREATE TABLE event_offsets (partition INT, offset BIGINT, PRIMARY KEY (partition));"); err != nil {
+  if tableName != "event_offsets" {
+    if _, err := db.Exec("CREATE TABLE event_offsets (partition INT, offset BIGINT, topic STRING, PRIMARY KEY (topic, partition));"); err != nil {
       return nil, fmt.Errorf("Offsets table does not exist and could not create: %v", err.Error())
     }
   }
+  parts := strings.Split(urlStr, ";")
   var resumeOffset int64
   var partition int32
   offsets := make(map[int32]int64)
-  rows, err := db.QueryContext(context.Background(), "SELECT partition, offset FROM offsets;")
+  rows, err := db.QueryContext(context.Background(), "SELECT partition, offset FROM event_offsets WHERE topic = ?;", parts[1])
   if err != nil { return nil, err }
   for rows.Next() {
     if err := rows.Scan(&partition, &resumeOffset); err != nil { return nil, err }
     offsets[partition] = resumeOffset
   }
-  parts := strings.Split(urlStr, ";")
   log.Printf("Parts: %v", parts)
-  log.Printf("Resume offset: %v", resumeOffset)
+  log.Printf("Resume offset: %v", offsets)
   consumer, err := replica.NewKafkaEventConsumerFromURLs(strings.TrimPrefix(parts[0], "kafka://"), parts[1], common.Hash{}, offsets)
   if err != nil { return nil, err }
   feed := &kafkaDataFeed{
     lastBlockTime: &atomic.Value{},
     consumer: consumer,
+    topic: parts[1],
   }
   feed.subscribe()
   return feed, nil
@@ -108,11 +110,20 @@ func NewKafkaDataFeed(urlStr string, db *sql.DB) (DataFeed, error) {
 
 func (kdf *kafkaDataFeed) subscribe() {
   kdf.consumer.Start()
-  eventCh := make(chan replica.ChainEvents)
+  eventCh := make(chan *replica.ChainEvents)
   eventSub := kdf.consumer.SubscribeChainEvents(eventCh)
   go func() {
     defer eventSub.Unsubscribe()
     for chainEvents := range eventCh {
+      n := make([]string, len(chainEvents.New))
+      r := make([]string, len(chainEvents.Reverted))
+      for i, ce := range chainEvents.New {
+        n[i] = ce.Block.Hash().Hex()
+      }
+      for i, ce := range chainEvents.Reverted {
+        r[i] = ce.Block.Hash().Hex()
+      }
+      // log.Printf("Event: New(%v) Reverted(%v)", n, r)
       for i, chainEvent := range chainEvents.New {
         ce := ChainEventFromKafka(chainEvent)
         if i < len(chainEvents.New) - 1 {
@@ -124,7 +135,8 @@ func (kdf *kafkaDataFeed) subscribe() {
           ce.Commit = func(tx *sql.Tx) (error) {
             if tx == nil { return nil }
             for partition, offset := range chainEvents.Partitions {
-              if _, err := tx.Exec("UPDATE event_offsets SET offset = ? WHERE partition = ?", offset, partition); err != nil {
+              if _, err := tx.Exec("INSERT OR REPLACE INTO event_offsets(offset, partition, topic) VALUES (?, ?, ?)", offset, partition, kdf.topic); err != nil {
+              //if _, err := tx.Exec("UPDATE event_offsets SET offset = ? WHERE partition = ? AND topic = ?", offset, partition, kdf.topic); err != nil {
                 return err
               }
             }

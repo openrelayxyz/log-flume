@@ -76,6 +76,7 @@ func GetHandler(db *sql.DB) func(http.ResponseWriter, *http.Request) {
       if _, err := getLatestBlock(r.Context(), db); err != nil {
         w.WriteHeader(500)
         w.Write([]byte(`{"ok":false}`))
+        log.Printf("Unhealthy: Error getting latest block: %v", err.Error())
         return
       }
       w.WriteHeader(200)
@@ -110,7 +111,7 @@ func GetHandler(db *sql.DB) func(http.ResponseWriter, *http.Request) {
 
 func getLatestBlock(ctx context.Context, db *sql.DB) (int64, error) {
   var result int64
-  err := db.QueryRowContext(ctx, "SELECT max(blockNumber) FROM event_logs;").Scan(&result)
+  err := db.QueryRowContext(ctx, "SELECT max(blockNumber) FROM v_event_logs;").Scan(&result)
   return result, err
 }
 
@@ -167,11 +168,11 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
   }
   whereClause = append(whereClause, "blockNumber <= ?")
   params = append(params, toBlock)
-  if crit.BlockHash == nil && toBlock - fromBlock < 10000 {
-    // If the block range is smaller than 10k, that's probably the best index
-    // otherwise we'll lean on the query planner.
-    indexClause = "INDEXED BY blockNumber"
-  }
+  // if crit.BlockHash == nil && toBlock - fromBlock < 10000 {
+  //   // If the block range is smaller than 10k, that's probably the best index
+  //   // otherwise we'll lean on the query planner.
+  //   indexClause = "INDEXED BY blockNumber"
+  // }
   addressClause := []string{}
   for _, address := range crit.Addresses {
     addressClause = append(addressClause, "address = ?")
@@ -196,7 +197,7 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
   if len(topicsClause) > 0 {
     whereClause = append(whereClause, fmt.Sprintf("(%v)", strings.Join(topicsClause, " AND ")))
   }
-  query := fmt.Sprintf("SELECT address, topic0, topic1, topic2, topic3, topic4, data, blockNumber, transactionHash, transactionIndex, blockHash, logIndex FROM event_logs %v WHERE %v;", indexClause, strings.Join(whereClause, " AND "))
+  query := fmt.Sprintf("SELECT address, topic0, topic1, topic2, topic3, topic4, data, blockNumber, transactionHash, transactionIndex, blockHash, logIndex FROM v_event_logs %v WHERE %v;", indexClause, strings.Join(whereClause, " AND "))
   rows, err := db.QueryContext(ctx, query, params...)
   if err != nil {
     log.Printf("Error selecting: %v - '%v'", err.Error(), query)
@@ -280,7 +281,7 @@ func getERC20ByAccount(ctx context.Context, w http.ResponseWriter, call *rpcCall
 
   topic0 := common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
   // topic0 must match ERC20, topic3 must be empty (to exclude ERC721) and topic2 is the recipient address
-  rows, err := db.QueryContext(tctx, `SELECT distinct(address) FROM event_logs INDEXED BY topic2 WHERE topic0 = ? AND topic2 = ? AND topic3 = zeroblob(0) LIMIT 10000 OFFSET ?;`, trimPrefix(topic0.Bytes()), trimPrefix(addr.Bytes()), offset)
+  rows, err := db.QueryContext(tctx, `SELECT distinct(address) FROM v_event_logs INDEXED BY topic2 WHERE topic0 = ? AND topic2 = ? AND topic3 = zeroblob(0) LIMIT 10000 OFFSET ?;`, trimPrefix(topic0.Bytes()), trimPrefix(addr.Bytes()), offset)
   if err != nil {
     log.Printf("Error getting account addresses: %v", err.Error())
     handleError(w, "database error", call.ID, 500)
@@ -339,7 +340,7 @@ func getERC20Holders(ctx context.Context, w http.ResponseWriter, call *rpcCall, 
 
   topic0 := common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
   // topic0 must match ERC20, topic3 must be empty (to exclude ERC721) and topic2 is the recipient address
-  rows, err := db.QueryContext(tctx, `SELECT distinct(topic2) FROM event_logs INDEXED BY address WHERE topic0 = ? AND address = ? AND topic3 = zeroblob(0) LIMIT 10000 OFFSET ?;`, trimPrefix(topic0.Bytes()), trimPrefix(addr.Bytes()), offset)
+  rows, err := db.QueryContext(tctx, `SELECT distinct(topic2) FROM v_event_logs INDEXED BY address WHERE topic0 = ? AND address = ? AND topic3 = zeroblob(0) LIMIT 10000 OFFSET ?;`, trimPrefix(topic0.Bytes()), trimPrefix(addr.Bytes()), offset)
   if err != nil {
     log.Printf("Error getting account addresses: %v", err.Error())
     handleError(w, "database error", call.ID, 500)

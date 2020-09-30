@@ -75,13 +75,16 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
           log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
           continue BLOCKLOOP
         }
-        _, err := dbtx.Exec("DELETE FROM transactions WHERE blockNumber = ? AND blockHash != ?;", chainEvent.Block.NumberU64(), trimPrefix(chainEvent.Block.Hash().Bytes()))
+        deleteRes, err := dbtx.Exec("DELETE FROM transactions WHERE blockNumber >= ?;", chainEvent.Block.NumberU64())
         if err != nil {
           dbtx.Rollback()
           stats := db.Stats()
           log.Printf("WARN: Failed to cleanup reorged transactions: %v", err.Error())
           log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
           continue BLOCKLOOP
+        }
+        if count, _ := deleteRes.RowsAffected(); count > 0 {
+          log.Printf("Deleted %v records for blocks >= %v", count, chainEvent.Block.NumberU64())
         }
         var signer types.Signer
         for _, txwr := range chainEvent.TxWithReceipts() {
@@ -106,6 +109,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
           if txwr.Transaction.To() != nil {
             to = trimPrefix(txwr.Transaction.To().Bytes())
           }
+          // log.Printf("Inserting transaction %#x", txwr.Transaction.Hash())
           result, err := dbtx.Exec("INSERT INTO transactions(blockHash, blockNumber, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, value, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             trimPrefix(chainEvent.Block.Hash().Bytes()),
             chainEvent.Block.NumberU64(),

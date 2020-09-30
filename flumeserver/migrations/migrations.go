@@ -78,7 +78,8 @@ func Migrate(db *sql.DB) {
         logIndex,
         transactions.blockNumber as blockNumber,
         transactions.transactionIndex as transactionIndex,
-        transactions.hash as transactionHash
+        transactions.hash as transactionHash,
+        transactions.blockHash as blockHash
       FROM
         event_logs
       INNER JOIN transactions on transactions.id = event_logs.tx;`)

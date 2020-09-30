@@ -76,7 +76,7 @@ func main() {
   go func() {
     ticker := time.NewTicker(30 * time.Second)
     defer ticker.Stop()
-    for _ = range ticker.C {
+    for range ticker.C {
       stats := logsdb.Stats()
       log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
     }
