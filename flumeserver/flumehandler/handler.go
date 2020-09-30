@@ -6,9 +6,11 @@ package flumehandler
 
 import (
   "bytes"
+  "compress/zlib"
   "strings"
   "time"
   "encoding/json"
+  "math/big"
   "net/http"
   "database/sql"
   "github.com/ethereum/go-ethereum/common"
@@ -31,7 +33,7 @@ type rpcCall struct {
 type rpcResponse struct {
   Version string `json:"jsonrpc"`
   ID *json.RawMessage `json:"id,omitempty"`
-  Result interface{} `json:"result,omitempty"`
+  Result interface{} `json:"result"`
 }
 
 func formatResponse(result interface{}, call *rpcCall) *rpcResponse {
@@ -59,6 +61,10 @@ func bytesToAddress(data []byte) (common.Address) {
   result := common.Address{}
   copy(result[20 - len(data):], data[:])
   return result
+}
+func bytesToAddressPtr(data []byte) (*common.Address) {
+  result := bytesToAddress(data)
+  return &result
 }
 func bytesToHash(data []byte) (common.Hash) {
   result := common.Hash{}
@@ -98,10 +104,30 @@ func GetHandler(db *sql.DB) func(http.ResponseWriter, *http.Request) {
       getLogs(r.Context(), w, call, db)
     case "eth_blockNumber":
       getBlockNumber(r.Context(), w, call, db)
+    case "eth_getTransactionByHash":
+      getTransactionByHash(r.Context(), w, call, db)
+    case "eth_getTransactionByBlockHashAndIndex":
+      getTransactionByBlockHashAndIndex(r.Context(), w, call, db)
+    case "eth_getTransactionByBlockNumberAndIndex":
+      getTransactionByBlockNumberAndIndex(r.Context(), w, call, db)
+    case "eth_getTransactionReceipt":
+      getTransactionReceipt(r.Context(), w, call, db)
     case "flume_erc20ByAccount":
       getERC20ByAccount(r.Context(), w, call, db)
     case "flume_erc20Holders":
       getERC20Holders(r.Context(), w, call, db)
+    case "flume_getTransactionsBySender":
+      getTransactionsBySender(r.Context(), w, call, db)
+    case "flume_getTransactionReceiptsBySender":
+      getTransactionReceiptsBySender(r.Context(), w, call, db)
+    case "flume_getTransactionsByRecipient":
+      getTransactionsByRecipient(r.Context(), w, call, db)
+    case "flume_getTransactionReceiptsByRecipient":
+      getTransactionReceiptsByRecipient(r.Context(), w, call, db)
+    case "flume_getTransactionsByParticipant":
+      getTransactionsByParticipant(r.Context(), w, call, db)
+    case "flume_getTransactionReceiptsByParticipant":
+      getTransactionReceiptsByParticipant(r.Context(), w, call, db)
     default:
       handleError(w, "unsupported method", call.ID, 400)
     }
@@ -224,17 +250,23 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
     if len(topic2) > 0 { topics = append(topics, bytesToHash(topic2)) }
     if len(topic3) > 0 { topics = append(topics, bytesToHash(topic3)) }
     if len(topic4) > 0 { topics = append(topics, bytesToHash(topic4)) }
+    input, err := decompress(data)
+    if err != nil {
+      log.Printf("Error decompressing data: %v", err.Error())
+      handleError(w, "database error", call.ID, 500)
+      return
+    }
     logs = append(logs, &types.Log{
       Address: bytesToAddress(address),
       Topics: topics,
-      Data: data,
+      Data: input,
       BlockNumber: blockNumber,
       TxHash: bytesToHash(transactionHash),
       TxIndex: transactionIndex,
       BlockHash: bytesToHash(blockHash),
       Index: logIndex,
     })
-      if len(logs) > 10000 && len(blockNumbersInResponse) > 1 {
+    if len(logs) > 10000 && len(blockNumbersInResponse) > 1 {
       handleError(w, "query returned more than 10,000 results spanning multiple blocks", call.ID, 413)
       return
     }
@@ -370,6 +402,441 @@ func getERC20Holders(ctx context.Context, w http.ResponseWriter, call *rpcCall, 
   if err != nil {
     log.Printf("Error scanning: %v", err.Error())
     handleError(w, "database error", call.ID, 500)
+    return
+  }
+  w.WriteHeader(200)
+  w.Write(responseBytes)
+}
+
+
+type rpcTransaction struct {
+  BlockHash        *common.Hash    `json:"blockHash"`
+  BlockNumber      *hexutil.Big    `json:"blockNumber"`
+  From             common.Address  `json:"from"`
+  Gas              hexutil.Uint64  `json:"gas"`
+  GasPrice         *hexutil.Big    `json:"gasPrice"`
+  Hash             common.Hash     `json:"hash"`
+  Input            hexutil.Bytes   `json:"input"`
+  Nonce            hexutil.Uint64  `json:"nonce"`
+  To               *common.Address `json:"to"`
+  TransactionIndex *hexutil.Uint64 `json:"transactionIndex"`
+  Value            *hexutil.Big    `json:"value"`
+  V                *hexutil.Big    `json:"v"`
+  R                *hexutil.Big    `json:"r"`
+  S                *hexutil.Big    `json:"s"`
+}
+
+func uintToHexBig(a uint64) *hexutil.Big {
+  x := hexutil.Big(*big.NewInt(int64(a)))
+  return &x
+}
+
+func bytesToHexBig(a []byte) *hexutil.Big {
+  x := hexutil.Big(*new(big.Int).SetBytes(a))
+  return &x
+}
+
+func decompress(data []byte) ([]byte, error) {
+  if len(data) == 0 { return data, nil }
+  r, err := zlib.NewReader(bytes.NewBuffer(data))
+  if err != nil { return []byte{}, err }
+  return ioutil.ReadAll(r)
+}
+
+
+func getTransactions(ctx context.Context, db *sql.DB, whereClause string, params ...interface{}) ([]*rpcTransaction, error) {
+  query := fmt.Sprintf("SELECT blockHash, blockNumber, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, value, v, r, s, sender FROM transactions WHERE %v;", whereClause)
+  rows, err := db.QueryContext(ctx, query, params...)
+  if err != nil { return nil, err }
+  defer rows.Close()
+  results := []*rpcTransaction{}
+  for rows.Next() {
+    var amount, to, from, data, blockHashBytes, txHash, r, s []byte
+    var nonce, gasLimit, blockNumber, gasPrice, txIndex, v uint64
+    err := rows.Scan(
+      &blockHashBytes,
+      &blockNumber,
+      &gasLimit,
+      &gasPrice,
+      &txHash,
+      &data,
+      &nonce,
+      &to,
+      &txIndex,
+      &amount,
+      &v,
+      &r,
+      &s,
+      &from,
+    )
+    if err != nil { return nil, err }
+    blockHash := bytesToHash(blockHashBytes)
+    txIndexHex := hexutil.Uint64(txIndex)
+    inputBytes, err := decompress(data)
+    if err != nil { return nil, err }
+    results = append(results, &rpcTransaction{
+      BlockHash: &blockHash,        //*common.Hash
+      BlockNumber: uintToHexBig(blockNumber),       //*hexutil.Big
+      From: bytesToAddress(from),             //common.Address
+      Gas: hexutil.Uint64(gasLimit),               //hexutil.Uint64
+      GasPrice:  uintToHexBig(gasPrice),          //*hexutil.Big
+      Hash: bytesToHash(txHash),             //common.Hash
+      Input: hexutil.Bytes(inputBytes),            //hexutil.Bytes
+      Nonce: hexutil.Uint64(nonce),             //hexutil.Uint64
+      To: bytesToAddressPtr(to),                //*common.Address
+      TransactionIndex: &txIndexHex,  //*hexutil.Uint64
+      Value: bytesToHexBig(amount),           //*hexutil.Big
+      V:  uintToHexBig(v),                 //*hexutil.Big
+      R: bytesToHexBig(r),                //*hexutil.Big
+      S: bytesToHexBig(s),                //*hexutil.Big
+    })
+  }
+  if err := rows.Err(); err != nil { return nil, err }
+  return results, nil
+}
+func getTransactionReceipts(ctx context.Context, db *sql.DB, whereClause string, params ...interface{}) ([]map[string]interface{}, error) {
+  query := fmt.Sprintf("SELECT blockHash, blockNumber, gasUsed, cumulativeGasUsed, hash, recipient, transactionIndex, sender, contractAddress, logsBloom, status FROM transactions WHERE %v;", whereClause)
+  rows, err := db.QueryContext(ctx, query, params...)
+  if err != nil { return nil, err }
+  defer rows.Close()
+  results := []map[string]interface{}{}
+  for rows.Next() {
+    var to, from, blockHash, txHash, contractAddress, bloomBytes []byte
+    var blockNumber, txIndex, gasUsed, cumulativeGasUsed, status  uint64
+    err := rows.Scan(
+      &blockHash,
+      &blockNumber,
+      &gasUsed,
+      &cumulativeGasUsed,
+      &txHash,
+      &to,
+      &txIndex,
+      &from,
+      &contractAddress,
+      &bloomBytes,
+      &status,
+    )
+    logsBloom, err := decompress(bloomBytes)
+    if err != nil { return nil, err }
+    fields := map[string]interface{}{
+      "blockHash":         bytesToHash(blockHash),
+      "blockNumber":       hexutil.Uint64(blockNumber),
+      "transactionHash":   bytesToHash(txHash),
+      "transactionIndex":  hexutil.Uint64(txIndex),
+      "from":              bytesToAddress(from),
+      "to":                bytesToAddress(to),
+      "gasUsed":           hexutil.Uint64(gasUsed),
+      "cumulativeGasUsed": hexutil.Uint64(cumulativeGasUsed),
+      "contractAddress":   nil,
+      "logsBloom":         hexutil.Bytes(logsBloom),
+      "status":            hexutil.Uint(status),
+    }
+    fieldLogs := []*types.Log{}
+    // If the ContractAddress is 20 0x0 bytes, assume it is not a contract creation
+    if address := bytesToAddress(contractAddress); address != (common.Address{}) {
+      fields["contractAddress"] = address
+    }
+
+    logRows, err := db.QueryContext(ctx, "SELECT address, topic0, topic1, topic2, topic3, topic4, data, logIndex FROM v_event_logs WHERE transactionHash = ?;", txHash)
+    if err != nil {
+      log.Printf("Error selecting: %v - '%v'", err.Error(), query)
+      return nil, err
+    }
+    for logRows.Next() {
+      var address, topic0, topic1, topic2, topic3, topic4, data []byte
+      var logIndex uint
+      err := logRows.Scan(&address, &topic0, &topic1, &topic2, &topic3, &topic4, &data, &logIndex)
+      if err != nil {
+        logRows.Close()
+        return nil, err
+      }
+      topics := []common.Hash{}
+      if len(topic0) > 0 { topics = append(topics, bytesToHash(topic0)) }
+      if len(topic1) > 0 { topics = append(topics, bytesToHash(topic1)) }
+      if len(topic2) > 0 { topics = append(topics, bytesToHash(topic2)) }
+      if len(topic3) > 0 { topics = append(topics, bytesToHash(topic3)) }
+      if len(topic4) > 0 { topics = append(topics, bytesToHash(topic4)) }
+      input, err := decompress(data)
+      if err != nil { return nil, err }
+      fieldLogs = append(fieldLogs, &types.Log{
+        Address: bytesToAddress(address),
+        Topics: topics,
+        Data: input,
+        BlockNumber: blockNumber,
+        TxHash: bytesToHash(txHash),
+        TxIndex: uint(txIndex),
+        BlockHash: bytesToHash(blockHash),
+        Index: logIndex,
+      })
+    }
+    logRows.Close()
+    if err := rows.Err(); err != nil {
+      return nil, err
+    }
+    fields["logs"] = fieldLogs
+    results = append(results, fields)
+  }
+  if err := rows.Err(); err != nil { return nil, err }
+  return results, nil
+}
+
+func returnSingleTransaction(txs []*rpcTransaction, w http.ResponseWriter, call *rpcCall) {
+  var result interface{}
+  if len(txs) > 0 {
+    result = txs[0]
+  } else {
+    result = nil
+  }
+  responseBytes, err := json.Marshal(formatResponse(result, call))
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  w.WriteHeader(200)
+  w.Write(responseBytes)
+}
+func returnSingleReceipt(txs []map[string]interface{}, w http.ResponseWriter, call *rpcCall) {
+  var result interface{}
+  if len(txs) > 0 {
+    result = txs[0]
+  } else {
+    result = nil
+  }
+  responseBytes, err := json.Marshal(formatResponse(result, call))
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  w.WriteHeader(200)
+  w.Write(responseBytes)
+}
+
+func getTransactionByHash(ctx context.Context ,w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  if len(call.Params) < 1 {
+    handleError(w, "missing value for required argument 0", call.ID, 400)
+    return
+  }
+  var txHash common.Hash
+  if err := json.Unmarshal(call.Params[0], &txHash); err != nil {
+    handleError(w, "error reading params.0", call.ID, 400)
+    return
+  }
+  txs, err := getTransactions(ctx, db, "hash = ?", trimPrefix(txHash.Bytes()))
+  if err != nil {
+    log.Printf("Error getting transactions: %v", err.Error())
+    handleError(w, "error reading database", call.ID, 400)
+    return
+  }
+  returnSingleTransaction(txs, w, call)
+}
+
+func getTransactionByBlockHashAndIndex(ctx context.Context ,w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  if len(call.Params) < 2 {
+    handleError(w, "missing value for required argument 1", call.ID, 400)
+    return
+  }
+  var txHash common.Hash
+  if err := json.Unmarshal(call.Params[0], &txHash); err != nil {
+    handleError(w, "error reading params.0", call.ID, 400)
+    return
+  }
+  var index hexutil.Uint64
+  if err := json.Unmarshal(call.Params[1], &index); err != nil {
+    handleError(w, "error reading params.1", call.ID, 400)
+    return
+  }
+  txs, err := getTransactions(ctx, db, "blockHash = ? AND transactionIndex = ?", trimPrefix(txHash.Bytes()), uint64(index))
+  if err != nil {
+    log.Printf("Error getting transactions: %v", err.Error())
+    handleError(w, "error reading database", call.ID, 400)
+    return
+  }
+  returnSingleTransaction(txs, w, call)
+}
+
+func getTransactionByBlockNumberAndIndex(ctx context.Context ,w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  if len(call.Params) < 2 {
+    handleError(w, "missing value for required argument 1", call.ID, 400)
+    return
+  }
+  var number, index hexutil.Uint64
+  if err := json.Unmarshal(call.Params[0], &number); err != nil {
+    handleError(w, "error reading params.0", call.ID, 400)
+    return
+  }
+  if err := json.Unmarshal(call.Params[1], &index); err != nil {
+    handleError(w, "error reading params.1", call.ID, 400)
+    return
+  }
+  txs, err := getTransactions(ctx, db, "blockNumber = ? AND transactionIndex = ?", uint64(number), uint64(index))
+  if err != nil {
+    log.Printf("Error getting transactions: %v", err.Error())
+    handleError(w, "error reading database", call.ID, 400)
+    return
+  }
+  returnSingleTransaction(txs, w, call)
+}
+
+func getTransactionReceipt(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  if len(call.Params) < 1 {
+    handleError(w, "missing value for required argument 0", call.ID, 400)
+    return
+  }
+  var txHash common.Hash
+  if err := json.Unmarshal(call.Params[0], &txHash); err != nil {
+    handleError(w, "error reading params.0", call.ID, 400)
+    return
+  }
+  receipts, err := getTransactionReceipts(ctx, db, "hash = ?", trimPrefix(txHash.Bytes()))
+  if err != nil {
+    handleError(w, "error reading database", call.ID, 400)
+    return
+  }
+  returnSingleReceipt(receipts, w, call)
+}
+
+func getTransactionsBySender(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  if len(call.Params) < 1 {
+    handleError(w, "missing value for required argument 0", call.ID, 400)
+    return
+  }
+  var address common.Address
+  if err := json.Unmarshal(call.Params[0], &address); err != nil {
+    handleError(w, "error reading params.0", call.ID, 400)
+    return
+  }
+  txs, err := getTransactions(ctx, db, "sender = ?", trimPrefix(address.Bytes()))
+  if err != nil {
+    log.Printf("Error getting txs: %v", err.Error())
+    handleError(w, "error reading database", call.ID, 400)
+    return
+  }
+  responseBytes, err := json.Marshal(formatResponse(txs, call))
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  w.WriteHeader(200)
+  w.Write(responseBytes)
+}
+
+func getTransactionReceiptsBySender(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  if len(call.Params) < 1 {
+    handleError(w, "missing value for required argument 0", call.ID, 400)
+    return
+  }
+  var address common.Address
+  if err := json.Unmarshal(call.Params[0], &address); err != nil {
+    handleError(w, "error reading params.0", call.ID, 400)
+    return
+  }
+  receipts, err := getTransactionReceipts(ctx, db, "sender = ?", trimPrefix(address.Bytes()))
+  if err != nil {
+    log.Printf("Error getting receipts: %v", err.Error())
+    handleError(w, "error reading database", call.ID, 400)
+    return
+  }
+  responseBytes, err := json.Marshal(formatResponse(receipts, call))
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  w.WriteHeader(200)
+  w.Write(responseBytes)
+}
+func getTransactionsByRecipient(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  if len(call.Params) < 1 {
+    handleError(w, "missing value for required argument 0", call.ID, 400)
+    return
+  }
+  var address common.Address
+  if err := json.Unmarshal(call.Params[0], &address); err != nil {
+    handleError(w, "error reading params.0", call.ID, 400)
+    return
+  }
+  txs, err := getTransactions(ctx, db, "recipient = ?", trimPrefix(address.Bytes()))
+  if err != nil {
+    log.Printf("Error getting txs: %v", err.Error())
+    handleError(w, "error reading database", call.ID, 400)
+    return
+  }
+  responseBytes, err := json.Marshal(formatResponse(txs, call))
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  w.WriteHeader(200)
+  w.Write(responseBytes)
+}
+
+func getTransactionReceiptsByRecipient(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  if len(call.Params) < 1 {
+    handleError(w, "missing value for required argument 0", call.ID, 400)
+    return
+  }
+  var address common.Address
+  if err := json.Unmarshal(call.Params[0], &address); err != nil {
+    handleError(w, "error reading params.0", call.ID, 400)
+    return
+  }
+  receipts, err := getTransactionReceipts(ctx, db, "recipient = ?", trimPrefix(address.Bytes()))
+  if err != nil {
+    log.Printf("Error getting receipts: %v", err.Error())
+    handleError(w, "error reading database", call.ID, 400)
+    return
+  }
+  responseBytes, err := json.Marshal(formatResponse(receipts, call))
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  w.WriteHeader(200)
+  w.Write(responseBytes)
+}
+func getTransactionsByParticipant(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  if len(call.Params) < 1 {
+    handleError(w, "missing value for required argument 0", call.ID, 400)
+    return
+  }
+  var address common.Address
+  if err := json.Unmarshal(call.Params[0], &address); err != nil {
+    handleError(w, "error reading params.0", call.ID, 400)
+    return
+  }
+  txs, err := getTransactions(ctx, db, "sender = ? OR recipient = ?", trimPrefix(address.Bytes()), trimPrefix(address.Bytes()))
+  if err != nil {
+    log.Printf("Error getting txs: %v", err.Error())
+    handleError(w, "error reading database", call.ID, 400)
+    return
+  }
+  responseBytes, err := json.Marshal(formatResponse(txs, call))
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  w.WriteHeader(200)
+  w.Write(responseBytes)
+}
+
+func getTransactionReceiptsByParticipant(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  if len(call.Params) < 1 {
+    handleError(w, "missing value for required argument 0", call.ID, 400)
+    return
+  }
+  var address common.Address
+  if err := json.Unmarshal(call.Params[0], &address); err != nil {
+    handleError(w, "error reading params.0", call.ID, 400)
+    return
+  }
+  receipts, err := getTransactionReceipts(ctx, db, "sender = ? OR recipient = ?", trimPrefix(address.Bytes()), trimPrefix(address.Bytes()))
+  if err != nil {
+    log.Printf("Error getting receipts: %v", err.Error())
+    handleError(w, "error reading database", call.ID, 400)
+    return
+  }
+  responseBytes, err := json.Marshal(formatResponse(receipts, call))
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
     return
   }
   w.WriteHeader(200)

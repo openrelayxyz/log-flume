@@ -11,7 +11,7 @@ import (
   "log"
   // "time"
   "compress/zlib"
-  "io/ioutil"
+  // "io/ioutil"
 )
 
 func trimPrefix(data []byte) ([]byte) {
@@ -39,13 +39,6 @@ func compress(data []byte) []byte {
   w.Write(data)
   w.Close()
   return b.Bytes()
-}
-
-func decompress(data []byte) ([]byte, error) {
-  if len(data) == 0 { return data, nil }
-  r, err := zlib.NewReader(bytes.NewBuffer(data))
-  if err != nil { return []byte{}, err }
-  return ioutil.ReadAll(r)
 }
 
 func getFuncSig(data []byte) ([]byte) {
