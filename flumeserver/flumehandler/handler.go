@@ -128,6 +128,10 @@ func GetHandler(db *sql.DB) func(http.ResponseWriter, *http.Request) {
       getTransactionsByParticipant(r.Context(), w, call, db)
     case "flume_getTransactionReceiptsByParticipant":
       getTransactionReceiptsByParticipant(r.Context(), w, call, db)
+    case "flume_getTransactionReceiptsByBlockHash":
+      getTransactionReceiptsByBlockHash(r.Context(), w, call, db)
+    case "flume_getTransactionReceiptsByBlockNumber":
+      getTransactionReceiptsByBlockNumber(r.Context(), w, call, db)
     default:
       handleError(w, "unsupported method", call.ID, 400)
     }
@@ -829,6 +833,54 @@ func getTransactionReceiptsByParticipant(ctx context.Context, w http.ResponseWri
     return
   }
   receipts, err := getTransactionReceipts(ctx, db, "sender = ? OR recipient = ?", trimPrefix(address.Bytes()), trimPrefix(address.Bytes()))
+  if err != nil {
+    log.Printf("Error getting receipts: %v", err.Error())
+    handleError(w, "error reading database", call.ID, 400)
+    return
+  }
+  responseBytes, err := json.Marshal(formatResponse(receipts, call))
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  w.WriteHeader(200)
+  w.Write(responseBytes)
+}
+func getTransactionReceiptsByBlockHash(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  if len(call.Params) < 1 {
+    handleError(w, "missing value for required argument 0", call.ID, 400)
+    return
+  }
+  var blockHash common.Hash
+  if err := json.Unmarshal(call.Params[0], &blockHash); err != nil {
+    handleError(w, "error reading params.0", call.ID, 400)
+    return
+  }
+  receipts, err := getTransactionReceipts(ctx, db, "blockHash = ?", trimPrefix(blockHash.Bytes()))
+  if err != nil {
+    log.Printf("Error getting receipts: %v", err.Error())
+    handleError(w, "error reading database", call.ID, 400)
+    return
+  }
+  responseBytes, err := json.Marshal(formatResponse(receipts, call))
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  w.WriteHeader(200)
+  w.Write(responseBytes)
+}
+func getTransactionReceiptsByBlockNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  if len(call.Params) < 1 {
+    handleError(w, "missing value for required argument 0", call.ID, 400)
+    return
+  }
+  var blockNumber hexutil.Uint64
+  if err := json.Unmarshal(call.Params[0], &blockNumber); err != nil {
+    handleError(w, "error reading params.0", call.ID, 400)
+    return
+  }
+  receipts, err := getTransactionReceipts(ctx, db, "blockNumber = ?", uint64(blockNumber))
   if err != nil {
     log.Printf("Error getting receipts: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
