@@ -69,7 +69,7 @@ func main() {
   sqlitePath := flag.CommandLine.Args()[0]
   feedURL := flag.CommandLine.Args()[1]
 
-  logsdb, err := sql.Open("sqlite3", fmt.Sprintf("file:%v?_sync=0&_journal_mode=WAL", sqlitePath))
+  logsdb, err := sql.Open("sqlite3", fmt.Sprintf("file:%v?_sync=0&_journal_mode=WAL&_foreign_keys=on", sqlitePath))
   if err != nil { log.Fatalf(err.Error()) }
   logsdb.SetConnMaxLifetime(0)
   logsdb.SetMaxIdleConns(32)
@@ -81,7 +81,9 @@ func main() {
       log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
     }
   }()
-  migrations.Migrate(logsdb)
+  if err := migrations.Migrate(logsdb); err != nil {
+    log.Fatalf(err.Error())
+  }
 
 
   feed, err := datafeed.ResolveFeed(feedURL, logsdb)

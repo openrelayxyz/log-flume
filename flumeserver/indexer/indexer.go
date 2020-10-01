@@ -8,6 +8,7 @@ import (
   "database/sql"
   "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/common"
+  "github.com/ethereum/go-ethereum/rlp"
   "log"
   // "time"
   "compress/zlib"
@@ -68,7 +69,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
           log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
           continue BLOCKLOOP
         }
-        deleteRes, err := dbtx.Exec("DELETE FROM transactions WHERE blockNumber >= ?;", chainEvent.Block.NumberU64())
+        deleteRes, err := dbtx.Exec("DELETE FROM blocks WHERE number >= ?;", chainEvent.Block.Number.ToInt().Int64())
         if err != nil {
           dbtx.Rollback()
           stats := db.Stats()
@@ -77,14 +78,43 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
           continue BLOCKLOOP
         }
         if count, _ := deleteRes.RowsAffected(); count > 0 {
-          log.Printf("Deleted %v records for blocks >= %v", count, chainEvent.Block.NumberU64())
+          log.Printf("Deleted %v records for blocks >= %v", count, chainEvent.Block.Number.ToInt().Int64())
+        }
+        uncles, _ := rlp.EncodeToBytes(chainEvent.Block.Uncles)
+        _, err = dbtx.Exec("INSERT INTO blocks(number, hash, parentHash, uncleHash, coinbase, root, txRoot, receiptRoot, bloom, difficulty, gasLimit, gasUsed, time, extra, mixDigest, nonce, uncles, size, td) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+          chainEvent.Block.Number.ToInt().Int64(),
+          trimPrefix(chainEvent.Block.Hash.Bytes()),
+          trimPrefix(chainEvent.Block.ParentHash.Bytes()),
+          trimPrefix(chainEvent.Block.Sha3Uncles.Bytes()),
+          trimPrefix(chainEvent.Block.Coinbase.Bytes()),
+          trimPrefix(chainEvent.Block.StateRoot.Bytes()),
+          trimPrefix(chainEvent.Block.TransactionsRoot.Bytes()),
+          trimPrefix(chainEvent.Block.ReceiptRoot.Bytes()),
+          compress(chainEvent.Block.LogsBloom),
+          chainEvent.Block.Difficulty.ToInt().Int64(),
+          uint64(chainEvent.Block.GasLimit),
+          uint64(chainEvent.Block.GasUsed),
+          uint64(chainEvent.Block.Timestamp),
+          chainEvent.Block.ExtraData,
+          trimPrefix(chainEvent.Block.MixHash.Bytes()),
+          uint64(chainEvent.Block.Nonce),
+          uncles,//rlp
+          uint64(chainEvent.Block.Size),
+          chainEvent.Block.TotalDifficulty.ToInt().Int64(),
+        )
+        if err != nil {
+          dbtx.Rollback()
+          stats := db.Stats()
+          log.Printf("WARN: Failed to insert block: %v", err.Error())
+          log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
+          continue BLOCKLOOP
         }
         var signer types.Signer
         for _, txwr := range chainEvent.TxWithReceipts() {
           switch {
-          case chainEvent.Block.NumberU64() > eip155Block:
+          case uint64(chainEvent.Block.Number.ToInt().Int64()) > eip155Block:
             signer = types.NewEIP155Signer(txwr.Transaction.ChainId())
-          case chainEvent.Block.NumberU64() > homesteadBlock:
+          case uint64(chainEvent.Block.Number.ToInt().Int64()) > homesteadBlock:
             signer = types.HomesteadSigner{}
           default:
             signer = types.FrontierSigner{}
@@ -103,9 +133,8 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
             to = trimPrefix(txwr.Transaction.To().Bytes())
           }
           // log.Printf("Inserting transaction %#x", txwr.Transaction.Hash())
-          result, err := dbtx.Exec("INSERT INTO transactions(blockHash, blockNumber, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, value, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            trimPrefix(chainEvent.Block.Hash().Bytes()),
-            chainEvent.Block.NumberU64(),
+          result, err := dbtx.Exec("INSERT INTO transactions(block, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, value, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            chainEvent.Block.Number.ToInt().Int64(),
             txwr.Transaction.Gas(),
             txwr.Transaction.GasPrice().Uint64(),
             trimPrefix(txwr.Transaction.Hash().Bytes()),
@@ -142,7 +171,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
           }
           for _, logRecord := range txwr.Receipt.Logs {
             _, err := dbtx.Exec(
-              "INSERT OR IGNORE INTO event_logs(address, topic0, topic1, topic2, topic3, topic4, data, tx, logIndex) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);",
+              "INSERT OR IGNORE INTO event_logs(address, topic0, topic1, topic2, topic3, topic4, data, tx, block, logIndex) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
               trimPrefix(logRecord.Address.Bytes()),
               trimPrefix(getTopicIndex(logRecord.Topics, 0)),
               trimPrefix(getTopicIndex(logRecord.Topics, 1)),
@@ -151,6 +180,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
               trimPrefix(getTopicIndex(logRecord.Topics, 4)),
               compress(logRecord.Data),
               insertID,
+              chainEvent.Block.Number.ToInt().Int64(),
               logRecord.Index,
             )
             if err != nil {
@@ -168,7 +198,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
           log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
           continue BLOCKLOOP
         }
-        log.Printf("Committed Block %v (%#x)", chainEvent.Block.NumberU64(), chainEvent.Block.Hash().Bytes())
+        log.Printf("Committed Block %v (%#x)", uint64(chainEvent.Block.Number.ToInt().Int64()), chainEvent.Block.Hash.Bytes())
         break
       }
     }

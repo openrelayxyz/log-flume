@@ -6,8 +6,10 @@ import (
   "math/big"
   "github.com/ethereum/go-ethereum/ethclient"
   "github.com/ethereum/go-ethereum/common"
-  "github.com/ethereum/go-ethereum/event"
+  "github.com/ethereum/go-ethereum/common/hexutil"
   "github.com/ethereum/go-ethereum/core/types"
+  "github.com/ethereum/go-ethereum/event"
+  "github.com/ethereum/go-ethereum/rpc"
   "log"
 
   "sync"
@@ -32,6 +34,7 @@ import (
 type ethWSFeed struct {
   urlStr string
   conn *ethclient.Client
+  rpcConn *rpc.Client
   lastBlockHash common.Hash
   lastBlockNumber *big.Int
   lastBlockTime *atomic.Value
@@ -44,9 +47,11 @@ type ethWSFeed struct {
 func NewETHWSFeed(urlStr string, db *sql.DB) (DataFeed, error) {
   var resumeBlock int64
   var blockHash []byte
-  db.QueryRowContext(context.Background(), "SELECT max(blockNumber) FROM transactions;").Scan(&resumeBlock)
-  db.QueryRowContext(context.Background(), "SELECT DISTINCT blockHash FROM transactions WHERE blockNumber = ?;", resumeBlock).Scan(&blockHash)
+  db.QueryRowContext(context.Background(), "SELECT max(number) FROM blocks;").Scan(&resumeBlock)
+  db.QueryRowContext(context.Background(), "SELECT DISTINCT blockHash FROM blocks WHERE blockNumber = ?;", resumeBlock).Scan(&blockHash)
   conn, err := ethclient.Dial(urlStr)
+  if err != nil { return nil, err }
+  rpcConn, err := rpc.Dial(urlStr)
   if err != nil { return nil, err }
   feed := &ethWSFeed{
     urlStr: urlStr,
@@ -56,6 +61,7 @@ func NewETHWSFeed(urlStr string, db *sql.DB) (DataFeed, error) {
     lastBlockNumber: big.NewInt(resumeBlock),
     lastBlockHash: common.BytesToHash(blockHash),
     conn: conn,
+    rpcConn: rpcConn,
     db: db,
   }
   go feed.subscribe()
@@ -68,18 +74,22 @@ func (feed *ethWSFeed) Close() {
 
 func (feed *ethWSFeed) getFromHeader(header *types.Header) (*ChainEvent, error) {
   ce := &ChainEvent{
+    Block: &miniBlock{},
     receiptMeta: make(map[common.Hash]*receiptMeta),
     logs: make( map[common.Hash][]*types.Log),
     Commit: func(*sql.Tx) (error) { return nil },
   }
-  var err error
-  ce.Block, err = feed.conn.BlockByNumber(context.Background(), header.Number)
+	err := feed.rpcConn.CallContext(context.Background(), &ce.Block, "eth_getBlockByNumber", hexutil.Big(*header.Number))
+	if err != nil {
+		return nil, err
+	}
+  // ce.Block, err = feed.rpcConn.BlockByNumber(context.Background(), header.Number)
   if err != nil { return nil, err }
   txhash := make(chan common.Hash, 10)
   txreceipts := make(chan *types.Receipt, 10)
   errch := make(chan error)
   go func() {
-    for _, tx := range ce.Block.Transactions() {
+    for _, tx := range ce.Block.Transactions {
       txhash <- tx.Hash()
     }
     close(txhash)
@@ -139,14 +149,14 @@ func (feed *ethWSFeed) subscribe() {
   if err != nil { panic(err.Error()) }
   rolledBack := 0
   for feed.lastBlockNumber.Cmp(big.NewInt(0)) > 0 && header.Hash() != feed.lastBlockHash {
-    tx.Exec("DELETE FROM transactions WHERE blockHash = ?;", feed.lastBlockHash)
+    tx.Exec("DELETE FROM blocks WHERE hash = ?;", feed.lastBlockHash)
     rolledBack++
     if rolledBack > 1000 {
       panic("Cannot find matching blockhash between DB and node")
     }
     feed.lastBlockNumber.Sub(feed.lastBlockNumber, big.NewInt(1))
     var blockHash []byte
-    feed.db.QueryRowContext(context.Background(), "SELECT DISTINCT blockHash FROM transactions WHERE blockNumber = ?;", feed.lastBlockNumber.Int64()).Scan(&blockHash)
+    feed.db.QueryRowContext(context.Background(), "SELECT DISTINCT hash FROM blocks WHERE number = ?;", feed.lastBlockNumber.Int64()).Scan(&blockHash)
     feed.lastBlockHash = common.BytesToHash(blockHash)
     header, err = feed.conn.HeaderByNumber(context.Background(), feed.lastBlockNumber)
     if err != nil { panic(err.Error()) }
@@ -180,8 +190,8 @@ func (feed *ethWSFeed) subscribe() {
     }
   }, func(ce interface{}) {
     feed.feed.Send(ce)
-    feed.lastBlockHash = ce.(*ChainEvent).Block.Hash()
-    feed.lastBlockNumber = ce.(*ChainEvent).Block.Number()
+    feed.lastBlockHash = ce.(*ChainEvent).Block.Hash
+    feed.lastBlockNumber = ce.(*ChainEvent).Block.Number.ToInt()
   })
   // At this point we've emitted all chain events from where the DB left off up
   // through the latest the node has. Now we switch over to subscriptions.

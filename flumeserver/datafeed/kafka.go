@@ -5,6 +5,7 @@ import (
   "database/sql"
   "github.com/ethereum/go-ethereum/replica"
   "github.com/ethereum/go-ethereum/common"
+  "github.com/ethereum/go-ethereum/common/hexutil"
   // "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/event"
   "time"
@@ -32,7 +33,28 @@ import (
 
 func ChainEventFromKafka(kce *replica.ChainEvent) *ChainEvent {
   ce := &ChainEvent{
-    Block: kce.Block,
+    Block: &miniBlock{
+      Difficulty: hexutil.Big(*kce.Block.Difficulty()),
+      ExtraData: kce.Block.Extra(),
+      GasLimit: hexutil.Uint64(kce.Block.GasLimit()),
+      GasUsed: hexutil.Uint64(kce.Block.GasUsed()),
+      Hash: kce.Block.Hash(),
+      LogsBloom: kce.Block.Bloom().Bytes(),
+      Coinbase: kce.Block.Coinbase(),
+      MixHash: kce.Block.MixDigest(),
+      Nonce: hexutil.Uint64(kce.Block.Nonce()),
+      Number: hexutil.Big(*kce.Block.Number()),
+      ParentHash: kce.Block.ParentHash(),
+      ReceiptRoot: kce.Block.ReceiptHash(),
+      Sha3Uncles: kce.Block.UncleHash(),
+      Size: hexutil.Uint64(kce.Block.Size()),
+      StateRoot: kce.Block.Root(),
+      Timestamp: hexutil.Uint64(kce.Block.Time()),
+      TotalDifficulty: hexutil.Big(*kce.Td),
+      Transactions: kce.Block.Transactions(),
+      TransactionsRoot: kce.Block.TxHash(),
+      Uncles: make([]common.Hash, len(kce.Block.Uncles())),
+    },
     logs: kce.Logs,
     receiptMeta: make(map[common.Hash]*receiptMeta),
   }

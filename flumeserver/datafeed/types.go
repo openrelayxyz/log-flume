@@ -2,8 +2,10 @@ package datafeed
 
 import (
   "database/sql"
+  // "math/big"
   "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/common"
+  "github.com/ethereum/go-ethereum/common/hexutil"
   "github.com/ethereum/go-ethereum/event"
 )
 
@@ -15,8 +17,34 @@ type receiptMeta struct {
   status uint64
 }
 
+// In websockets.go, load this via query
+// In kafka.go, load this from the chainEvent
+type miniBlock struct {
+  Difficulty hexutil.Big  `json:"difficulty"`
+  ExtraData []byte `json:"extraData"`
+  GasLimit hexutil.Uint64 `json:"gasLimit"`
+  GasUsed hexutil.Uint64 `json:"gasUsed"`
+  Hash  common.Hash `json:"hash"`
+  LogsBloom hexutil.Bytes  `json:"logsBloom"`
+  Coinbase common.Address  `json:"miner"`
+  MixHash common.Hash `json:"mixHash"`
+  Nonce hexutil.Uint64 `json:"nonce"`
+  Number hexutil.Big  `json:"number"`
+  ParentHash common.Hash  `json:"parentHash"`
+  ReceiptRoot common.Hash  `json:"receiptsRoot"`
+  Sha3Uncles common.Hash  `json:"sha3Uncles"`
+  Size hexutil.Uint64  `json:"size"`
+  StateRoot common.Hash  `json:"stateRoot"`
+  Timestamp hexutil.Uint64  `json:"timestamp"`
+  TotalDifficulty hexutil.Big `json:"totalDifficulty"`
+  Transactions []*types.Transaction `json:"transactions"`
+  TransactionsRoot common.Hash `json:"transactionsRoot"`
+  Uncles []common.Hash  `json:"uncles"`
+}
+
+// TODO: Save the fields off the block that we actually need.
 type ChainEvent struct {
-  Block *types.Block
+  Block *miniBlock
   Commit func(*sql.Tx) error
   receiptMeta map[common.Hash]*receiptMeta
   logs map[common.Hash][]*types.Log
@@ -24,7 +52,7 @@ type ChainEvent struct {
 
 func (ce *ChainEvent) Logs() []*types.Log {
   logs := []*types.Log{}
-  for _, tx := range ce.Block.Transactions() {
+  for _, tx := range ce.Block.Transactions {
     logs = append(logs, ce.logs[tx.Hash()]...)
   }
   return logs
@@ -46,8 +74,8 @@ func (ce *ChainEvent) TxWithReceipts() []*TxWithReceipt {
 }
 
 func (ce *ChainEvent) Receipts() []*types.Receipt {
-  receipts := make([]*types.Receipt, len(ce.Block.Transactions()))
-  for i, tx := range ce.Block.Transactions() {
+  receipts := make([]*types.Receipt, len(ce.Block.Transactions))
+  for i, tx := range ce.Block.Transactions {
     meta := ce.receiptMeta[tx.Hash()]
     receipts[i] = &types.Receipt{
       Status: meta.status,
@@ -57,8 +85,8 @@ func (ce *ChainEvent) Receipts() []*types.Receipt {
       TxHash: tx.Hash(),
       ContractAddress: meta.contractAddress,
       GasUsed: meta.gasUsed,
-      BlockHash: ce.Block.Hash(),
-      BlockNumber: ce.Block.Number(),
+      BlockHash: ce.Block.Hash,
+      BlockNumber: ce.Block.Number.ToInt(),
       TransactionIndex: uint(i),
     }
   }
@@ -66,7 +94,7 @@ func (ce *ChainEvent) Receipts() []*types.Receipt {
 }
 
 func (ce *ChainEvent) Transactions() types.Transactions {
-  return ce.Block.Transactions()
+  return ce.Block.Transactions
 }
 
 type DataFeed interface{

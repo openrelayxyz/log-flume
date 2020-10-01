@@ -317,7 +317,7 @@ func getERC20ByAccount(ctx context.Context, w http.ResponseWriter, call *rpcCall
 
   topic0 := common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
   // topic0 must match ERC20, topic3 must be empty (to exclude ERC721) and topic2 is the recipient address
-  rows, err := db.QueryContext(tctx, `SELECT distinct(address) FROM v_event_logs INDEXED BY topic2 WHERE topic0 = ? AND topic2 = ? AND topic3 = zeroblob(0) LIMIT 10000 OFFSET ?;`, trimPrefix(topic0.Bytes()), trimPrefix(addr.Bytes()), offset)
+  rows, err := db.QueryContext(tctx, `SELECT distinct(address) FROM event_logs INDEXED BY topic2 WHERE topic0 = ? AND topic2 = ? AND topic3 = zeroblob(0) LIMIT 10000 OFFSET ?;`, trimPrefix(topic0.Bytes()), trimPrefix(addr.Bytes()), offset)
   if err != nil {
     log.Printf("Error getting account addresses: %v", err.Error())
     handleError(w, "database error", call.ID, 500)
@@ -376,7 +376,7 @@ func getERC20Holders(ctx context.Context, w http.ResponseWriter, call *rpcCall, 
 
   topic0 := common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
   // topic0 must match ERC20, topic3 must be empty (to exclude ERC721) and topic2 is the recipient address
-  rows, err := db.QueryContext(tctx, `SELECT distinct(topic2) FROM v_event_logs INDEXED BY address WHERE topic0 = ? AND address = ? AND topic3 = zeroblob(0) LIMIT 10000 OFFSET ?;`, trimPrefix(topic0.Bytes()), trimPrefix(addr.Bytes()), offset)
+  rows, err := db.QueryContext(tctx, `SELECT distinct(topic2) FROM event_logs INDEXED BY address WHERE topic0 = ? AND address = ? AND topic3 = zeroblob(0) LIMIT 10000 OFFSET ?;`, trimPrefix(topic0.Bytes()), trimPrefix(addr.Bytes()), offset)
   if err != nil {
     log.Printf("Error getting account addresses: %v", err.Error())
     handleError(w, "database error", call.ID, 500)
@@ -449,7 +449,7 @@ func decompress(data []byte) ([]byte, error) {
 
 
 func getTransactions(ctx context.Context, db *sql.DB, whereClause string, params ...interface{}) ([]*rpcTransaction, error) {
-  query := fmt.Sprintf("SELECT blockHash, blockNumber, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, value, v, r, s, sender FROM transactions WHERE %v;", whereClause)
+  query := fmt.Sprintf("SELECT blockHash, blockNumber, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, value, v, r, s, sender FROM v_transactions WHERE %v;", whereClause)
   rows, err := db.QueryContext(ctx, query, params...)
   if err != nil { return nil, err }
   defer rows.Close()
@@ -499,7 +499,7 @@ func getTransactions(ctx context.Context, db *sql.DB, whereClause string, params
   return results, nil
 }
 func getTransactionReceipts(ctx context.Context, db *sql.DB, whereClause string, params ...interface{}) ([]map[string]interface{}, error) {
-  query := fmt.Sprintf("SELECT blockHash, blockNumber, gasUsed, cumulativeGasUsed, hash, recipient, transactionIndex, sender, contractAddress, logsBloom, status FROM transactions WHERE %v;", whereClause)
+  query := fmt.Sprintf("SELECT blockHash, blockNumber, gasUsed, cumulativeGasUsed, hash, recipient, transactionIndex, sender, contractAddress, logsBloom, status FROM v_transactions WHERE %v;", whereClause)
   rows, err := db.QueryContext(ctx, query, params...)
   if err != nil { return nil, err }
   defer rows.Close()
