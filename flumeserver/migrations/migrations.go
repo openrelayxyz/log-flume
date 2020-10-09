@@ -86,6 +86,7 @@ func Migrate(db *sql.DB) error {
     db.Exec(`CREATE INDEX eventblock ON event_logs(block);`)
     db.Exec(`CREATE INDEX txblock ON transactions(block);`)
     db.Exec(`CREATE INDEX hash ON blocks(hash);`)
+    db.Exec(`CREATE INDEX coinbase ON blocks(coinbase);`)
     db.Exec(`CREATE INDEX sender ON transactions(sender);`)
     db.Exec(`CREATE INDEX recipient ON transactions(recipient);`)
     db.Exec(`CREATE INDEX func ON transactions(func);`)
@@ -108,7 +109,7 @@ func Migrate(db *sql.DB) error {
       FROM
         event_logs
       INNER JOIN transactions on transactions.id = event_logs.tx
-      INNER JOIN blocks on blocks.number = event_logs.tx;`)
+      INNER JOIN blocks on blocks.number = event_logs.block;`)
 
     db.Exec(`CREATE VIEW v_transactions AS
       SELECT

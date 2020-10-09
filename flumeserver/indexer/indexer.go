@@ -97,7 +97,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
           uint64(chainEvent.Block.Timestamp),
           chainEvent.Block.ExtraData,
           trimPrefix(chainEvent.Block.MixHash.Bytes()),
-          uint64(chainEvent.Block.Nonce),
+          int64(chainEvent.Block.Nonce),
           uncles,//rlp
           uint64(chainEvent.Block.Size),
           chainEvent.Block.TotalDifficulty.ToInt().Int64(),

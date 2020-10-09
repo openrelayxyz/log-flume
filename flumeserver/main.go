@@ -93,10 +93,10 @@ func main() {
   // go indexer.ProcessFeed(feed, logsdb, quit)
   go indexer.ProcessDataFeed(feed, logsdb, quit, eip155Block, homesteadBlock)
 
-  handler := flumehandler.GetHandler(logsdb)
 
   mux := http.NewServeMux()
-  mux.HandleFunc("/", handler)
+  mux.HandleFunc("/", flumehandler.GetHandler(logsdb))
+  mux.HandleFunc("/api", flumehandler.GetAPIHandler(logsdb))
   s := &http.Server{
     Addr: fmt.Sprintf(":%v", *port),
     Handler: gziphandler.GzipHandler(cors.Default().Handler(mux)),
