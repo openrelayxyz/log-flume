@@ -13,25 +13,6 @@ import (
   "log"
 )
 
-    // "blockNumber": "10924440",
-    // "timeStamp": "1600938936",
-    // "hash": "0xd0975aab38233a044a3c10f69f0081531df77280d02d5edc34a7542f4c6a1b52",
-    // "nonce": "746",
-    // "blockHash": "0x0512c418d8c051b327e4a74b97a43b607d0119ed6b07948a9caa1551a04779e5",
-    // "transactionIndex": "47",
-    // "from": "0x5ed8cee6b63b1c6afce3ad7c92f4fd7e1b8fad9f",
-    // "to": "0xde0b295669a9fd93d5f28d9ec85e40f4cb697bae",
-    // "value": "0",
-    // "gas": "250000",
-    // "gasPrice": "135000000000",
-    // "isError": "0",
-    // "txreceipt_status": "1",
-    // "input": "0xb61d27f60000000000000000000000009ee457023bb3de16d51a003a247baead7fce313d00000000000000000000000000000000000000000000003635c9adc5dea0000000000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000000000",
-    // "contractAddress": "",
-    // "cumulativeGasUsed": "1830658",
-    // "gasUsed": "45155",
-    // "confirmations": "47858"
-
 type txResponse struct {
   BlockNumber string `json:"blockNumber"`
   TimeStamp string `json:"timeStamp"`
@@ -97,6 +78,8 @@ func GetAPIHandler(db *sql.DB, network uint64) func(http.ResponseWriter, *http.R
       accountBlocksMined(w, r, db)
     case "blockgetblockcountdown":
       blockCountdown(w, r, db)
+    case "blockgetblocknobytime":
+      blockByTimestamp(w, r, db)
     default:
       handleApiResponse(w, 0, "NOTOK-invalid action", "Error! Missing or invalid action name", 404, false)
     }
@@ -467,10 +450,33 @@ func blockCountdown(w http.ResponseWriter, r *http.Request, db *sql.DB) {
   }
   averageBlockTime := float64(cumulativeDifference) / float64(count)
 
-  handleApiResponse(w, 0, "OK", countdown{
+  handleApiResponse(w, 1, "OK", countdown{
     CurrentBlock: fmt.Sprintf("%d", headBlockNumber),
     CountdownBlock: fmt.Sprintf("%d", blockNo),
     RemainingBlock: fmt.Sprintf("%d", blockNo - headBlockNumber),
     EstimateTimeInSec: fmt.Sprintf("%.1f", float64(headBlockNumber - blockNo) * averageBlockTime),
-  }, 400, false)
+  }, 200, false)
+}
+
+func blockByTimestamp(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+  query := r.URL.Query()
+  timestamp, _ := strconv.Atoi(query.Get("timestamp"))
+  sort := "DESC"
+  operand := "<="
+  if query.Get("closest") == "after" {
+    operand = ">="
+    sort = "ASC"
+  }
+  var blockNumber string
+  log.Printf(fmt.Sprintf("SELECT number FROM blocks WHERE time %v %v ORDER BY number %v LIMIT 1;", operand, timestamp, sort))
+  row := db.QueryRowContext(r.Context(), fmt.Sprintf("SELECT number FROM blocks WHERE time %v ? ORDER BY number %v LIMIT 1;", operand, sort), timestamp)
+  if err := row.Scan(&blockNumber); err == sql.ErrNoRows {
+    handleApiResponse(w, 0, "NOTOK-missing", "Error! No closest block found", 400, false)
+    return
+  } else if err != nil {
+    log.Printf("Error selecting: %v", err.Error())
+    handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
+    return
+  }
+  handleApiResponse(w, 1, "OK", blockNumber, 200, false)
 }

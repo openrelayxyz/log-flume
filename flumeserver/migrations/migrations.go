@@ -90,6 +90,7 @@ func Migrate(db *sql.DB, chainid uint64) error {
     db.Exec(`CREATE INDEX txblock ON transactions(block);`)
     db.Exec(`CREATE INDEX hash ON blocks(hash);`)
     db.Exec(`CREATE INDEX coinbase ON blocks(coinbase);`)
+    db.Exec(`CREATE INDEX timestamp ON blocks(time);`)
     db.Exec(`CREATE INDEX sender ON transactions(sender);`)
     db.Exec(`CREATE INDEX recipient ON transactions(recipient);`)
     db.Exec(`CREATE INDEX func ON transactions(func);`)
