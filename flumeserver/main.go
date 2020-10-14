@@ -42,6 +42,8 @@ func main() {
   homesteadBlockFlag := flag.Int("homestead", 0, "Block of the homestead hardfork")
   eip155BlockFlag := flag.Int("eip155", 0, "Block of the eip155 hardfork")
 
+  flag.CommandLine.Parse(os.Args[1:])
+
   var homesteadBlock, eip155Block, chainid uint64
 
   if *mainnet {
@@ -71,7 +73,6 @@ func main() {
   }
 
 
-  flag.CommandLine.Parse(os.Args[1:])
   sqlitePath := flag.CommandLine.Args()[0]
   feedURL := flag.CommandLine.Args()[1]
 

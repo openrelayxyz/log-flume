@@ -66,7 +66,10 @@ func GetAPIHandler(db *sql.DB, network uint64) func(http.ResponseWriter, *http.R
   return func(w http.ResponseWriter, r *http.Request) {
     query := r.URL.Query()
     chainTokens, ok := tokens.Tokens[network]
-    if !ok { chainTokens = make(map[common.Address]tokens.Token )}
+    if !ok {
+      log.Printf("No tokens for network %v - making empty map", network)
+      chainTokens = make(map[common.Address]tokens.Token )
+    }
     switch query.Get("module") + query.Get("action") {
     case "accounttxlist":
       accountTxList(w, r, db)
@@ -80,6 +83,8 @@ func GetAPIHandler(db *sql.DB, network uint64) func(http.ResponseWriter, *http.R
       blockCountdown(w, r, db)
     case "blockgetblocknobytime":
       blockByTimestamp(w, r, db)
+    case "tokentokeninfo":
+      getTokenInfo(w, r, db, chainTokens)
     default:
       handleApiResponse(w, 0, "NOTOK-invalid action", "Error! Missing or invalid action name", 404, false)
     }
@@ -393,14 +398,6 @@ type countdown struct {
   EstimateTimeInSec string `json:"EstimateTimeInSec"`
 }
 
-// {
-//   "CurrentBlock": "11056086",
-//   "CountdownBlock": "12056086",
-//   "RemainingBlock": "1000000",
-//   "EstimateTimeInSec": "13100015.0"
-// }
-
-
 func blockCountdown(w http.ResponseWriter, r *http.Request, db *sql.DB) {
   query := r.URL.Query()
   blockNo, _ := strconv.Atoi(query.Get("blockno"))
@@ -479,4 +476,89 @@ func blockByTimestamp(w http.ResponseWriter, r *http.Request, db *sql.DB) {
     return
   }
   handleApiResponse(w, 1, "OK", blockNumber, 200, false)
+}
+
+
+//     {
+//       "contractAddress": "0x...",
+//       "tokenName": "Token Name",
+//       "symbol": "Token Symbol",
+//       "divisor": "18",
+//       "tokenType": "ERC20",
+//       "totalSupply": "1000000000000000",
+//       "blueCheckmark": "true",
+//       "description": "Token Description",
+//       "website": "https://token.webiste",
+//       "email": "email@token.website",
+//       "blog": "https://blog.token.website/",
+//       "reddit": "https://www.reddit.com/r/tokenwebsite/",
+//       "slack": "https://chat.token.website/",
+//       "facebook": "https://facebook.com/tokenwebsite",
+//       "twitter": "https://twitter.com/tokenwebsite",
+//       "bitcointalk": "https://www.bitcointalk.org/index.php?topic=xxxxx",
+//       "github": "https://github.com/tokenwebsite",
+//       "telegram": "https://t.me/tokenwebsite",
+//       "wechat": "https://token.website/wechat",
+//       "linkedin": "https://www.linkedin.com/tokenwebsite/",
+//       "discord": "https://discord.com/tokenwebsite",
+//       "whitepaper": "https://token.website/documents/document.pdf"
+//     }
+
+type tokenInfo struct {
+  ContractAddress string `json:"contractAddress"`
+  TokenName string `json:"tokenName"`
+  Symbol string `json:"symbol"`
+  Divisor json.Number `json:"divisor"`
+  TokenType string `json:"tokenType"`
+  TotalSupply string `json:"totalSupply"`
+  BlueCheckmark string `json:"blueCheckmark"`
+  Description string `json:"description"`
+  Website string `json:"website"`
+  Email string `json:"email"`
+  Blog string `json:"blog"`
+  Reddit string `json:"reddit"`
+  Slack string `json:"slack"`
+  Facebook string `json:"facebook"`
+  Twitter string `json:"twitter"`
+  Bitcointalk string `json:"bitcointalk"`
+  Github string `json:"github"`
+  Telegram string `json:"telegram"`
+  Wechat string `json:"wechat"`
+  Linkedin string `json:"linkedin"`
+  Discord string `json:"discord"`
+  Whitepaper string `json:"whitepaper"`
+}
+
+func getTokenInfo(w http.ResponseWriter, r *http.Request, db *sql.DB, chainTokens map[common.Address]tokens.Token) {
+  // TODO: Query for total supply
+  query := r.URL.Query()
+  if query.Get("contractaddress") == "" {
+    handleApiResponse(w, 0, "NOTOK-missing arguments", "Error! Missing account address", 400, false)
+    return
+  }
+  addr := common.HexToAddress(query.Get("contractaddress"))
+  token, ok := chainTokens[addr]
+  if !ok {
+    handleApiResponse(w, 0, "NOTOK-missing", "Error! Unknown token", 404, false)
+    return
+  }
+  handleApiResponse(w, 1, "OK", tokenInfo{
+    ContractAddress: addr.String(),
+    TokenName: token.Name,
+    Symbol: token.Symbol,
+    Divisor: token.Decimals,
+    TokenType: "ERC20",
+    Website: token.Website,
+    Email: token.Support.Email,
+    Blog: token.Social["blog"],
+    Reddit: token.Social["reddit"],
+    Slack: token.Social["slack"],
+    Facebook: token.Social["facebook"],
+    Twitter: token.Social["twitter"],
+    Github: token.Social["github"],
+    Telegram: token.Social["telegram"],
+    Wechat: token.Social["chat"],
+    Linkedin: token.Social["linkedin"],
+    Discord: token.Social["discord"],
+  }, 200, false)
 }
