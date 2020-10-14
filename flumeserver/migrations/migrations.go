@@ -4,8 +4,11 @@ import (
   "database/sql"
 )
 
+const (
+  maxInt = 9223372036854775807
+)
 
-func Migrate(db *sql.DB) error {
+func Migrate(db *sql.DB, chainid uint64) error {
   var tableName string
   db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' and name='migrations';").Scan(&tableName)
   if tableName != "migrations" {
@@ -14,7 +17,7 @@ func Migrate(db *sql.DB) error {
   }
   var schemaVersion uint
   db.QueryRow("SELECT version FROM migrations;").Scan(&schemaVersion)
-  if schemaVersion == 0 {
+  if schemaVersion < 1 {
     if _, err := db.Exec(`CREATE TABLE blocks (
       number      BIGINT PRIMARY KEY,
       hash        varchar(32),
@@ -139,5 +142,37 @@ func Migrate(db *sql.DB) error {
     db.Exec(`CREATE TABLE offsets(offset BIGINT, topic varchar(32));`)
     db.Exec(`UPDATE migrations SET version = 1;`)
   }
+  if schemaVersion < 2 {
+    if _, err := db.Exec(`CREATE TABLE issuance (
+      startBlock     BIGINT,
+      endBlock       BIGINT,
+      value          BIGINT
+    );`); err != nil { return err }
+    switch chainid {
+    case 1:
+      if _, err := db.Exec(`INSERT INTO issuance(startBlock, endBlock, value) VALUES (?, ?, ?)`, 1, 4369999, 5000000000000000000); err != nil { return err }
+      if _, err := db.Exec(`INSERT INTO issuance(startBlock, endBlock, value) VALUES (?, ?, ?)`, 4370000, 7279999, 3000000000000000000); err != nil { return err }
+      if _, err := db.Exec(`INSERT INTO issuance(startBlock, endBlock, value) VALUES (?, ?, ?)`, 7280000, maxInt, 2000000000000000000); err != nil { return err }
+    case 61:
+      if _, err := db.Exec(`INSERT INTO issuance(startBlock, endBlock, value) VALUES (?, ?, ?)`, 1, 5000000, 5000000000000000000); err != nil { return err }
+      if _, err := db.Exec(`INSERT INTO issuance(startBlock, endBlock, value) VALUES (?, ?, ?)`, 5000001, 10000000, 4000000000000000000); err != nil { return err }
+      if _, err := db.Exec(`INSERT INTO issuance(startBlock, endBlock, value) VALUES (?, ?, ?)`, 10000001, 15000000, 3200000000000000000); err != nil { return err }
+      if _, err := db.Exec(`INSERT INTO issuance(startBlock, endBlock, value) VALUES (?, ?, ?)`, 15000001, 20000000, 2560000000000000000); err != nil { return err }
+      if _, err := db.Exec(`INSERT INTO issuance(startBlock, endBlock, value) VALUES (?, ?, ?)`, 20000001, 25000000, 2048000000000000000); err != nil { return err }
+      if _, err := db.Exec(`INSERT INTO issuance(startBlock, endBlock, value) VALUES (?, ?, ?)`, 25000001, maxInt, 0); err != nil { return err }
+    case 3:
+      if _, err := db.Exec(`INSERT INTO issuance(startBlock, endBlock, value) VALUES (?, ?, ?)`, 1, 1699999, 5000000000000000000); err != nil { return err }
+      if _, err := db.Exec(`INSERT INTO issuance(startBlock, endBlock, value) VALUES (?, ?, ?)`, 1700000, 4229999, 3000000000000000000); err != nil { return err }
+      if _, err := db.Exec(`INSERT INTO issuance(startBlock, endBlock, value) VALUES (?, ?, ?)`, 4230000, maxInt, 2000000000000000000); err != nil { return err }
+    case 4:
+      if _, err := db.Exec(`INSERT INTO issuance(startBlock, endBlock, value) VALUES (?, ?, ?)`, 1, maxInt, 0); err != nil { return err }
+    case 5:
+      if _, err := db.Exec(`INSERT INTO issuance(startBlock, endBlock, value) VALUES (?, ?, ?)`, 1, maxInt, 5000000000000000000); err != nil { return err }
+    default:
+      if _, err := db.Exec(`INSERT INTO issuance(startBlock, endBlock, value) VALUES (?, ?, ?)`, 1, maxInt, 0); err != nil { return err }
+    }
+    db.Exec(`UPDATE migrations SET version = 2;`)
+  }
+  // chainid
   return nil
 }

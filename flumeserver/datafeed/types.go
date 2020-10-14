@@ -107,5 +107,17 @@ type NullDataFeed struct {}
 
 
 func (*NullDataFeed) Close() {}
-func (*NullDataFeed) Subscribe(chan *ChainEvent) event.Subscription { return nil }
-func (*NullDataFeed) Ready() <-chan struct{} { return make(chan struct{}) }
+func (*NullDataFeed) Subscribe(chan *ChainEvent) event.Subscription { return &NullSubscription{} }
+func (*NullDataFeed) Ready() <-chan struct{} {
+  ch := make(chan struct{}, 1)
+  ch <- struct{}{}
+  return ch
+}
+
+
+type NullSubscription struct {}
+
+func (s *NullSubscription) Err() <-chan error {
+  return make(chan error)
+}
+func (s *NullSubscription) Unsubscribe() {}

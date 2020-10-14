@@ -33,7 +33,9 @@ jobs:
           command: |
             export GOPATH=$HOME/go
             export GOARCH=amd64
-            cd flumeserver
+            cd flumeserver/tokens
+            go generate
+            cd ..
             go build
       # - run:
       #     name: build image

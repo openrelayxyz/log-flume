@@ -42,26 +42,32 @@ func main() {
   homesteadBlockFlag := flag.Int("homestead", 0, "Block of the homestead hardfork")
   eip155BlockFlag := flag.Int("eip155", 0, "Block of the eip155 hardfork")
 
-  var homesteadBlock, eip155Block uint64
+  var homesteadBlock, eip155Block, chainid uint64
 
   if *mainnet {
     homesteadBlock = 1150000
     eip155Block = 2675000
+    chainid = 1
   } else if *classic {
     homesteadBlock = 1150000
     eip155Block = 3000000
+    chainid = 61
   } else if *ropsten {
     homesteadBlock = 0
     eip155Block = 10
+    chainid = 3
   } else if *rinkeby {
     homesteadBlock = 1
     eip155Block = 3
+    chainid = 4
   } else if *goerli {
     homesteadBlock = 0
     eip155Block = 0
+    chainid = 5
   } else {
     homesteadBlock = uint64(*homesteadBlockFlag)
     eip155Block = uint64(*eip155BlockFlag)
+    chainid = 0
   }
 
 
@@ -81,7 +87,7 @@ func main() {
       log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
     }
   }()
-  if err := migrations.Migrate(logsdb); err != nil {
+  if err := migrations.Migrate(logsdb, chainid); err != nil {
     log.Fatalf(err.Error())
   }
 
@@ -96,7 +102,7 @@ func main() {
 
   mux := http.NewServeMux()
   mux.HandleFunc("/", flumehandler.GetHandler(logsdb))
-  mux.HandleFunc("/api", flumehandler.GetAPIHandler(logsdb))
+  mux.HandleFunc("/api", flumehandler.GetAPIHandler(logsdb, chainid))
   s := &http.Server{
     Addr: fmt.Sprintf(":%v", *port),
     Handler: gziphandler.GzipHandler(cors.Default().Handler(mux)),
