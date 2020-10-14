@@ -95,6 +95,8 @@ func GetAPIHandler(db *sql.DB, network uint64) func(http.ResponseWriter, *http.R
       accountERC721TransferList(w, r, db, chainTokens)
     case "accountgetminedblocks":
       accountBlocksMined(w, r, db)
+    case "blockgetblockcountdown":
+      blockCountdown(w, r, db)
     default:
       handleApiResponse(w, 0, "NOTOK-invalid action", "Error! Missing or invalid action name", 404, false)
     }
@@ -399,4 +401,76 @@ func accountBlocksMined(w http.ResponseWriter, r *http.Request, db *sql.DB) {
     return
   }
   handleApiResponse(w, 1, "OK", result, 200, len(result) == 0)
+}
+
+type countdown struct {
+  CurrentBlock string `json:"CurrentBlock"`
+  CountdownBlock string `json:"CountdownBlock"`
+  RemainingBlock string `json:"RemainingBlock"`
+  EstimateTimeInSec string `json:"EstimateTimeInSec"`
+}
+
+// {
+//   "CurrentBlock": "11056086",
+//   "CountdownBlock": "12056086",
+//   "RemainingBlock": "1000000",
+//   "EstimateTimeInSec": "13100015.0"
+// }
+
+
+func blockCountdown(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+  query := r.URL.Query()
+  blockNo, _ := strconv.Atoi(query.Get("blockno"))
+  var headBlockNumber int
+  err := db.QueryRowContext(r.Context(), "SELECT max(number) FROM blocks;").Scan(&headBlockNumber)
+  if err != nil {
+    log.Printf("Error querying: %v", err.Error())
+    handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
+    return
+  }
+  if blockNo < headBlockNumber {
+    handleApiResponse(w, 0, "NOTOK-missing", "Error! Block number already pass", 400, false)
+    return
+  }
+  rows, err := db.QueryContext(r.Context(), `SELECT time FROM blocks ORDER BY number DESC LIMIT 100;`)
+  if err != nil {
+    log.Printf("Error querying: %v", err.Error())
+    handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
+    return
+  }
+  var lastBlock, cumulativeDifference, count int64
+  if !rows.Next() {
+    log.Printf("Error: No blocks available: %v",)
+    handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
+    return
+  }
+  if err := rows.Scan(&lastBlock); err != nil {
+    log.Printf("Error scanning: %v", err.Error())
+    handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
+    return
+  }
+  for rows.Next() {
+    var currentBlock int64
+    if err := rows.Scan(&currentBlock); err != nil {
+      log.Printf("Error scanning: %v", err.Error())
+      handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
+      return
+    }
+    cumulativeDifference += currentBlock - lastBlock
+    count++
+    lastBlock = currentBlock
+  }
+  if err := rows.Err(); err != nil {
+    log.Printf("Error processing: %v", err.Error())
+    handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
+    return
+  }
+  averageBlockTime := float64(cumulativeDifference) / float64(count)
+
+  handleApiResponse(w, 0, "OK", countdown{
+    CurrentBlock: fmt.Sprintf("%d", headBlockNumber),
+    CountdownBlock: fmt.Sprintf("%d", blockNo),
+    RemainingBlock: fmt.Sprintf("%d", blockNo - headBlockNumber),
+    EstimateTimeInSec: fmt.Sprintf("%.1f", float64(headBlockNumber - blockNo) * averageBlockTime),
+  }, 400, false)
 }
