@@ -853,6 +853,8 @@ Resources:
                   poweroff
                 fi
 
+                sleep 60
+
                 # upload Backup
                 export BACKUPNAME="${S3FlumeBackupBucket}/${NetworkId}/logs-$(date '+%Y%m%d-%H%M%S').sqlite.lz4"
                 if ! lz4 /var/lib/flume/item.sqlite | aws s3 cp - s3://$BACKUPNAME --expected-size=175000000000; then
