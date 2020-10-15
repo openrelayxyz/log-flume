@@ -41,6 +41,15 @@ type apiResult struct {
   Result interface{} `json:"result"`
 }
 
+func handleApiError(err error, w http.ResponseWriter, msg, result, logMsg string, code int) bool {
+  if err != nil {
+    log.Printf("%v: %v", logMsg, err.Error())
+    handleApiResponse(w, 0, fmt.Sprintf("NOTOK-%v", msg), result, code, false)
+    return true
+  }
+  return false
+}
+
 func handleApiResponse(w http.ResponseWriter, status int, message string, result interface{}, code int, empty bool) {
   fullResult := &apiResult{
     Status: fmt.Sprintf("%v", status),
@@ -123,29 +132,18 @@ func accountTxList(w http.ResponseWriter, r *http.Request, db *sql.DB) {
     LIMIT ?
     OFFSET ?;`, sort, sort),
     trimPrefix(addr.Bytes()), trimPrefix(addr.Bytes()), startBlock, endBlock, offset, (page - 1) * offset)
-  if err != nil {
-    log.Printf("Error querying: %v", err.Error())
-    handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
-    return
-  }
+  if handleApiError(err, w, "database error", "Error! Database error", "Error querying", 500) { return }
   result := []*txResponse{}
   for rows.Next() {
     var blockNumber uint64
     var blockTime, txNonce, txIndex,  txGas, txGasPrice, txStatus,  txCumulativeGasUsed, txGasUsed string
     var blockHash, txRecipient, txHash, txSender, txValue, txInput, txContractAddress []byte
-    if err := rows.Scan(&blockNumber, &blockTime, &txHash, &txNonce, &blockHash, &txIndex, &txRecipient, &txSender, &txValue, &txGas, &txGasPrice, &txStatus, &txInput, &txContractAddress, &txCumulativeGasUsed, &txGasUsed); err != nil {
-      log.Printf("Error processing record: %v", err.Error())
-      handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
-      return
-    }
+    err := rows.Scan(&blockNumber, &blockTime, &txHash, &txNonce, &blockHash, &txIndex, &txRecipient, &txSender, &txValue, &txGas, &txGasPrice, &txStatus, &txInput, &txContractAddress, &txCumulativeGasUsed, &txGasUsed)
+    if handleApiError(err, w, "database error", "Error! Database error", "Error processing", 500) { return }
     isError := "0"
     if txStatus == "0" { isError = "1" }
     input, err := decompress(txInput)
-    if err != nil {
-      log.Printf("Error decompressing record: %v", err.Error())
-      handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
-      return
-    }
+    if handleApiError(err, w, "database error", "Error! Database error", "Error processing", 500) { return }
     contractAddress := ""
     if addr := bytesToAddress(txContractAddress); addr != (common.Address{}) {
       contractAddress = addr.String()
@@ -172,13 +170,7 @@ func accountTxList(w http.ResponseWriter, r *http.Request, db *sql.DB) {
     }
     result = append(result, tx)
   }
-  if err := rows.Err(); err != nil {
-    if err != nil {
-      log.Printf("Error processing: %v", err.Error())
-      handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
-      return
-    }
-  }
+  if handleApiError(rows.Err(), w, "database error", "Error! Database error", "Error processing", 500) { return }
   handleApiResponse(w, 1, "OK", result, 200, len(result) == 0)
   return
 }
@@ -246,21 +238,14 @@ func accountTokenTransferList(w http.ResponseWriter, r *http.Request, db *sql.DB
     LIMIT ?
     OFFSET ?;`, topic3Comparison, sort, sort),
     trimPrefix(addr.Bytes()), trimPrefix(addr.Bytes()), startBlock, endBlock, offset, (page - 1) * offset)
-  if err != nil {
-    log.Printf("Error querying: %v", err.Error())
-    handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
-    return
-  }
+  if handleApiError(err, w, "database error", "Error! Database error", "Error processing", 500) { return }
   result := []*tokenTransfer{}
   for rows.Next() {
     var blockNumber uint64
     var blockTime, txNonce, txIndex,  txGas, txGasPrice, txCumulativeGasUsed, txGasUsed string
     var blockHash, tokenRecipient, txHash, tokenSender, tokenValue, txInput, tokenContractAddress []byte
-    if err := rows.Scan(&blockNumber, &blockTime, &txHash, &txNonce, &blockHash, &tokenRecipient, &tokenSender, &tokenContractAddress, &tokenValue, &txIndex, &txGas, &txGasPrice, &txInput, &txCumulativeGasUsed, &txGasUsed); err != nil {
-      log.Printf("Error processing record: %v", err.Error())
-      handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
-      return
-    }
+    err := rows.Scan(&blockNumber, &blockTime, &txHash, &txNonce, &blockHash, &tokenRecipient, &tokenSender, &tokenContractAddress, &tokenValue, &txIndex, &txGas, &txGasPrice, &txInput, &txCumulativeGasUsed, &txGasUsed)
+    if handleApiError(err, w, "database error", "Error! Database error", "Error processing", 500) { return }
     token := chainTokens[bytesToAddress(tokenContractAddress)]
     result = append(result, &tokenTransfer{
       BlockNumber: fmt.Sprintf("%v", blockNumber),
@@ -283,11 +268,7 @@ func accountTokenTransferList(w http.ResponseWriter, r *http.Request, db *sql.DB
       Confirmations: fmt.Sprintf("%v", (headBlockNumber - blockNumber) + 1),
     })
   }
-  if err := rows.Err(); err != nil {
-    log.Printf("Error processing: %v", err.Error())
-    handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
-    return
-  }
+  if handleApiError(rows.Err(), w, "database error", "Error! Database error", "Error processing", 500) { return }
   handleApiResponse(w, 1, "OK", result, 200, len(result) == 0)
   return
 
@@ -328,22 +309,13 @@ func accountBlocksMined(w http.ResponseWriter, r *http.Request, db *sql.DB) {
       INNER JOIN transactions on transactions.block = blocks.number
       WHERE coinbase = ? AND (blocks.number >= ? AND blocks.number <= ?) GROUP BY blocks.number ORDER BY blocks.number %v LIMIT ? OFFSET ?;`, sort),
     trimPrefix(addr.Bytes()), startBlock, endBlock, offset, (page - 1) * offset)
-  if err != nil {
-    log.Printf("Error querying: %v", err.Error())
-    handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
-    return
-  }
-  minerBlocks := make(map[uint64]*minersBlock)
+  if handleApiError(err, w, "database error", "Error! Database error", "Error querying", 500) { return }
   result := []*minersBlock{}
   for rows.Next() {
     var blockNumber uint64
     var issuance int64
     var blockTime, gasUsedConcat, gasPriceConcat string
-    if err := rows.Scan(&blockNumber, &blockTime, &issuance, &gasUsedConcat, &gasPriceConcat); err != nil {
-      log.Printf("Error getting blocks: %v", err.Error())
-      handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
-      return
-    }
+    if handleApiError(rows.Scan(&blockNumber, &blockTime, &issuance, &gasUsedConcat, &gasPriceConcat), w, "database error", "Error! Database error", "Error processing", 500) { return }
     gasUsedList := strings.Split(gasUsedConcat, ",")
     gasPriceList := strings.Split(gasPriceConcat, ",")
     reward := big.NewInt(issuance)
@@ -352,18 +324,13 @@ func accountBlocksMined(w http.ResponseWriter, r *http.Request, db *sql.DB) {
       gasPrice, _ := new(big.Int).SetString(gasPriceList[i], 10)
       reward.Add(reward, new(big.Int).Mul(gasUsed, gasPrice))
     }
-    minerBlocks[blockNumber] = &minersBlock{
+    result = append(result, &minersBlock{
       BlockNumber: fmt.Sprintf("%d", blockNumber),
       TimeStamp: blockTime,
       BlockReward: reward.String(),
-    }
-    result = append(result, minerBlocks[blockNumber])
+    })
   }
-  if err := rows.Err(); err != nil {
-    log.Printf("Error processing: %v", err.Error())
-    handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
-    return
-  }
+  if handleApiError(rows.Err(), w, "database error", "Error! Database error", "Error processing", 500) { return }
   handleApiResponse(w, 1, "OK", result, 200, len(result) == 0)
 }
 
@@ -379,48 +346,28 @@ func blockCountdown(w http.ResponseWriter, r *http.Request, db *sql.DB) {
   blockNo, _ := strconv.Atoi(query.Get("blockno"))
   var headBlockNumber int
   err := db.QueryRowContext(r.Context(), "SELECT max(number) FROM blocks;").Scan(&headBlockNumber)
-  if err != nil {
-    log.Printf("Error querying: %v", err.Error())
-    handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
-    return
-  }
+  if handleApiError(err, w, "database error", "Error! Database error", "Error querying", 500) { return }
   if blockNo < headBlockNumber {
     handleApiResponse(w, 0, "NOTOK-missing", "Error! Block number already pass", 400, false)
     return
   }
   rows, err := db.QueryContext(r.Context(), `SELECT time FROM blocks ORDER BY number DESC LIMIT 100;`)
-  if err != nil {
-    log.Printf("Error querying: %v", err.Error())
-    handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
-    return
-  }
+  if handleApiError(err, w, "database error", "Error! Database error", "Error querying", 500) { return }
   var lastBlock, cumulativeDifference, count int64
   if !rows.Next() {
     log.Printf("Error: No blocks available: %v",)
     handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
     return
   }
-  if err := rows.Scan(&lastBlock); err != nil {
-    log.Printf("Error scanning: %v", err.Error())
-    handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
-    return
-  }
+  if handleApiError(rows.Scan(&lastBlock), w, "database error", "Error! Database error", "Error scanning", 500) { return }
   for rows.Next() {
     var currentBlock int64
-    if err := rows.Scan(&currentBlock); err != nil {
-      log.Printf("Error scanning: %v", err.Error())
-      handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
-      return
-    }
+    if handleApiError(rows.Scan(&currentBlock), w, "database error", "Error! Database error", "Error scanning", 500) { return }
     cumulativeDifference += currentBlock - lastBlock
     count++
     lastBlock = currentBlock
   }
-  if err := rows.Err(); err != nil {
-    log.Printf("Error processing: %v", err.Error())
-    handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
-    return
-  }
+  if handleApiError(rows.Err(), w, "database error", "Error! Database error", "Error processing", 500) { return }
   averageBlockTime := float64(cumulativeDifference) / float64(count)
 
   handleApiResponse(w, 1, "OK", countdown{
@@ -446,39 +393,10 @@ func blockByTimestamp(w http.ResponseWriter, r *http.Request, db *sql.DB) {
   if err := row.Scan(&blockNumber); err == sql.ErrNoRows {
     handleApiResponse(w, 0, "NOTOK-missing", "Error! No closest block found", 400, false)
     return
-  } else if err != nil {
-    log.Printf("Error selecting: %v", err.Error())
-    handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
-    return
-  }
+  } else if handleApiError(err, w, "database error", "Error! Database error", "Error selecting", 500) { return }
   handleApiResponse(w, 1, "OK", blockNumber, 200, false)
 }
 
-
-//     {
-//       "contractAddress": "0x...",
-//       "tokenName": "Token Name",
-//       "symbol": "Token Symbol",
-//       "divisor": "18",
-//       "tokenType": "ERC20",
-//       "totalSupply": "1000000000000000",
-//       "blueCheckmark": "true",
-//       "description": "Token Description",
-//       "website": "https://token.webiste",
-//       "email": "email@token.website",
-//       "blog": "https://blog.token.website/",
-//       "reddit": "https://www.reddit.com/r/tokenwebsite/",
-//       "slack": "https://chat.token.website/",
-//       "facebook": "https://facebook.com/tokenwebsite",
-//       "twitter": "https://twitter.com/tokenwebsite",
-//       "bitcointalk": "https://www.bitcointalk.org/index.php?topic=xxxxx",
-//       "github": "https://github.com/tokenwebsite",
-//       "telegram": "https://t.me/tokenwebsite",
-//       "wechat": "https://token.website/wechat",
-//       "linkedin": "https://www.linkedin.com/tokenwebsite/",
-//       "discord": "https://discord.com/tokenwebsite",
-//       "whitepaper": "https://token.website/documents/document.pdf"
-//     }
 
 type tokenInfo struct {
   ContractAddress string `json:"contractAddress"`
