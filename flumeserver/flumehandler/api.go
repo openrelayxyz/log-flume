@@ -11,6 +11,7 @@ import (
   "github.com/ethereum/go-ethereum/common/hexutil"
   "github.com/openrelayxyz/flume/flumeserver/tokens"
   "log"
+  "strings"
 )
 
 type txResponse struct {
@@ -296,13 +297,6 @@ type minersBlock struct {
   BlockNumber string `json:"blockNumber"`
   TimeStamp   string `json:"timeStamp"`
   BlockReward string `json:"blockReward"`
-  blockReward *big.Int
-}
-
-func (b *minersBlock) addGasToReward(gasUsed int64, gasPrice int64) {
-  gasCost := new(big.Int).Mul(big.NewInt(gasUsed), big.NewInt(gasPrice))
-  b.blockReward = new(big.Int).Add(b.blockReward, gasCost)
-  b.BlockReward = b.blockReward.String()
 }
 
 func accountBlocksMined(w http.ResponseWriter, r *http.Request, db *sql.DB) {
@@ -325,12 +319,14 @@ func accountBlocksMined(w http.ResponseWriter, r *http.Request, db *sql.DB) {
   var headBlockNumber uint64
   err := db.QueryRowContext(r.Context(), "SELECT max(number) FROM blocks;").Scan(&headBlockNumber)
   if headBlockNumber > uint64(endBlock) { endBlock = int(headBlockNumber) }
+  // TODO: Use GROUP_CONCAT to avoid separate queries for gas usage
   rows, err := db.QueryContext(r.Context(),
     fmt.Sprintf(`SELECT
-        blocks.number, blocks.time, issuance.value
+        blocks.number, blocks.time, issuance.value, GROUP_CONCAT(transactions.gasUsed), GROUP_CONCAT(transactions.gasPrice)
       FROM blocks
       INNER JOIN issuance on blocks.number > issuance.startBlock AND blocks.number < issuance.endBlock
-      WHERE coinbase = ? AND (blocks.number >= ? AND blocks.number <= ?) ORDER BY blocks.number %v LIMIT ? OFFSET ?;`, sort),
+      INNER JOIN transactions on transactions.block = blocks.number
+      WHERE coinbase = ? AND (blocks.number >= ? AND blocks.number <= ?) GROUP BY blocks.number ORDER BY blocks.number %v LIMIT ? OFFSET ?;`, sort),
     trimPrefix(addr.Bytes()), startBlock, endBlock, offset, (page - 1) * offset)
   if err != nil {
     log.Printf("Error querying: %v", err.Error())
@@ -342,46 +338,26 @@ func accountBlocksMined(w http.ResponseWriter, r *http.Request, db *sql.DB) {
   for rows.Next() {
     var blockNumber uint64
     var issuance int64
-    var blockTime string
-    if err := rows.Scan(&blockNumber, &blockTime, &issuance); err != nil {
+    var blockTime, gasUsedConcat, gasPriceConcat string
+    if err := rows.Scan(&blockNumber, &blockTime, &issuance, &gasUsedConcat, &gasPriceConcat); err != nil {
       log.Printf("Error getting blocks: %v", err.Error())
       handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
       return
     }
+    gasUsedList := strings.Split(gasUsedConcat, ",")
+    gasPriceList := strings.Split(gasPriceConcat, ",")
     reward := big.NewInt(issuance)
+    for i := 0; i < len(gasUsedList); i++ {
+      gasUsed, _ := new(big.Int).SetString(gasUsedList[i], 10)
+      gasPrice, _ := new(big.Int).SetString(gasPriceList[i], 10)
+      reward.Add(reward, new(big.Int).Mul(gasUsed, gasPrice))
+    }
     minerBlocks[blockNumber] = &minersBlock{
       BlockNumber: fmt.Sprintf("%d", blockNumber),
       TimeStamp: blockTime,
-      blockReward: reward,
       BlockReward: reward.String(),
     }
     result = append(result, minerBlocks[blockNumber])
-  }
-  if err := rows.Err(); err != nil {
-    log.Printf("Error processing: %v", err.Error())
-    handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
-    return
-  }
-  rows, err = db.QueryContext(r.Context(),
-    fmt.Sprintf(`SELECT
-        transactions.block, transactions.gasUsed, transactions.gasPrice
-      FROM transactions
-      WHERE transactions.block in (SELECT blocks.number FROM blocks WHERE coinbase = ? AND (blocks.number >= ? AND blocks.number <= ?) ORDER BY blocks.number %v LIMIT ? OFFSET ?);`, sort),
-    trimPrefix(addr.Bytes()), startBlock, endBlock, offset, (page - 1) * offset)
-  if err != nil {
-    log.Printf("Error querying: %v", err.Error())
-    handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
-    return
-  }
-  for rows.Next() {
-    var blockNumber uint64
-    var gasPrice, gasUsed int64
-    if err := rows.Scan(&blockNumber, &gasPrice, &gasUsed); err != nil {
-      log.Printf("Error getting fees: %v", err.Error())
-      handleApiResponse(w, 0, "NOTOK-database error", "Error! Database error", 500, false)
-      return
-    }
-    minerBlocks[blockNumber].addGasToReward(gasUsed, gasPrice)
   }
   if err := rows.Err(); err != nil {
     log.Printf("Error processing: %v", err.Error())
