@@ -143,7 +143,7 @@ func accountTxList(w http.ResponseWriter, r *http.Request, db *sql.DB) {
     isError := "0"
     if txStatus == "0" { isError = "1" }
     input, err := decompress(txInput)
-    if handleApiError(err, w, "database error", "Error! Database error", "Error processing", 500) { return }
+    if handleApiError(err, w, "database error", "Error! Database error", "Error decompressing", 500) { return }
     contractAddress := ""
     if addr := bytesToAddress(txContractAddress); addr != (common.Address{}) {
       contractAddress = addr.String()
