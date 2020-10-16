@@ -28,7 +28,7 @@ type miniBlock struct {
   LogsBloom hexutil.Bytes  `json:"logsBloom"`
   Coinbase common.Address  `json:"miner"`
   MixHash common.Hash `json:"mixHash"`
-  Nonce hexutil.Uint64 `json:"nonce"`
+  Nonce types.BlockNonce `json:"nonce"`
   Number hexutil.Big  `json:"number"`
   ParentHash common.Hash  `json:"parentHash"`
   ReceiptRoot common.Hash  `json:"receiptsRoot"`

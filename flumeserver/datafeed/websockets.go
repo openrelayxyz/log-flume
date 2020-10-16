@@ -79,7 +79,7 @@ func (feed *ethWSFeed) getFromHeader(header *types.Header) (*ChainEvent, error) 
     logs: make( map[common.Hash][]*types.Log),
     Commit: func(*sql.Tx) (error) { return nil },
   }
-	err := feed.rpcConn.CallContext(context.Background(), &ce.Block, "eth_getBlockByNumber", hexutil.Big(*header.Number))
+	err := feed.rpcConn.CallContext(context.Background(), &ce.Block, "eth_getBlockByNumber", hexutil.Big(*header.Number), true)
 	if err != nil {
 		return nil, err
 	}

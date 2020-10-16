@@ -192,6 +192,8 @@ github.com/notegio/go-ethereum v0.0.0-20200929204914-a7d1afb23c8b h1:0CkBpaj4Zla
 github.com/notegio/go-ethereum v0.0.0-20200929204914-a7d1afb23c8b/go.mod h1:HJqOxRNXAWcxylBhg25hnQpPGV+7QK9X0Zi3smgc9PA=
 github.com/notegio/go-ethereum v0.0.0-20200929214105-06c5928ca4a2 h1:WYasatm3Mm7NEnX7SZuZJ6JwM55puHgoEtEcRPGEsYg=
 github.com/notegio/go-ethereum v0.0.0-20200929214105-06c5928ca4a2/go.mod h1:HJqOxRNXAWcxylBhg25hnQpPGV+7QK9X0Zi3smgc9PA=
+github.com/notegio/go-ethereum v0.0.0-20200930195028-b6b5f086629e h1:Kvydxge7IW75MPaboEO1/xj55Tb5KTyMHdVKoDmtdEg=
+github.com/notegio/go-ethereum v0.0.0-20200930195028-b6b5f086629e/go.mod h1:HJqOxRNXAWcxylBhg25hnQpPGV+7QK9X0Zi3smgc9PA=
 github.com/nxadm/tail v1.4.4/go.mod h1:kenIhsEOeOJmVchQTgglprH7qJGnHDVpk1VPCcaMI8A=
 github.com/oklog/ulid v1.3.1/go.mod h1:CirwcVhetQ6Lv90oh/F+FBtV6XMibvdAFo93nm5qn4U=
 github.com/olekukonko/tablewriter v0.0.1/go.mod h1:vsDQFd/mU46D+Z4whnwzcISnGGzXWMclvtLoiIKAKIo=

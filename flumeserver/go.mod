@@ -11,4 +11,4 @@ require (
 	github.com/rs/cors v1.7.0
 )
 
-replace github.com/ethereum/go-ethereum => /home/aroberts/Projects/gopath/src/github.com/ethereum/go-ethereum //github.com/notegio/go-ethereum v0.0.0-20200929214105-06c5928ca4a2
+replace github.com/ethereum/go-ethereum => github.com/notegio/go-ethereum v0.0.0-20200930195028-b6b5f086629e

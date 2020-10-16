@@ -6,7 +6,7 @@ import (
   "github.com/ethereum/go-ethereum/replica"
   "github.com/ethereum/go-ethereum/common"
   "github.com/ethereum/go-ethereum/common/hexutil"
-  // "github.com/ethereum/go-ethereum/core/types"
+  "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/event"
   "time"
   "strings"
@@ -42,7 +42,7 @@ func ChainEventFromKafka(kce *replica.ChainEvent) *ChainEvent {
       LogsBloom: kce.Block.Bloom().Bytes(),
       Coinbase: kce.Block.Coinbase(),
       MixHash: kce.Block.MixDigest(),
-      Nonce: hexutil.Uint64(kce.Block.Nonce()),
+      Nonce: types.EncodeNonce(kce.Block.Nonce()),
       Number: hexutil.Big(*kce.Block.Number()),
       ParentHash: kce.Block.ParentHash(),
       ReceiptRoot: kce.Block.ReceiptHash(),
