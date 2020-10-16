@@ -21,7 +21,7 @@ type receiptMeta struct {
 // In kafka.go, load this from the chainEvent
 type miniBlock struct {
   Difficulty hexutil.Big  `json:"difficulty"`
-  ExtraData []byte `json:"extraData"`
+  ExtraData hexutil.Bytes `json:"extraData"`
   GasLimit hexutil.Uint64 `json:"gasLimit"`
   GasUsed hexutil.Uint64 `json:"gasUsed"`
   Hash  common.Hash `json:"hash"`
