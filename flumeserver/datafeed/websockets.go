@@ -3,6 +3,7 @@ package datafeed
 import (
   "context"
   "database/sql"
+  "fmt"
   "math/big"
   "github.com/ethereum/go-ethereum/ethclient"
   "github.com/ethereum/go-ethereum/common"
@@ -81,6 +82,7 @@ func (feed *ethWSFeed) getFromHeader(header *types.Header) (*ChainEvent, error) 
   }
 	err := feed.rpcConn.CallContext(context.Background(), &ce.Block, "eth_getBlockByNumber", hexutil.Big(*header.Number), true)
 	if err != nil {
+    log.Printf("Error getting block by number")
 		return nil, err
 	}
   // ce.Block, err = feed.rpcConn.BlockByNumber(context.Background(), header.Number)
@@ -169,18 +171,20 @@ func (feed *ethWSFeed) subscribe() {
   OrderedProcessor(header.Number.Uint64(), 10, func(number uint64, ch chan<- interface{}, quit func()) {
     i := 0
     for ; i < 3; i++ {
-      header, _ := feed.conn.HeaderByNumber(context.Background(), big.NewInt(int64(number + 1)))
+      header, err := feed.conn.HeaderByNumber(context.Background(), big.NewInt(int64(number + 1)))
       if header != nil {
         j := 0
         for ; j < 3; j++{
           if ce, err := feed.getFromHeader(header); err == nil {
             ch <- ce
             return
+          } else {
+            log.Printf("Error getting header: %v", err.Error())
           }
         }
         if j == 3 {
           quit()
-          panic("Failed to get chain event from headers")
+          panic(fmt.Sprintf("Failed to get chain event from headers for block %v: %v", header.Number.Uint64(), err))
         }
       }
     }
