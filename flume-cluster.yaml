@@ -632,6 +632,7 @@ Resources:
                     "addresses": {
                       "http": "0.0.0.0"
                     },
+                    "ports": {"grpc": 8502 },
                     "connect": {
                       "enabled": true
                     }
@@ -717,7 +718,7 @@ Resources:
                     - |
                       Group=consul
                     - !Sub |
-                      ExecStart=/usr/bin/consul connect proxy -sidecar-for ${NetworkId}-flume
+                      ExecStart=/usr/bin/consul connect envoy -sidecar-for ${NetworkId}-flume
                     - |
                       ExecReload=/usr/bin/consul reload
                     - |
@@ -744,9 +745,15 @@ Resources:
                 command: systemctl enable consul
               05_start_consul:
                 command: systemctl start consul
-              06_enable_flume_sidecar:
+              06_get_envoy:
+                command: curl -L https://getenvoy.io/cli | bash -s -- -b /usr/local/bin
+              07_fetch_envoy:
+                command: /usr/local/bin/getenvoy fetch standard:1.13.1
+              08_install_envoy:
+                command: mv /root/.getenvoy/builds/standard/1.13.1/linux_glibc/bin/envoy /usr/bin/envoy
+              09_enable_flume_sidecar:
                 command: systemctl enable flume-sidecar
-              08_start_flume_sidecar:
+              10_start_flume_sidecar:
                 command: systemctl start flume-sidecar
     Properties:
       LaunchTemplateData:
