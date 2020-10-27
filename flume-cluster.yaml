@@ -633,6 +633,7 @@ Resources:
                       "http": "0.0.0.0"
                     },
                     "ports": {"grpc": 8502 },
+                    "weights": { "passing": 1, "warning": 0 },
                     "connect": {
                       "enabled": true
                     }
