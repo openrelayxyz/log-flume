@@ -981,7 +981,7 @@ Resources:
     Properties:
       LaunchTemplateData:
         ImageId: !If [HasFlumeImageAMI, !Ref FlumeImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
-        InstanceType: c5.large
+        InstanceType: r5.large
         TagSpecifications:
           - ResourceType: instance
             Tags:
