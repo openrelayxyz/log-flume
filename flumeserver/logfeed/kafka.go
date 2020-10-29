@@ -21,28 +21,30 @@ type ethKafkaFeed struct {
   eventConsumer replica.EventConsumer
   blockFeed event.Feed
   logFeed event.Feed
+  topic string
   chainHeadEventCh chan core.ChainHeadEvent
   offsetCh chan replica.OffsetHash
   db *sql.DB
 }
 
 func NewKafkaFeed(urlStr string, db *sql.DB) (Feed, error) {
+  parts := strings.Split(urlStr, ";")
   var tableName string
-  db.QueryRowContext(context.Background(), "SELECT name FROM sqlite_master WHERE type='table' and name='offsets';").Scan(&tableName)
-  if tableName != "offsets" {
-    if _, err := db.Exec("CREATE TABLE offsets (offset BIGINT, PRIMARY KEY (offset));"); err != nil {
+  db.QueryRowContext(context.Background(), "SELECT name FROM sqlite_master WHERE type='table' and name='topic_offsets';").Scan(&tableName)
+  if tableName != "topic_offsets" {
+    if _, err := db.Exec("CREATE TABLE topic_offsets (topic VARCHAR(32), offset BIGINT, PRIMARY KEY (topic));"); err != nil {
       return nil, fmt.Errorf("Offsets table does not exist and could not create: %v", err.Error())
     }
-    if _, err := db.Exec("INSERT INTO offsets(offset) VALUES (?);", sarama.OffsetOldest); err != nil {
+    if _, err := db.Exec("INSERT INTO topic_offsets(offset) VALUES (?, ?);", parts[1], sarama.OffsetOldest); err != nil {
       return nil, err
     }
   }
   var resumeOffset int64
-  db.QueryRowContext(context.Background(), "SELECT max(offset) FROM offsets;").Scan(&resumeOffset)
+  db.QueryRowContext(context.Background(), "SELECT max(offset) FROM topic_offsets WHERE topic = ?;", parts[1]).Scan(&resumeOffset)
   if resumeOffset == 0 {
     resumeOffset = sarama.OffsetOldest
   }
-  parts := strings.Split(urlStr, ";")
+
   log.Printf("Parts: %v", parts)
   log.Printf("Resume offset: %v", resumeOffset)
 
@@ -51,6 +53,7 @@ func NewKafkaFeed(urlStr string, db *sql.DB) (Feed, error) {
   feed := &ethKafkaFeed{
     lastBlockTime: &atomic.Value{},
     eventConsumer: consumer,
+    topic: parts[1],
     db: db,
   }
   feed.subscribe()
@@ -131,7 +134,7 @@ func (feeder *ethKafkaFeed) Commit(num uint64, tx *sql.Tx) {
     }
   }
   if tx != nil {
-    _, err := tx.Exec("UPDATE offsets SET offset = ? WHERE offset < ?;", offset.Offset, offset.Offset)
+    _, err := tx.Exec("UPDATE topic_offsets SET offset = ? WHERE topic = ? AND offset < ?;", offset.Offset, feeder.topic, offset.Offset)
     if err != nil { log.Printf("Error updating offset: %v", err.Error())}
   }
 }
