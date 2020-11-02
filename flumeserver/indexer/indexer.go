@@ -59,7 +59,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
     case <-quit:
       return
     case chainEvent := <- ch:
-      if chainEvent == nil { log.Fatalf("WTF CE IS NIL") }
+      log.Printf("chainEvent: %v", chainEvent)
       BLOCKLOOP:
       for {
         dbtx, err := db.BeginTx(context.Background(), nil)
