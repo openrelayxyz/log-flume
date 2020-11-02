@@ -8,6 +8,7 @@ import (
   "database/sql"
   "github.com/ethereum/go-ethereum/core/rawdb"
   "path"
+  "log"
 )
 
 func ResolveFeed(url string, db *sql.DB) (DataFeed, error) {
@@ -24,6 +25,7 @@ func ResolveFeed(url string, db *sql.DB) (DataFeed, error) {
     if err != nil { return nil, err }
     var resumeBlock int64
     db.QueryRowContext(context.Background(), "SELECT max(number) FROM blocks;").Scan(&resumeBlock)
+    log.Printf("Resuming DB load from block %v", resumeBlock)
     return &dbDataFeed{
       db: ldb,
       startingBlock: uint64(resumeBlock),

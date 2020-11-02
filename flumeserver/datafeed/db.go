@@ -7,6 +7,7 @@ import (
   "github.com/ethereum/go-ethereum/core/rawdb"
   "github.com/ethereum/go-ethereum/common"
   "github.com/ethereum/go-ethereum/common/hexutil"
+  "log"
 )
 
 // type DataFeed interface{
@@ -38,7 +39,13 @@ func (feed *dbDataFeed) Ready() <-chan struct{} {
 
 func (feed *dbDataFeed) subscribe() {
   genesisHash := rawdb.ReadCanonicalHash(feed.db, 0)
+  if genesisHash == (common.Hash{}) {
+    log.Fatalf("Genesis hash not available")
+  }
   chainConfig := rawdb.ReadChainConfig(feed.db, genesisHash)
+  if chainConfig == nil {
+    log.Fatalf("Chain config could not be loaded")
+  }
   n := feed.startingBlock
   h := rawdb.ReadCanonicalHash(feed.db, feed.startingBlock)
   for h != (common.Hash{}) {
