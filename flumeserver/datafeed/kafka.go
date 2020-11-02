@@ -75,13 +75,19 @@ type kafkaDataFeed struct {
   feed event.Feed
   consumer replica.EventConsumer
   topic string
+  started bool
 }
 
 func (kdf *kafkaDataFeed) Close() {
   kdf.consumer.Close()
 }
 func (kdf *kafkaDataFeed) Subscribe(ch chan *ChainEvent) event.Subscription{
-  return kdf.feed.Subscribe(ch)
+  sub := kdf.feed.Subscribe(ch)
+  if !kdf.started {
+    kdf.subscribe()
+    kdf.started = true
+  }
+  return sub
 }
 func (kdf *kafkaDataFeed) Ready() <-chan struct{}{
   return kdf.consumer.Ready()
@@ -126,7 +132,6 @@ func NewKafkaDataFeed(urlStr string, db *sql.DB) (DataFeed, error) {
     consumer: consumer,
     topic: parts[1],
   }
-  feed.subscribe()
   return feed, nil
 }
 

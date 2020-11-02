@@ -43,6 +43,7 @@ type ethWSFeed struct {
   db *sql.DB
   feed event.Feed
   quit chan struct{}
+  started bool
 }
 
 func NewETHWSFeed(urlStr string, db *sql.DB) (DataFeed, error) {
@@ -65,7 +66,6 @@ func NewETHWSFeed(urlStr string, db *sql.DB) (DataFeed, error) {
     rpcConn: rpcConn,
     db: db,
   }
-  go feed.subscribe()
   return feed, nil
 }
 
@@ -240,5 +240,10 @@ func (feed *ethWSFeed) Ready() <-chan struct{} {
 }
 
 func (feed *ethWSFeed) Subscribe(ch chan *ChainEvent) event.Subscription {
-  return feed.feed.Subscribe(ch)
+  sub := feed.feed.Subscribe(ch)
+  if !feed.started {
+    go feed.subscribe()
+    feed.started = true
+  }
+  return sub
 }
