@@ -61,7 +61,8 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
     case chainEvent := <- ch:
       BLOCKLOOP:
       for {
-        dbtx, _ := db.BeginTx(context.Background(), nil)
+        dbtx, err := db.BeginTx(context.Background(), nil)
+        if err != nil { log.Fatalf("Error creating a transaction: %v", err.Error())}
         if err := chainEvent.Commit(dbtx); err != nil {
           dbtx.Rollback()
           stats := db.Stats()
