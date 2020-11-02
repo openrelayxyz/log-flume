@@ -29,7 +29,7 @@ func (feed *dbDataFeed) Subscribe(ch chan *ChainEvent) event.Subscription {
     go feed.subscribe()
     feed.started = true
   }
-  sub := feed.Subscribe(ch)
+  sub := feed.feed.Subscribe(ch)
   return sub
 }
 func (feed *dbDataFeed) Ready() <-chan struct{} {
