@@ -649,7 +649,18 @@ Resources:
                       ],
                       "port": 8000,
                       "weights": { "passing": 1, "warning": 0 },
-                      "connect": {"sidecar_service": {}},
+                      "connect": {
+                        "sidecar_service": {
+                          "proxy": {
+                            "upstreams": [
+                              {
+                                "destination_name": "${NetworkId}-replica-ws",
+                                "local_bind_port": 7546
+                              }
+                            ]
+                          }
+                        }
+                      },
                       "check": {
                         "args": ["curl", "-f", "http://localhost:8000"],
                         "interval": "2s"
