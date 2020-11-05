@@ -35,7 +35,7 @@ func NewKafkaFeed(urlStr string, db *sql.DB) (Feed, error) {
     if _, err := db.Exec("CREATE TABLE topic_offsets (topic VARCHAR(32), offset BIGINT, PRIMARY KEY (topic));"); err != nil {
       return nil, fmt.Errorf("Offsets table does not exist and could not create: %v", err.Error())
     }
-    if _, err := db.Exec("INSERT INTO topic_offsets(offset) VALUES (?, ?);", parts[1], sarama.OffsetOldest); err != nil {
+    if _, err := db.Exec("INSERT INTO topic_offsets(topic, offset) VALUES (?, ?);", parts[1], sarama.OffsetOldest); err != nil {
       return nil, err
     }
   }
@@ -43,6 +43,7 @@ func NewKafkaFeed(urlStr string, db *sql.DB) (Feed, error) {
   db.QueryRowContext(context.Background(), "SELECT max(offset) FROM topic_offsets WHERE topic = ?;", parts[1]).Scan(&resumeOffset)
   if resumeOffset == 0 {
     resumeOffset = sarama.OffsetOldest
+    db.Exec("INSERT OR IGNORE INTO topic_offsets(topic, offset) VALUES (?, ?)", parts[1], resumeOffset)
   }
 
   log.Printf("Parts: %v", parts)
