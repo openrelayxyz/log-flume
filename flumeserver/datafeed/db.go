@@ -1,6 +1,7 @@
 package datafeed
 
 import (
+  "database/sql"
   "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/ethdb"
   "github.com/ethereum/go-ethereum/event"
@@ -88,6 +89,7 @@ func (feed *dbDataFeed) subscribe() {
       },
       logs: logs,
       receiptMeta: make(map[common.Hash]*receiptMeta),
+      Commit: func(*sql.Tx) (error) { return nil },
     }
     for _, receipt := range receipts {
       ce.receiptMeta[receipt.TxHash] = &receiptMeta{
@@ -100,6 +102,7 @@ func (feed *dbDataFeed) subscribe() {
     }
     feed.feed.Send(ce)
     n++
+    h = rawdb.ReadCanonicalHash(feed.db, n)
   }
   feed.ready <- struct{}{}
 }
