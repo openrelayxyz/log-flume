@@ -47,12 +47,16 @@ func (feed *dbDataFeed) subscribe() {
   if chainConfig == nil {
     log.Fatalf("Chain config could not be loaded")
   }
-  n := feed.startingBlock
-  h := rawdb.ReadCanonicalHash(feed.db, feed.startingBlock)
-  for h != (common.Hash{}) {
+
+  OrderedProcessor(feed.startingBlock, 10, func(n uint64, ch chan<- interface{}, quit func()) {
+    h := rawdb.ReadCanonicalHash(feed.db, n)
+    if h == (common.Hash{}) {
+      quit()
+      return
+    }
     block := rawdb.ReadBlock(feed.db, h, n)
     if block == nil {
-      feed.ready <- struct{}{}
+      quit()
       return
     }
     receipts := rawdb.ReadReceipts(feed.db, h, n, chainConfig)
@@ -100,9 +104,9 @@ func (feed *dbDataFeed) subscribe() {
         status: receipt.Status,
       }
     }
+    ch <- ce
+  }, func(ce interface{}) {
     feed.feed.Send(ce)
-    n++
-    h = rawdb.ReadCanonicalHash(feed.db, n)
-  }
+  })
   feed.ready <- struct{}{}
 }
