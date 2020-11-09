@@ -124,7 +124,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
           go func(tx *types.Transaction, ch chan<- common.Address) {
             switch {
             case uint64(chainEvent.Block.Number.ToInt().Int64()) > eip155Block:
-              signer = types.NewEIP155Signer(txwr.Transaction.ChainId())
+              signer = types.NewEIP155Signer(tx.ChainId())
             case uint64(chainEvent.Block.Number.ToInt().Int64()) > homesteadBlock:
               signer = types.HomesteadSigner{}
             default:
