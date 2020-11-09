@@ -35,8 +35,8 @@ func getTopicIndex(topics []common.Hash, idx int) []byte {
 
 func compress(data []byte) []byte {
   if len(data) == 0 { return data }
-  var b bytes.Buffer
-  w := zlib.NewWriter(&b)
+  b := bytes.NewBuffer(make([]byte, 0, 5 * 1024 * 1024))
+  w := zlib.NewWriter(b)
   w.Write(data)
   w.Close()
   return b.Bytes()
@@ -111,21 +111,34 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
           continue BLOCKLOOP
         }
         var signer types.Signer
+        senderMap := make(map[common.Hash]<-chan common.Address)
         for _, txwr := range chainEvent.TxWithReceipts() {
-          switch {
-          case uint64(chainEvent.Block.Number.ToInt().Int64()) > eip155Block:
-            signer = types.NewEIP155Signer(txwr.Transaction.ChainId())
-          case uint64(chainEvent.Block.Number.ToInt().Int64()) > homesteadBlock:
-            signer = types.HomesteadSigner{}
-          default:
-            signer = types.FrontierSigner{}
-          }
+          ch := make(chan common.Address)
+          senderMap[txwr.Transaction.Hash()] = ch
+          go func(tx *types.Transaction, ch chan<- common.Address) {
+            switch {
+            case uint64(chainEvent.Block.Number.ToInt().Int64()) > eip155Block:
+              signer = types.NewEIP155Signer(txwr.Transaction.ChainId())
+            case uint64(chainEvent.Block.Number.ToInt().Int64()) > homesteadBlock:
+              signer = types.HomesteadSigner{}
+            default:
+              signer = types.FrontierSigner{}
+            }
+            sender, err := types.Sender(signer, tx)
+            if err != nil {
+              log.Printf("WARN: Failed to derive sender: %v", err.Error())
+            }
+            ch <- sender
+          }(txwr.Transaction, ch)
+        }
+        for _, txwr := range chainEvent.TxWithReceipts() {
           v, r, s := txwr.Transaction.RawSignatureValues()
-          sender, err := types.Sender(signer, txwr.Transaction)
-          if err != nil {
+          txHash := txwr.Transaction.Hash()
+          sender := <-senderMap[txHash]
+          if sender == (common.Address{}) {
             dbtx.Rollback()
             stats := db.Stats()
-            log.Printf("WARN: Failed to derive sender: %v", err.Error())
+            log.Printf("WARN: Failed to derive sender.")
             log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
             continue BLOCKLOOP
           }
@@ -138,7 +151,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
             chainEvent.Block.Number.ToInt().Int64(),
             txwr.Transaction.Gas(),
             txwr.Transaction.GasPrice().Uint64(),
-            trimPrefix(txwr.Transaction.Hash().Bytes()),
+            trimPrefix(txHash.Bytes()),
             compress(txwr.Transaction.Data()),
             txwr.Transaction.Nonce(),
             to,
