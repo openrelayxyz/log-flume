@@ -119,7 +119,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
         var signer types.Signer
         senderMap := make(map[common.Hash]<-chan common.Address)
         for _, txwr := range chainEvent.TxWithReceipts() {
-          ch := make(chan common.Address)
+          ch := make(chan common.Address, 1)
           senderMap[txwr.Transaction.Hash()] = ch
           go func(tx *types.Transaction, ch chan<- common.Address) {
             switch {
