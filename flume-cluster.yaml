@@ -441,7 +441,7 @@ Resources:
       - IpProtocol: tcp
         FromPort: '21000'
         ToPort: '21001'
-        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
+        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/14"]]
   FlumeNodeRole:
     Type: "AWS::IAM::Role"
     Properties:
