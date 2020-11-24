@@ -36,6 +36,10 @@ Parameters:
   NetworkId:
     Type: String
     Description: An identifier for the network this cluster represents. This should be common across all clusters representing the same network. (this is a subdirectory backups/snapshots will be stored)
+  FlumeClusterVersion:
+    Type: String
+    Default: v0.1
+    Description: The cluster version for flume, to be used in service discovery queries
   FlumeSyncEndpoint:
     Default: ws://localhost:5654
     Type: String
@@ -646,6 +650,7 @@ Resources:
                       "tags": [
                         "${NetworkId}",
                         "flume"
+                        "${FlumeClusterVersion}"
                       ],
                       "port": 8000,
                       "weights": { "passing": 1, "warning": 0 },
