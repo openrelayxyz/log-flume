@@ -103,6 +103,9 @@ Parameters:
     Type: String
     Default: "rivet-consul-member"
     ConstraintDescription: Must match EC2 Tag Name requirements.
+  ConsulPrimaryRegion:
+      Description: The AWS region of the primary Consul cluster. If not set, defaults to this region.
+      Type: String
 
 
 Metadata:
@@ -248,6 +251,8 @@ Conditions:
   HasExtraSecurityGroup: !Not [!Equals [ !Ref FlumeExtraSecurityGroup, "" ]]
   SmallFlume: !Equals [ !Ref FlumeSize, "small"]
   FlumeSpotLowestPrice: !Equals [!Ref FlumeSpotAllocationStrategy, "lowest-price"]
+  SpecifiesConsulRegion: !Not [ !Equals [ !Ref ConsulPrimaryRegion, "" ] ]
+
 
 Resources:
   LambdaExecutionRole:
@@ -617,30 +622,34 @@ Resources:
           consul_bootstrap:
             files:
               /opt/consul/config/client.json:
-                content: !Sub |
-                  {
-                    "advertise_addr": "PrivateIpAddress",
-                    "bind_addr": "PrivateIpAddress",
-                    "node_name": "InstanceId",
-                    "datacenter": "${AWS::Region}",
-                    "server": false,
-                    "ui" : false,
-                    "leave_on_terminate" : true,
-                    "skip_leave_on_interrupt" : false,
-                    "disable_update_check": true,
-                    "log_level": "warn",
-                    "enable_local_script_checks": true,
-                    "data_dir": "/opt/consul/data",
-                    "client_addr": "0.0.0.0",
-                    "retry_join": ["provider=aws region=${AWS::Region} tag_key=${ConsulEc2RetryTagKey} tag_value=${ConsulEc2RetryTagValue}"],
-                    "addresses": {
-                      "http": "0.0.0.0"
-                    },
-                    "ports": {"grpc": 8502 },
-                    "connect": {
-                      "enabled": true
-                    }
-                  }
+                content:
+                  Fn::Sub:
+                    - |
+                      {
+                        "advertise_addr": "PrivateIpAddress",
+                        "bind_addr": "PrivateIpAddress",
+                        "node_name": "InstanceId",
+                        "datacenter": "${AWS::Region}",
+                        "server": false,
+                        "ui" : false,
+                        "leave_on_terminate" : true,
+                        "skip_leave_on_interrupt" : false,
+                        "disable_update_check": true,
+                        "log_level": "warn",
+                        "enable_local_script_checks": true,
+                        "data_dir": "/opt/consul/data",
+                        "client_addr": "0.0.0.0",
+                        "primary_datacenter": "${PrimaryRegion}",
+                        "retry_join": ["provider=aws region=${AWS::Region} tag_key=${ConsulEc2RetryTagKey} tag_value=${ConsulEc2RetryTagValue}"],
+                        "addresses": {
+                          "http": "0.0.0.0"
+                        },
+                        "ports": {"grpc": 8502 },
+                        "connect": {
+                          "enabled": true
+                        }
+                      }
+                    - PrimaryRegion: !If [ SpecifiesConsulRegion, !Ref ConsulPrimaryRegion, !Sub "${AWS::Region}"]
                 mode: 000644
               /opt/consul/config/flume.json:
                 content: !Sub |
