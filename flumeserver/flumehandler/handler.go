@@ -40,7 +40,7 @@ type rpcResponse struct {
 
 func formatResponse(result interface{}, call *rpcCall) *rpcResponse {
   return &rpcResponse{
-    Version: call.Version,
+    Version: "2.0",
     ID: call.ID,
     Result: result,
   }
@@ -118,6 +118,16 @@ func GetHandler(db *sql.DB) func(http.ResponseWriter, *http.Request) {
       getBlockByNumber(r.Context(), w, call, db)
     case "eth_getBlockByHash":
       getBlockByHash(r.Context(), w, call, db)
+    case "eth_getBlockTransactionCountByNumber":
+      getBlockTransactionCountByNumber(r.Context(), w, call, db)
+    case "eth_getBlockTransactionCountByHash":
+      getBlockTransactionCountByHash(r.Context(), w, call, db)
+    case "eth_getUncleCountByBlockNumber":
+      getUncleCountByBlockNumber(r.Context(), w, call, db)
+    case "eth_getUncleCountByBlockHash":
+      getUncleCountByBlockHash(r.Context(), w, call, db)
+    case "eth_gasPrice":
+      gasPrice(r.Context(), w, call, db)
     case "flume_erc20ByAccount":
       getERC20ByAccount(r.Context(), w, call, db)
     case "flume_erc20Holders":
@@ -1013,12 +1023,148 @@ func getBlockByHash(ctx context.Context, w http.ResponseWriter, call *rpcCall, d
     handleError(w, "error reading params.1", call.ID, 400)
     return
   }
-  blocks, err := getBlocks(ctx, db, includeTxs, "hash   = ?", blockHash)
+  blocks, err := getBlocks(ctx, db, includeTxs, "hash = ?", trimPrefix(blockHash.Bytes()))
   responseBytes, err := json.Marshal(formatResponse(blocks[0], call))
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
     return
   }
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  w.WriteHeader(200)
+  w.Write(responseBytes)
+}
+
+func getBlockTransactionCountByNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  if len(call.Params) < 1 {
+    handleError(w, "missing value for required argument 0", call.ID, 400)
+    return
+  }
+  var blockNumber rpc.BlockNumber
+  if err := json.Unmarshal(call.Params[0], &blockNumber); err != nil {
+    handleError(w, "error reading params.0", call.ID, 400)
+    return
+  }
+  if blockNumber.Int64() < 0 {
+    latestBlock, err := getLatestBlock(ctx, db)
+    if err != nil {
+      handleError(w, err.Error(), call.ID, 500)
+      return
+    }
+    blockNumber = rpc.BlockNumber(latestBlock)
+  }
+  var count uint64
+  if err := db.QueryRowContext(ctx, "SELECT count(*) FROM transactions WHERE block = ?", blockNumber).Scan(&count); err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  responseBytes, err := json.Marshal(formatResponse(hexutil.Uint64(count), call))
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  w.WriteHeader(200)
+  w.Write(responseBytes)
+}
+
+func getBlockTransactionCountByHash(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  if len(call.Params) < 1 {
+    handleError(w, "missing value for required argument 0", call.ID, 400)
+    return
+  }
+  var blockHash common.Hash
+  if err := json.Unmarshal(call.Params[0], &blockHash); err != nil {
+    handleError(w, "error reading params.0", call.ID, 400)
+    return
+  }
+  var count uint64
+  if err := db.QueryRowContext(ctx, "SELECT count(*) FROM v_transactions WHERE blockHash = ?", trimPrefix(blockHash.Bytes())).Scan(&count); err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  responseBytes, err := json.Marshal(formatResponse(hexutil.Uint64(count), call))
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  w.WriteHeader(200)
+  w.Write(responseBytes)
+}
+
+func getUncleCountByBlockNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  if len(call.Params) < 1 {
+    handleError(w, "missing value for required argument 0", call.ID, 400)
+    return
+  }
+  var blockNumber rpc.BlockNumber
+  if err := json.Unmarshal(call.Params[0], &blockNumber); err != nil {
+    handleError(w, "error reading params.0", call.ID, 400)
+    return
+  }
+  if blockNumber.Int64() < 0 {
+    latestBlock, err := getLatestBlock(ctx, db)
+    if err != nil {
+      handleError(w, err.Error(), call.ID, 500)
+      return
+    }
+    blockNumber = rpc.BlockNumber(latestBlock)
+  }
+  var uncles []byte
+  if err := db.QueryRowContext(ctx, "SELECT uncles FROM blocks WHERE number = ?", blockNumber).Scan(&uncles); err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  unclesList := []common.Hash{}
+  rlp.DecodeBytes(uncles, &unclesList)
+  responseBytes, err := json.Marshal(formatResponse(hexutil.Uint64(len(unclesList)), call))
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  w.WriteHeader(200)
+  w.Write(responseBytes)
+}
+
+func getUncleCountByBlockHash(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  if len(call.Params) < 1 {
+    handleError(w, "missing value for required argument 0", call.ID, 400)
+    return
+  }
+  var blockHash common.Hash
+  if err := json.Unmarshal(call.Params[0], &blockHash); err != nil {
+    handleError(w, "error reading params.0", call.ID, 400)
+    return
+  }
+  var uncles []byte
+  if err := db.QueryRowContext(ctx, "SELECT uncles FROM blocks WHERE hash = ?", trimPrefix(blockHash.Bytes())).Scan(&uncles); err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  unclesList := []common.Hash{}
+  rlp.DecodeBytes(uncles, &unclesList)
+  responseBytes, err := json.Marshal(formatResponse(hexutil.Uint64(len(unclesList)), call))
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  w.WriteHeader(200)
+  w.Write(responseBytes)
+}
+
+func gasPrice(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  latestBlock, err := getLatestBlock(ctx, db)
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  var price uint64
+  if err := db.QueryRowContext(ctx, "SELECT gasPrice FROM transactions WHERE block > ? ORDER BY gasPrice LIMIT 1 OFFSET (SELECT count(*) FROM transactions WHERE block > ?) * 6/10 - 1;", latestBlock - 20, latestBlock - 20).Scan(&price); err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  responseBytes, err := json.Marshal(formatResponse(hexutil.Uint64(price), call))
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
     return
