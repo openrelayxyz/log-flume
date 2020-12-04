@@ -106,7 +106,7 @@ func Migrate(db *sql.DB, chainid uint64) error {
         topic4,
         data,
         logIndex,
-        blocks.number as blockNumber,
+        block as blockNumber,
         transactions.transactionIndex as transactionIndex,
         transactions.hash as transactionHash,
         blocks.hash as blockHash
@@ -135,7 +135,7 @@ func Migrate(db *sql.DB, chainid uint64) error {
         transactions.gasUsed as gasUsed,
         logsBloom,
         status,
-        blocks.number as blockNumber,
+        blocks as blockNumber,
         blocks.hash as blockHash
       FROM
         transactions

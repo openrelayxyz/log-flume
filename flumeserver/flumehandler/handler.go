@@ -17,6 +17,8 @@ import (
   "github.com/ethereum/go-ethereum/common/hexutil"
   "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/eth/filters"
+  "github.com/ethereum/go-ethereum/rlp"
+  "github.com/ethereum/go-ethereum/rpc"
   "io/ioutil"
   "context"
   "fmt"
@@ -112,6 +114,10 @@ func GetHandler(db *sql.DB) func(http.ResponseWriter, *http.Request) {
       getTransactionByBlockNumberAndIndex(r.Context(), w, call, db)
     case "eth_getTransactionReceipt":
       getTransactionReceipt(r.Context(), w, call, db)
+    case "eth_getBlockByNumber":
+      getBlockByNumber(r.Context(), w, call, db)
+    case "eth_getBlockByHash":
+      getBlockByHash(r.Context(), w, call, db)
     case "flume_erc20ByAccount":
       getERC20ByAccount(r.Context(), w, call, db)
     case "flume_erc20Holders":
@@ -141,7 +147,7 @@ func GetHandler(db *sql.DB) func(http.ResponseWriter, *http.Request) {
 
 func getLatestBlock(ctx context.Context, db *sql.DB) (int64, error) {
   var result int64
-  err := db.QueryRowContext(ctx, "SELECT max(blockNumber) FROM v_event_logs;").Scan(&result)
+  err := db.QueryRowContext(ctx, "SELECT max(number) FROM blocks;").Scan(&result)
   return result, err
 }
 
@@ -449,7 +455,7 @@ func decompress(data []byte) ([]byte, error) {
 
 
 func getTransactions(ctx context.Context, db *sql.DB, whereClause string, params ...interface{}) ([]*rpcTransaction, error) {
-  query := fmt.Sprintf("SELECT blockHash, blockNumber, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, value, v, r, s, sender FROM v_transactions WHERE %v;", whereClause)
+  query := fmt.Sprintf("SELECT blockHash, blockNumber, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, value, v, r, s, sender FROM v_transactions WHERE %v ORDER BY transactionIndex ASC;", whereClause)
   rows, err := db.QueryContext(ctx, query, params...)
   if err != nil { return nil, err }
   defer rows.Close()
@@ -520,6 +526,7 @@ func getTransactionReceipts(ctx context.Context, db *sql.DB, whereClause string,
       &bloomBytes,
       &status,
     )
+    if err != nil { return nil, err }
     logsBloom, err := decompress(bloomBytes)
     if err != nil { return nil, err }
     fields := map[string]interface{}{
@@ -887,6 +894,131 @@ func getTransactionReceiptsByBlockNumber(ctx context.Context, w http.ResponseWri
     return
   }
   responseBytes, err := json.Marshal(formatResponse(receipts, call))
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  w.WriteHeader(200)
+  w.Write(responseBytes)
+}
+
+func getBlocks(ctx context.Context, db *sql.DB, includeTxs bool, whereClause string, params ...interface{}) ([]map[string]interface{}, error) {
+  query := fmt.Sprintf("SELECT hash, parentHash, uncleHash, coinbase, root, txRoot, receiptRoot, bloom, difficulty, extra, mixDigest, uncles, td, number, gasLimit, gasUsed, time, nonce, size FROM blocks WHERE %v;", whereClause)
+  rows, err := db.QueryContext(ctx, query, params...)
+  if err != nil { return nil, err }
+  defer rows.Close()
+  results := []map[string]interface{}{}
+  for rows.Next() {
+    var hash, parentHash, uncleHash, coinbase, root, txRoot, receiptRoot, bloomBytes, extra, mixDigest, uncles []byte
+    var number, gasLimit, gasUsed, time, nonce, size, difficulty, td uint64
+    err := rows.Scan(&hash, &parentHash, &uncleHash, &coinbase, &root, &txRoot, &receiptRoot, &bloomBytes, &difficulty, &extra, &mixDigest, &uncles, &td, &number, &gasLimit, &gasUsed, &time, &nonce, &size)
+    if err != nil { return nil, err }
+    logsBloom, err := decompress(bloomBytes)
+    if err != nil { return nil, err }
+    unclesList := []common.Hash{}
+    rlp.DecodeBytes(uncles, &unclesList)
+    fields := map[string]interface{}{
+      "difficulty": hexutil.Uint64(difficulty),
+      "extraData": hexutil.Bytes(extra),
+      "gasLimit": hexutil.Uint64(gasLimit),
+      "gasUsed": hexutil.Uint64(gasUsed),
+      "hash": bytesToHash(hash),
+      "logsBloom": hexutil.Bytes(logsBloom),
+      "miner": bytesToAddress(coinbase),
+      "mixHash": bytesToHash(mixDigest),
+      "nonce": types.EncodeNonce(nonce),
+      "number": hexutil.Uint64(number),
+      "parentHash": bytesToHash(parentHash),
+      "receiptsRoot": bytesToHash(receiptRoot),
+      "sha3Uncles": bytesToHash(uncleHash),
+      "size": hexutil.Uint64( size),
+      "stateRoot": bytesToHash(root),
+      "timestamp": hexutil.Uint64(time),
+      "totalDifficulty": hexutil.Uint64(td),
+      "transactionsRoot": bytesToHash(txRoot),
+      "uncles": unclesList,
+    }
+    if includeTxs {
+      fields["transactions"], err = getTransactions(ctx, db, "blockNumber = ?", number)
+      if err != nil { return nil, err }
+    } else {
+      txs := []common.Hash{}
+      txRows, err := db.QueryContext(ctx, "SELECT hash FROM transactions WHERE block = ? ORDER BY transactionIndex ASC", number)
+      if err != nil { return nil, err }
+      for txRows.Next() {
+        var txHash []byte
+        if err := txRows.Scan(&txHash); err != nil { return nil, err }
+        txs = append(txs, bytesToHash(txHash))
+      }
+      if err := txRows.Err(); err != nil { return nil, err }
+      fields["transactions"] = txs
+    }
+    results = append(results, fields)
+  }
+  if err := rows.Err(); err != nil {
+    return nil, err
+  }
+  return results, nil
+}
+
+func getBlockByNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  if len(call.Params) < 2 {
+    handleError(w, "missing value for required argument 1", call.ID, 400)
+    return
+  }
+  var blockNumber rpc.BlockNumber
+  if err := json.Unmarshal(call.Params[0], &blockNumber); err != nil {
+    handleError(w, "error reading params.0", call.ID, 400)
+    return
+  }
+  if blockNumber.Int64() < 0 {
+    latestBlock, err := getLatestBlock(ctx, db)
+    if err != nil {
+      handleError(w, err.Error(), call.ID, 500)
+      return
+    }
+    blockNumber = rpc.BlockNumber(latestBlock)
+  }
+  var includeTxs bool
+  if err := json.Unmarshal(call.Params[1], &includeTxs); err != nil {
+    handleError(w, "error reading params.1", call.ID, 400)
+    return
+  }
+  blocks, err := getBlocks(ctx, db, includeTxs, "number = ?", blockNumber)
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  responseBytes, err := json.Marshal(formatResponse(blocks[0], call))
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
+  w.WriteHeader(200)
+  w.Write(responseBytes)
+}
+
+func getBlockByHash(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+  if len(call.Params) < 2 {
+    handleError(w, "missing value for required argument 1", call.ID, 400)
+    return
+  }
+  var blockHash common.Hash
+  if err := json.Unmarshal(call.Params[0], &blockHash); err != nil {
+    handleError(w, "error reading params.0", call.ID, 400)
+    return
+  }
+  var includeTxs bool
+  if err := json.Unmarshal(call.Params[1], &includeTxs); err != nil {
+    handleError(w, "error reading params.1", call.ID, 400)
+    return
+  }
+  blocks, err := getBlocks(ctx, db, includeTxs, "hash   = ?", blockHash)
+  responseBytes, err := json.Marshal(formatResponse(blocks[0], call))
+  if err != nil {
+    handleError(w, err.Error(), call.ID, 500)
+    return
+  }
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
     return
