@@ -11,4 +11,5 @@ require (
 	github.com/rs/cors v1.7.0
 )
 
-replace github.com/ethereum/go-ethereum => github.com/notegio/go-ethereum v0.0.0-20200930195028-b6b5f086629e
+replace github.com/ethereum/go-ethereum => github.com/notegio/go-ethereum v1.9.24-chain-event-0
+replace github.com/Shopify/sarama => github.com/openrelayxyz/sarama v0.0.0-20200619041629-a7760f73892f
