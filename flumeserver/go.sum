@@ -204,6 +204,8 @@ github.com/notegio/go-ethereum v0.0.0-20200930195028-b6b5f086629e h1:Kvydxge7IW7
 github.com/notegio/go-ethereum v0.0.0-20200930195028-b6b5f086629e/go.mod h1:HJqOxRNXAWcxylBhg25hnQpPGV+7QK9X0Zi3smgc9PA=
 github.com/notegio/go-ethereum v1.9.24-chain-event-0 h1:5B1BL+O4mDbKZRoKmYSN3GK2n8+Lvp5+JBXUHy31rxU=
 github.com/notegio/go-ethereum v1.9.24-chain-event-0/go.mod h1:6G82HQIgIHQ0UDhq2DEoCnn+sZv2SPGI/Y1FBenA/z0=
+github.com/notegio/go-ethereum v1.9.24-chain-event-1 h1:+AuxdL3ypo14wvHhyMJjnDddigRNWYex3aJjhJJBMEU=
+github.com/notegio/go-ethereum v1.9.24-chain-event-1/go.mod h1:6G82HQIgIHQ0UDhq2DEoCnn+sZv2SPGI/Y1FBenA/z0=
 github.com/nxadm/tail v1.4.4/go.mod h1:kenIhsEOeOJmVchQTgglprH7qJGnHDVpk1VPCcaMI8A=
 github.com/oklog/ulid v1.3.1/go.mod h1:CirwcVhetQ6Lv90oh/F+FBtV6XMibvdAFo93nm5qn4U=
 github.com/olekukonko/tablewriter v0.0.1/go.mod h1:vsDQFd/mU46D+Z4whnwzcISnGGzXWMclvtLoiIKAKIo=
