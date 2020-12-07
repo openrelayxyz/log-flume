@@ -10,7 +10,8 @@ func OrderedProcessor(start uint64, buffer int, itemGetter func(uint64, chan<- i
       select {
       case <-quit:
         close(orderedResults)
-        break
+        sempahore <- struct{}{}
+        return
       case semaphore <- struct{}{}:
       }
       ch := make(chan interface{})
