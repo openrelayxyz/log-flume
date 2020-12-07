@@ -48,7 +48,7 @@ jobs:
           aws-region: AWS_REGION
       - run:
           name: push to s3
-          command: aws s3 cp ./flumeserver/flumeserver s3://ethercattle-binaries/flume/$CIRCLE_TAG/flumeserver
+          command: aws s3 cp ./flumeserver/flumeserver s3://ethercattle-binaries/flume/$CIRCLE_TAG/flumeserver --acl=public-read
       - run:
           name: Message Slack
           command: |
