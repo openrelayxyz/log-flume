@@ -26,7 +26,7 @@ func main() {
 
 
   glogger := gethLog.NewGlogHandler(gethLog.StreamHandler(os.Stderr, gethLog.TerminalFormat(false)))
-	glogger.Verbosity(gethLog.Lvl(3))
+	glogger.Verbosity(gethLog.LvlDebug)
 	glogger.Vmodule("")
 	gethLog.Root().SetHandler(glogger)
 
