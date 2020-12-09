@@ -24,12 +24,6 @@ import (
 
 func main() {
 
-
-  glogger := gethLog.NewGlogHandler(gethLog.StreamHandler(os.Stderr, gethLog.TerminalFormat(false)))
-	glogger.Verbosity(gethLog.LvlDebug)
-	glogger.Vmodule("")
-	gethLog.Root().SetHandler(glogger)
-
   // shutdownSync := flag.Bool("shutdownSync", false, "Shutdown server once sync is completed")
   port := flag.Int("port", 8000, "Serving port")
   minSafeBlock := flag.Int("min-safe-block", 1000000, "Do not start serving if the smallest block exceeds this value")
@@ -41,8 +35,18 @@ func main() {
   rinkeby := flag.Bool("rinkeby", false, "Rinkeby Testnet")
   homesteadBlockFlag := flag.Int("homestead", 0, "Block of the homestead hardfork")
   eip155BlockFlag := flag.Int("eip155", 0, "Block of the eip155 hardfork")
+  verbosity := flag.Bool("verbose", false, "Increase verbosity")
 
   flag.CommandLine.Parse(os.Args[1:])
+
+  glogger := gethLog.NewGlogHandler(gethLog.StreamHandler(os.Stderr, gethLog.TerminalFormat(false)))
+  if *verbosity {
+    glogger.Verbosity(gethLog.LvlDebug)
+  } else {
+    glogger.Verbosity(gethLog.LvlInfo)
+  }
+  glogger.Vmodule("")
+  gethLog.Root().SetHandler(glogger)
 
   var homesteadBlock, eip155Block, chainid uint64
 
