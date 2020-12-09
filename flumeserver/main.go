@@ -132,9 +132,6 @@ func main() {
     time.Sleep(time.Second)
   }
   quit <- struct{}{}
-  if *shutdownSync {
-    logsdb.Exec("VACUUM;")
-  }
   logsdb.Close()
   time.Sleep(time.Second)
 }
