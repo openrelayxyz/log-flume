@@ -174,6 +174,33 @@ func Migrate(db *sql.DB, chainid uint64) error {
     }
     db.Exec(`UPDATE migrations SET version = 2;`)
   }
+  if schemaVersion < 3 {
+    if _, err := db.Exec(`CREATE TABLE pending_transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      gas BIGINT,
+      gasPrice BIGINT,
+      hash varchar(32) UNIQUE,
+      input blob,
+      nonce BIGINT,
+      recipient varchar(20),
+      value varchar(32),
+      v SMALLINT,
+      r varchar(32),
+      s varchar(32),
+      sender varchar(20),
+      contractAddress varchar(20),
+      seenTimestamp BIGINT,
+      confirmationDuration BIGINT,
+      block BIGINT
+    );`); err != nil { return err }
+    db.Exec(`CREATE INDEX address ON pending_transactions(hash);`)
+    db.Exec(`CREATE INDEX address ON pending_transactions(sender, nonce);`)
+    db.Exec(`CREATE INDEX address ON pending_transactions(block);`)
+    db.Exec(`CREATE INDEX address ON pending_transactions(gasPrice);`)
+    db.Exec(`CREATE INDEX address ON pending_transactions(recipient);`)
+    db.Exec(`CREATE INDEX address ON pending_transactions(confirmationDuration);`)
+    db.Exec(`CREATE INDEX address ON pending_transactions(seenTimestamp);`)
+  }
   // chainid
   return nil
 }

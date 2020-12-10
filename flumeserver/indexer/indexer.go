@@ -8,9 +8,10 @@ import (
   "database/sql"
   "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/common"
+  "github.com/ethereum/go-ethereum/crypto"
   "github.com/ethereum/go-ethereum/rlp"
   "log"
-  // "time"
+  "time"
   "compress/zlib"
   // "io/ioutil"
 )
@@ -55,7 +56,7 @@ func getFuncSig(data []byte) ([]byte) {
   return data[:len(data)]
 }
 
-func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, eip155Block, homesteadBlock uint64) {
+func ProcessDataFeed(feed datafeed.DataFeed, confirmedRetentionLimit int, retentionDuration time.Duration, db, mempool *sql.DB, quit <-chan struct{}, eip155Block, homesteadBlock uint64) {
   log.Printf("Processing data feed")
   ch := make(chan *datafeed.ChainEvent, 10)
   sub := feed.Subscribe(ch)
@@ -67,6 +68,8 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
     case chainEvent := <- ch:
       BLOCKLOOP:
       for {
+        memtx, err := mempool.BeginTx(context.Background(), nil)
+        if err != nil { log.Printf("Error creating a mempool transaction: %v", err.Error())}
         dbtx, err := db.BeginTx(context.Background(), nil)
         if err != nil { log.Fatalf("Error creating a transaction: %v", err.Error())}
         if err := chainEvent.Commit(dbtx); err != nil {
@@ -76,7 +79,10 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
           log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
           continue BLOCKLOOP
         }
-        deleteRes, err := dbtx.Exec("DELETE FROM blocks WHERE number >= ?;", chainEvent.Block.Number.ToInt().Int64())
+        bn := chainEvent.Block.Number.ToInt().Int64()
+        memtx.Exec("UPDATE pending_transactions SET block = NULL, confirmationDuration = NULL WHERE block >= ?;", bn)
+        memtx.Exec("DELETE FROM pending_transactions WHERE (block != NULL AND block < ?) OR (block == NULL AND seenTimestamp < ?);", bn - int64(confirmedRetentionLimit), time.Now().Add(-retentionDuration).Unix())
+        deleteRes, err := dbtx.Exec("DELETE FROM blocks WHERE number >= ?;", bn)
         if err != nil {
           dbtx.Rollback()
           stats := db.Stats()
@@ -89,7 +95,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
         }
         uncles, _ := rlp.EncodeToBytes(chainEvent.Block.Uncles)
         _, err = dbtx.Exec("INSERT INTO blocks(number, hash, parentHash, uncleHash, coinbase, root, txRoot, receiptRoot, bloom, difficulty, gasLimit, gasUsed, time, extra, mixDigest, nonce, uncles, size, td) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-          chainEvent.Block.Number.ToInt().Int64(),
+          bn,
           trimPrefix(chainEvent.Block.Hash.Bytes()),
           trimPrefix(chainEvent.Block.ParentHash.Bytes()),
           trimPrefix(chainEvent.Block.Sha3Uncles.Bytes()),
@@ -152,6 +158,8 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
           if txwr.Transaction.To() != nil {
             to = trimPrefix(txwr.Transaction.To().Bytes())
           }
+          memtx.Exec("UPDATE pending_transactions SET block = ?, confirmationDuration = ? - seenTimestamp WHERE hash = ?;", trimPrefix(txwr.Transaction.Hash().Bytes()))
+          memtx.Exec("DELETE FROM pending_transactions WHERE sender = ? AND nonce = ? AND hash != ?", trimPrefix(sender.Bytes()), txwr.Transaction.Nonce(), trimPrefix(txwr.Transaction.Hash().Bytes()))
           // log.Printf("Inserting transaction %#x", txwr.Transaction.Hash())
           result, err := dbtx.Exec("INSERT INTO transactions(block, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, value, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             chainEvent.Block.Number.ToInt().Int64(),
@@ -223,4 +231,44 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
       }
     }
   }
+}
+
+
+func ProcessMempool(feed datafeed.TransactionFeed, mempool *sql.DB, maxMempoolSize int) {
+  go func() {
+    for range time.NewTicker(time.Minute).C {
+      // Delete any pending transactions where
+      mempool.Exec("DELETE FROM pending_transactions WHERE block == NULL AND gasPrice < (SELECT MIN(gasPrice) FROM pending_transactions WHERE 1 ORDER BY gasPrice DESC LIMIT ?);", maxMempoolSize);
+    }
+  }()
+  go func() {
+    for txWithTs := range feed.Messages() {
+      tx := txWithTs.Tx
+      ts := txWithTs.Timestamp
+      signer := types.NewEIP155Signer(tx.ChainId())
+      sender, _ := types.Sender(signer, tx)
+      v, r, s := tx.RawSignatureValues()
+      var to, contractAddress []byte
+      if tx.To() != nil {
+        to = trimPrefix(tx.To().Bytes())
+      } else {
+        contractAddress = trimPrefix(crypto.CreateAddress(sender, tx.Nonce()).Bytes())
+      }
+      mempool.Exec("INSERT OR IGNORE INTO pending_transactions(gas, gasPrice, hash, input, nonce, recipient, value, v, r, s, sender, contractAddress, seenTimestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+        tx.Gas(),
+        tx.GasPrice().Uint64(),
+        trimPrefix(tx.Hash().Bytes()),
+        compress(tx.Data()),
+        tx.Nonce(),
+        to,
+        trimPrefix(tx.Value().Bytes()),
+        v.Int64(),
+        trimPrefix(r.Bytes()),
+        trimPrefix(s.Bytes()),
+        trimPrefix(sender.Bytes()),
+        contractAddress,
+        ts.Unix(),
+      )
+    }
+  }()
 }

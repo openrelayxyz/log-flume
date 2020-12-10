@@ -121,3 +121,16 @@ func (s *NullSubscription) Err() <-chan error {
   return make(chan error)
 }
 func (s *NullSubscription) Unsubscribe() {}
+
+type TransactionFeed interface {
+  Messages() <-chan TimestampedTx
+  Close()
+}
+
+type NullTxFeed struct {}
+
+func (*NullTxFeed) Messages() <-chan TimestampedTx {
+  return make(chan TimestampedTx)
+}
+
+func (*NullTxFeed) Close() {}

@@ -40,3 +40,13 @@ func ResolveFeed(url string, db *sql.DB) (DataFeed, error) {
   }
   return nil, fmt.Errorf("Unknown feed type")
 }
+
+func ResolveTxFeed(url string) (TransactionFeed, error)  {
+  if url == "null://" {
+    return &NullTxFeed{}, nil
+  } else if strings.HasPrefix(url, "kafka://") {
+    parts := strings.Split(";", url)
+    return NewKafkaTransactionConsumerFromURLs(strings.TrimPrefix(parts[0], "kafka://"), parts[1])
+  }
+  return nil, fmt.Errorf("Unknown feed type")
+}

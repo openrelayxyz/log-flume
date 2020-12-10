@@ -36,6 +36,11 @@ func main() {
   homesteadBlockFlag := flag.Int("homestead", 0, "Block of the homestead hardfork")
   eip155BlockFlag := flag.Int("eip155", 0, "Block of the eip155 hardfork")
   verbosity := flag.Bool("verbose", false, "Increase verbosity")
+  mempool := flag.String("mempool", "file::memory:?cache=shared", "Mempool sqlite database (default in memory)")
+  confirmedRetentionLimit := flag.Int("confirmed-retention-limit", 240, "How long to track confirmed transactions for aggregation purposes")
+  retentionDuration := flag.Int("retention-duration-hours", 12, "How many hours before dropping unconfirmed transactions")
+  maxMempoolSize := flag.Int("max-mempool-size", 50000, "How many unconfirmed transactions to keep in the mempool")
+  txFeedURL := flag.String("tx-feed", "null://", "A feed of pending transactions")
 
   flag.CommandLine.Parse(os.Args[1:])
 
@@ -84,6 +89,9 @@ func main() {
   if err != nil { log.Fatalf(err.Error()) }
   logsdb.SetConnMaxLifetime(0)
   logsdb.SetMaxIdleConns(32)
+  memdb, err := sql.Open("sqlite3", *mempool)
+  logsdb.SetConnMaxLifetime(0)
+  logsdb.SetMaxIdleConns(32)
   go func() {
     ticker := time.NewTicker(30 * time.Second)
     defer ticker.Stop()
@@ -99,11 +107,13 @@ func main() {
 
   feed, err := datafeed.ResolveFeed(feedURL, logsdb)
   if err != nil { log.Fatalf(err.Error()) }
+  txfeed, err := datafeed.ResolveTxFeed(*txFeedURL)
+  if err != nil { log.Fatalf(err.Error()) }
 
   quit := make(chan struct{})
   // go indexer.ProcessFeed(feed, logsdb, quit)
-  go indexer.ProcessDataFeed(feed, logsdb, quit, eip155Block, homesteadBlock)
-
+  go indexer.ProcessDataFeed(feed, *confirmedRetentionLimit, time.Duration(*retentionDuration) * time.Hour, logsdb, memdb, quit, eip155Block, homesteadBlock)
+  indexer.ProcessMempool(txfeed, memdb, *maxMempoolSize)
 
   mux := http.NewServeMux()
   mux.HandleFunc("/", flumehandler.GetHandler(logsdb))
