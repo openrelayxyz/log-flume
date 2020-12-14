@@ -11,7 +11,7 @@ import (
   "github.com/ethereum/go-ethereum/rlp"
   "log"
   "time"
-  "compress/zlib"
+  "github.com/klauspost/compress/zlib"
   // "io/ioutil"
 )
 
