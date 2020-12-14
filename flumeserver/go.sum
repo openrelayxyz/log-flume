@@ -208,6 +208,8 @@ github.com/notegio/go-ethereum v1.9.24-chain-event-1 h1:+AuxdL3ypo14wvHhyMJjnDdd
 github.com/notegio/go-ethereum v1.9.24-chain-event-1/go.mod h1:6G82HQIgIHQ0UDhq2DEoCnn+sZv2SPGI/Y1FBenA/z0=
 github.com/notegio/go-ethereum v1.9.24-chain-event-2 h1:wLuEcG/aQvjUJ37QNu27c4Sw7RPr6TfvRd3YEaotiH8=
 github.com/notegio/go-ethereum v1.9.24-chain-event-2/go.mod h1:6G82HQIgIHQ0UDhq2DEoCnn+sZv2SPGI/Y1FBenA/z0=
+github.com/notegio/go-ethereum v1.9.24-chain-event-8 h1:M2RMJg/SXm3ATSWozNBkZ1IL8kGCWgKOsYa+rca+Bbo=
+github.com/notegio/go-ethereum v1.9.24-chain-event-8/go.mod h1:6G82HQIgIHQ0UDhq2DEoCnn+sZv2SPGI/Y1FBenA/z0=
 github.com/notegio/go-ethereum v1.9.24-chain-event-DEBUG-0 h1:1g11UFz4mho9+qNYgbUE+7pt7y9si9LwB3OGs1c4oAA=
 github.com/notegio/go-ethereum v1.9.24-chain-event-DEBUG-0/go.mod h1:6G82HQIgIHQ0UDhq2DEoCnn+sZv2SPGI/Y1FBenA/z0=
 github.com/notegio/go-ethereum v1.9.24-chain-event-DEBUG-1 h1:jRzNq1mozALNvnFi9EgC+qnHd9mgLtrXCNUozGXQ+60=

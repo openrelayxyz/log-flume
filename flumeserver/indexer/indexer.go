@@ -10,7 +10,7 @@ import (
   "github.com/ethereum/go-ethereum/common"
   "github.com/ethereum/go-ethereum/rlp"
   "log"
-  // "time"
+  "time"
   "compress/zlib"
   // "io/ioutil"
 )
@@ -65,6 +65,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
     case <-quit:
       return
     case chainEvent := <- ch:
+      start := time.Now()
       BLOCKLOOP:
       for {
         dbtx, err := db.BeginTx(context.Background(), nil)
@@ -218,7 +219,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
           log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
           continue BLOCKLOOP
         }
-        log.Printf("Committed Block %v (%#x)", uint64(chainEvent.Block.Number.ToInt().Int64()), chainEvent.Block.Hash.Bytes())
+        log.Printf("Committed Block %v (%#x) in %v", uint64(chainEvent.Block.Number.ToInt().Int64()), chainEvent.Block.Hash.Bytes(), time.Since(start))
         break
       }
     }
