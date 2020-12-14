@@ -38,7 +38,7 @@ var compressionBuffer = bytes.NewBuffer(make([]byte, 0, 5 * 1024 * 1024))
 
 func compress(data []byte) []byte {
   start := time.Now()
-  defer log.Printf("Spent %v on compression", time.Since(start))
+  defer func() {log.Printf("Spent %v on compression", time.Since(start))}()
   if len(data) == 0 { return data }
   compressionBuffer.Reset()
   if compressor == nil {
