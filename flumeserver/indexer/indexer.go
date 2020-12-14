@@ -1,6 +1,7 @@
 package indexer
 
 import (
+  "strings"
   "bytes"
   "context"
   // "github.com/openrelayxyz/flume/flumeserver/logfeed"
@@ -37,8 +38,6 @@ var compressor *zlib.Writer
 var compressionBuffer = bytes.NewBuffer(make([]byte, 0, 5 * 1024 * 1024))
 
 func compress(data []byte) []byte {
-  start := time.Now()
-  defer func() {log.Printf("Spent %v on compression", time.Since(start))}()
   if len(data) == 0 { return data }
   compressionBuffer.Reset()
   if compressor == nil {
@@ -94,8 +93,10 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
         }
         log.Printf("Spent %v deleting reorged data", time.Since(dstart))
         uncles, _ := rlp.EncodeToBytes(chainEvent.Block.Uncles)
-        ibstart := time.Now()
-        _, err = dbtx.Exec("INSERT INTO blocks(number, hash, parentHash, uncleHash, coinbase, root, txRoot, receiptRoot, bloom, difficulty, gasLimit, gasUsed, time, extra, mixDigest, nonce, uncles, size, td) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+        statements := []string{}
+        params := []interface{}{}
+        statements = append(statements, "INSERT INTO blocks(number, hash, parentHash, uncleHash, coinbase, root, txRoot, receiptRoot, bloom, difficulty, gasLimit, gasUsed, time, extra, mixDigest, nonce, uncles, size, td) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        params = append(params,
           chainEvent.Block.Number.ToInt().Int64(),
           trimPrefix(chainEvent.Block.Hash.Bytes()),
           trimPrefix(chainEvent.Block.ParentHash.Bytes()),
@@ -116,14 +117,6 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
           uint64(chainEvent.Block.Size),
           chainEvent.Block.TotalDifficulty.ToInt().Int64(),
         )
-        if err != nil {
-          dbtx.Rollback()
-          stats := db.Stats()
-          log.Printf("WARN: Failed to insert block: %v", err.Error())
-          log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
-          continue BLOCKLOOP
-        }
-        log.Printf("Spent %v inserting blocks", time.Since(ibstart))
         var signer types.Signer
         senderMap := make(map[common.Hash]<-chan common.Address)
         for _, txwr := range chainEvent.TxWithReceipts() {
@@ -161,8 +154,8 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
             to = trimPrefix(txwr.Transaction.To().Bytes())
           }
           // log.Printf("Inserting transaction %#x", txwr.Transaction.Hash())
-          itstart := time.Now()
-          result, err := dbtx.Exec("INSERT INTO transactions(block, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, value, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          statements = append(statements, "INSERT INTO transactions(block, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, value, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+          params = append(params,
             chainEvent.Block.Number.ToInt().Int64(),
             txwr.Transaction.Gas(),
             txwr.Transaction.GasPrice().Uint64(),
@@ -183,26 +176,9 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
             compress(txwr.Receipt.Bloom.Bytes()),
             txwr.Receipt.Status,
           )
-          if err != nil {
-            dbtx.Rollback()
-            stats := db.Stats()
-            log.Printf("WARN: Failed to insert transaction: %v", err.Error())
-            log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
-            continue BLOCKLOOP
-          }
-          insertID, err := result.LastInsertId()
-          if err != nil {
-            dbtx.Rollback()
-            stats := db.Stats()
-            log.Printf("WARN: Failed to insert transaction: %v", err.Error())
-            log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
-            continue BLOCKLOOP
-          }
-          log.Printf("Spent %v inserting tx", time.Since(itstart))
           for _, logRecord := range txwr.Receipt.Logs {
-            ilstart := time.Now()
-            _, err := dbtx.Exec(
-              "INSERT OR IGNORE INTO event_logs(address, topic0, topic1, topic2, topic3, topic4, data, tx, block, logIndex) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+            statements = append(statements, "INSERT OR IGNORE INTO event_logs(address, topic0, topic1, topic2, topic3, topic4, data, block, logIndex, tx) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT max(rowid) from transactions))")
+            params = append(params,
               trimPrefix(logRecord.Address.Bytes()),
               trimPrefix(getTopicIndex(logRecord.Topics, 0)),
               trimPrefix(getTopicIndex(logRecord.Topics, 1)),
@@ -210,20 +186,20 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
               trimPrefix(getTopicIndex(logRecord.Topics, 3)),
               trimPrefix(getTopicIndex(logRecord.Topics, 4)),
               compress(logRecord.Data),
-              insertID,
               chainEvent.Block.Number.ToInt().Int64(),
               logRecord.Index,
             )
-            if err != nil {
-              dbtx.Rollback()
-              stats := db.Stats()
-              log.Printf("WARN: Failed to insert logs: %v", err.Error())
-              log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
-              continue BLOCKLOOP
-            }
-            log.Printf("Spent %v inserting log", time.Since(ilstart))
           }
         }
+        istart := time.Now()
+        if _, err := dbtx.Exec(strings.Join(statements, " ; "), params...); err != nil {
+          dbtx.Rollback()
+          stats := db.Stats()
+          log.Printf("WARN: Failed to insert logs: %v", err.Error())
+          log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
+          continue BLOCKLOOP
+        }
+        log.Printf("Spent %v on %v inserts", time.Since(istart), len(statements))
         cstart := time.Now()
         if err := dbtx.Commit(); err != nil {
           stats := db.Stats()
