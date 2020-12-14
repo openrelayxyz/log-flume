@@ -855,7 +855,7 @@ Resources:
 
                 # upload Backup
                 export BACKUPNAME="${S3FlumeBackupBucket}/${NetworkId}/logs-$(date '+%Y%m%d-%H%M%S').sqlite.lz4"
-                if ! lz4 /var/lib/flume/item.sqlite | aws s3 cp - s3://$BACKUPNAME --expected-size=${FlumeSize}000000000; then
+                if ! lz4 /var/lib/flume/item.sqlite | aws s3 cp - s3://$BACKUPNAME --expected-size=${FlumeDiskSize}000000000; then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
                     aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking Backup Failed" --message="The snapshotting process for ${AWS::StackName} failed to upload the backup."
