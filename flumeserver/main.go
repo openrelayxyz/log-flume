@@ -36,6 +36,9 @@ func main() {
   homesteadBlockFlag := flag.Int("homestead", 0, "Block of the homestead hardfork")
   eip155BlockFlag := flag.Int("eip155", 0, "Block of the eip155 hardfork")
   verbosity := flag.Bool("verbose", false, "Increase verbosity")
+  mmap := flag.Int("mmap-size", 1073741824, "Set mmap size")
+  cacheSize := flag.Int("cache-size", 2000, "Set cache size (in 4 kb pages")
+  memstore := flag.Bool("memstore", false, "Store temporary tables in memory")
 
   flag.CommandLine.Parse(os.Args[1:])
 
@@ -82,6 +85,11 @@ func main() {
 
   logsdb, err := sql.Open("sqlite3", fmt.Sprintf("file:%v?_sync=0&_journal_mode=WAL&_foreign_keys=on", sqlitePath))
   if err != nil { log.Fatalf(err.Error()) }
+  logsdb.Exec(fmt.Sprintf("pragma mmap_size=%v", *mmap))
+  logsdb.Exec(fmt.Sprintf("pragma cache_size=%v", *cacheSize))
+  if *memstore {
+    logsdb.Exec("pragma temp_store = memory")
+  }
   logsdb.SetConnMaxLifetime(0)
   logsdb.SetMaxIdleConns(32)
   go func() {
