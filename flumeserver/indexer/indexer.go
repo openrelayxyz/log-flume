@@ -122,29 +122,34 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
         }
         log.Printf("Spent %v deleting reorged data", time.Since(dstart))
         uncles, _ := rlp.EncodeToBytes(chainEvent.Block.Uncles)
-        statements := []string{}
-        statements = append(statements, applyParameters(
-          "INSERT INTO blocks(number, hash, parentHash, uncleHash, coinbase, root, txRoot, receiptRoot, bloom, difficulty, gasLimit, gasUsed, time, extra, mixDigest, nonce, uncles, size, td) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
-          chainEvent.Block.Number,
-          chainEvent.Block.Hash,
-          chainEvent.Block.ParentHash,
-          chainEvent.Block.Sha3Uncles,
-          chainEvent.Block.Coinbase,
-          chainEvent.Block.StateRoot,
-          chainEvent.Block.TransactionsRoot,
-          chainEvent.Block.ReceiptRoot,
-          compress(chainEvent.Block.LogsBloom),
-          chainEvent.Block.Difficulty,
-          chainEvent.Block.GasLimit,
-          chainEvent.Block.GasUsed,
-          chainEvent.Block.Timestamp,
-          chainEvent.Block.ExtraData,
-          chainEvent.Block.MixHash,
-          chainEvent.Block.Nonce,
-          uncles, // rlp
-          chainEvent.Block.Size,
-          chainEvent.Block.TotalDifficulty,
-        ))
+        pendingStatements := make([]chan string, len(chainEvent.TxWithReceipts()) + 1)
+        blockCh := make(chan string, 1)
+        errCh := make(chan error)
+        pendingStatements[0] = blockCh
+        go func() {
+          blockCh <- applyParameters(
+            "INSERT INTO blocks(number, hash, parentHash, uncleHash, coinbase, root, txRoot, receiptRoot, bloom, difficulty, gasLimit, gasUsed, time, extra, mixDigest, nonce, uncles, size, td) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
+            chainEvent.Block.Number,
+            chainEvent.Block.Hash,
+            chainEvent.Block.ParentHash,
+            chainEvent.Block.Sha3Uncles,
+            chainEvent.Block.Coinbase,
+            chainEvent.Block.StateRoot,
+            chainEvent.Block.TransactionsRoot,
+            chainEvent.Block.ReceiptRoot,
+            compress(chainEvent.Block.LogsBloom),
+            chainEvent.Block.Difficulty,
+            chainEvent.Block.GasLimit,
+            chainEvent.Block.GasUsed,
+            chainEvent.Block.Timestamp,
+            chainEvent.Block.ExtraData,
+            chainEvent.Block.MixHash,
+            chainEvent.Block.Nonce,
+            uncles, // rlp
+            chainEvent.Block.Size,
+            chainEvent.Block.TotalDifficulty,
+          )
+        }()
         var signer types.Signer
         senderMap := make(map[common.Hash]<-chan common.Address)
         for _, txwr := range chainEvent.TxWithReceipts() {
@@ -164,62 +169,79 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
               log.Printf("WARN: Failed to derive sender: %v", err.Error())
             }
             ch <- sender
+            close(ch)
           }(txwr.Transaction, ch)
         }
-        for _, txwr := range chainEvent.TxWithReceipts() {
-          v, r, s := txwr.Transaction.RawSignatureValues()
-          txHash := txwr.Transaction.Hash()
-          sender := <-senderMap[txHash]
-          if sender == (common.Address{}) {
-            dbtx.Rollback()
-            stats := db.Stats()
-            log.Printf("WARN: Failed to derive sender.")
-            log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
-            continue BLOCKLOOP
-          }
-          var to []byte
-          if txwr.Transaction.To() != nil {
-            to = trimPrefix(txwr.Transaction.To().Bytes())
-          }
-          // log.Printf("Inserting transaction %#x", txwr.Transaction.Hash())
-          statements = append(statements, applyParameters(
-            "INSERT INTO transactions(block, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, value, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, status) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
-            chainEvent.Block.Number,
-            txwr.Transaction.Gas(),
-            txwr.Transaction.GasPrice().Uint64(),
-            txHash,
-            compress(txwr.Transaction.Data()),
-            txwr.Transaction.Nonce(),
-            to,
-            txwr.Receipt.TransactionIndex,
-            trimPrefix(txwr.Transaction.Value().Bytes()),
-            v.Int64(),
-            r,
-            s,
-            sender,
-            getFuncSig(txwr.Transaction.Data()),
-            txwr.Receipt.ContractAddress,
-            txwr.Receipt.CumulativeGasUsed,
-            txwr.Receipt.GasUsed,
-            compress(txwr.Receipt.Bloom.Bytes()),
-            txwr.Receipt.Status,
-          ))
-          for _, logRecord := range txwr.Receipt.Logs {
-            statements = append(statements, applyParameters(
-              "INSERT OR IGNORE INTO event_logs(address, topic0, topic1, topic2, topic3, topic4, data, block, logIndex, tx) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, (SELECT max(rowid) from transactions))",
-              logRecord.Address,
-              getTopicIndex(logRecord.Topics, 0),
-              getTopicIndex(logRecord.Topics, 1),
-              getTopicIndex(logRecord.Topics, 2),
-              getTopicIndex(logRecord.Topics, 3),
-              getTopicIndex(logRecord.Topics, 4),
-              compress(logRecord.Data),
+        for i, txwr := range chainEvent.TxWithReceipts() {
+          pendingStatements[i+1] = make(chan string, len(txwr.Receipt.Logs) + 1)
+          go func(txCh chan<- string, txwr *datafeed.TxWithReceipt) {
+            v, r, s := txwr.Transaction.RawSignatureValues()
+            txHash := txwr.Transaction.Hash()
+            sender := <-senderMap[txHash]
+            if sender == (common.Address{}) {
+              dbtx.Rollback()
+              stats := db.Stats()
+              log.Printf("WARN: Failed to derive sender.")
+              log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
+              errCh <- fmt.Errorf("Failed to derive sender for %#x", txHash[:])
+              return
+            }
+            var to []byte
+            if txwr.Transaction.To() != nil {
+              to = trimPrefix(txwr.Transaction.To().Bytes())
+            }
+            // log.Printf("Inserting transaction %#x", txwr.Transaction.Hash())
+            txCh <- applyParameters(
+              "INSERT INTO transactions(block, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, value, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, status) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
               chainEvent.Block.Number,
-              logRecord.Index,
-            ))
-          }
+              txwr.Transaction.Gas(),
+              txwr.Transaction.GasPrice().Uint64(),
+              txHash,
+              compress(txwr.Transaction.Data()),
+              txwr.Transaction.Nonce(),
+              to,
+              txwr.Receipt.TransactionIndex,
+              trimPrefix(txwr.Transaction.Value().Bytes()),
+              v.Int64(),
+              r,
+              s,
+              sender,
+              getFuncSig(txwr.Transaction.Data()),
+              txwr.Receipt.ContractAddress,
+              txwr.Receipt.CumulativeGasUsed,
+              txwr.Receipt.GasUsed,
+              compress(txwr.Receipt.Bloom.Bytes()),
+              txwr.Receipt.Status,
+            )
+            for _, logRecord := range txwr.Receipt.Logs {
+              txCh <- applyParameters(
+                "INSERT OR IGNORE INTO event_logs(address, topic0, topic1, topic2, topic3, topic4, data, block, logIndex, tx) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, (SELECT max(rowid) from transactions))",
+                logRecord.Address,
+                getTopicIndex(logRecord.Topics, 0),
+                getTopicIndex(logRecord.Topics, 1),
+                getTopicIndex(logRecord.Topics, 2),
+                getTopicIndex(logRecord.Topics, 3),
+                getTopicIndex(logRecord.Topics, 4),
+                compress(logRecord.Data),
+                chainEvent.Block.Number,
+                logRecord.Index,
+              )
+            }
+            close(txCh)
+          }(pendingStatements[i+1], txwr)
         }
         istart := time.Now()
+        statements := []string{}
+        for _, ch := range pendingStatements {
+          for {
+            select {
+            case statement := <-ch:
+              statements = append(statements, statement)
+            case <-errCh:
+              continue BLOCKLOOP
+            }
+          }
+        }
         if _, err := dbtx.Exec(strings.Join(statements, " ; ")); err != nil {
           dbtx.Rollback()
           stats := db.Stats()
