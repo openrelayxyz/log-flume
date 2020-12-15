@@ -1,6 +1,7 @@
 package indexer
 
 import (
+  "fmt"
   "strings"
   "bytes"
   "context"
@@ -9,6 +10,7 @@ import (
   "database/sql"
   "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/common"
+  "github.com/ethereum/go-ethereum/common/hexutil"
   "github.com/ethereum/go-ethereum/rlp"
   "log"
   "time"
@@ -57,6 +59,33 @@ func getFuncSig(data []byte) ([]byte) {
   return data[:len(data)]
 }
 
+type bytesable interface {
+  Bytes() []byte
+}
+
+func applyParameters(query string, params ...interface{}) string {
+  preparedParams := make([]interface{}, len(params))
+  for i, param := range params {
+    switch value := param.(type) {
+    case []byte:
+      preparedParams[i] = fmt.Sprintf("X'%x'", value)
+    case bytesable:
+      preparedParams[i] = fmt.Sprintf("X'%x'", trimPrefix(value.Bytes()))
+    case hexutil.Bytes:
+      preparedParams[i] = fmt.Sprintf("X'%x'", value[:])
+    case hexutil.Big:
+      preparedParams[i] = fmt.Sprintf("%v", value.ToInt().Int64())
+    case hexutil.Uint64:
+      preparedParams[i] = fmt.Sprintf("%v", uint64(value))
+    case types.BlockNonce:
+      preparedParams[i] = fmt.Sprintf("%v", value.Uint64())
+    default:
+      preparedParams[i] = fmt.Sprintf("%v", value)
+    }
+  }
+  return fmt.Sprintf(query, preparedParams...)
+}
+
 func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, eip155Block, homesteadBlock uint64) {
   log.Printf("Processing data feed")
   ch := make(chan *datafeed.ChainEvent, 10)
@@ -94,29 +123,28 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
         log.Printf("Spent %v deleting reorged data", time.Since(dstart))
         uncles, _ := rlp.EncodeToBytes(chainEvent.Block.Uncles)
         statements := []string{}
-        params := []interface{}{}
-        statements = append(statements, "INSERT INTO blocks(number, hash, parentHash, uncleHash, coinbase, root, txRoot, receiptRoot, bloom, difficulty, gasLimit, gasUsed, time, extra, mixDigest, nonce, uncles, size, td) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-        params = append(params,
-          chainEvent.Block.Number.ToInt().Int64(),
-          trimPrefix(chainEvent.Block.Hash.Bytes()),
-          trimPrefix(chainEvent.Block.ParentHash.Bytes()),
-          trimPrefix(chainEvent.Block.Sha3Uncles.Bytes()),
-          trimPrefix(chainEvent.Block.Coinbase.Bytes()),
-          trimPrefix(chainEvent.Block.StateRoot.Bytes()),
-          trimPrefix(chainEvent.Block.TransactionsRoot.Bytes()),
-          trimPrefix(chainEvent.Block.ReceiptRoot.Bytes()),
+        statements = append(statements, applyParameters(
+          "INSERT INTO blocks(number, hash, parentHash, uncleHash, coinbase, root, txRoot, receiptRoot, bloom, difficulty, gasLimit, gasUsed, time, extra, mixDigest, nonce, uncles, size, td) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
+          chainEvent.Block.Number,
+          chainEvent.Block.Hash,
+          chainEvent.Block.ParentHash,
+          chainEvent.Block.Sha3Uncles,
+          chainEvent.Block.Coinbase,
+          chainEvent.Block.StateRoot,
+          chainEvent.Block.TransactionsRoot,
+          chainEvent.Block.ReceiptRoot,
           compress(chainEvent.Block.LogsBloom),
-          chainEvent.Block.Difficulty.ToInt().Int64(),
-          uint64(chainEvent.Block.GasLimit),
-          uint64(chainEvent.Block.GasUsed),
-          uint64(chainEvent.Block.Timestamp),
+          chainEvent.Block.Difficulty,
+          chainEvent.Block.GasLimit,
+          chainEvent.Block.GasUsed,
+          chainEvent.Block.Timestamp,
           chainEvent.Block.ExtraData,
-          trimPrefix(chainEvent.Block.MixHash.Bytes()),
-          int64(chainEvent.Block.Nonce.Uint64()),
-          uncles,//rlp
-          uint64(chainEvent.Block.Size),
-          chainEvent.Block.TotalDifficulty.ToInt().Int64(),
-        )
+          chainEvent.Block.MixHash,
+          chainEvent.Block.Nonce,
+          uncles, // rlp
+          chainEvent.Block.Size,
+          chainEvent.Block.TotalDifficulty,
+        ))
         var signer types.Signer
         senderMap := make(map[common.Hash]<-chan common.Address)
         for _, txwr := range chainEvent.TxWithReceipts() {
@@ -154,45 +182,45 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
             to = trimPrefix(txwr.Transaction.To().Bytes())
           }
           // log.Printf("Inserting transaction %#x", txwr.Transaction.Hash())
-          statements = append(statements, "INSERT INTO transactions(block, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, value, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-          params = append(params,
-            chainEvent.Block.Number.ToInt().Int64(),
+          statements = append(statements, applyParameters(
+            "INSERT INTO transactions(block, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, value, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, status) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
+            chainEvent.Block.Number,
             txwr.Transaction.Gas(),
             txwr.Transaction.GasPrice().Uint64(),
-            trimPrefix(txHash.Bytes()),
+            txHash,
             compress(txwr.Transaction.Data()),
             txwr.Transaction.Nonce(),
             to,
             txwr.Receipt.TransactionIndex,
             trimPrefix(txwr.Transaction.Value().Bytes()),
             v.Int64(),
-            trimPrefix(r.Bytes()),
-            trimPrefix(s.Bytes()),
-            trimPrefix(sender.Bytes()),
+            r,
+            s,
+            sender,
             getFuncSig(txwr.Transaction.Data()),
-            trimPrefix(txwr.Receipt.ContractAddress.Bytes()),
+            txwr.Receipt.ContractAddress,
             txwr.Receipt.CumulativeGasUsed,
             txwr.Receipt.GasUsed,
             compress(txwr.Receipt.Bloom.Bytes()),
             txwr.Receipt.Status,
-          )
+          ))
           for _, logRecord := range txwr.Receipt.Logs {
-            statements = append(statements, "INSERT OR IGNORE INTO event_logs(address, topic0, topic1, topic2, topic3, topic4, data, block, logIndex, tx) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT max(rowid) from transactions))")
-            params = append(params,
-              trimPrefix(logRecord.Address.Bytes()),
-              trimPrefix(getTopicIndex(logRecord.Topics, 0)),
-              trimPrefix(getTopicIndex(logRecord.Topics, 1)),
-              trimPrefix(getTopicIndex(logRecord.Topics, 2)),
-              trimPrefix(getTopicIndex(logRecord.Topics, 3)),
-              trimPrefix(getTopicIndex(logRecord.Topics, 4)),
+            statements = append(statements, applyParameters(
+              "INSERT OR IGNORE INTO event_logs(address, topic0, topic1, topic2, topic3, topic4, data, block, logIndex, tx) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, (SELECT max(rowid) from transactions))",
+              logRecord.Address,
+              getTopicIndex(logRecord.Topics, 0),
+              getTopicIndex(logRecord.Topics, 1),
+              getTopicIndex(logRecord.Topics, 2),
+              getTopicIndex(logRecord.Topics, 3),
+              getTopicIndex(logRecord.Topics, 4),
               compress(logRecord.Data),
-              chainEvent.Block.Number.ToInt().Int64(),
+              chainEvent.Block.Number,
               logRecord.Index,
-            )
+            ))
           }
         }
         istart := time.Now()
-        if _, err := dbtx.Exec(strings.Join(statements, " ; "), params...); err != nil {
+        if _, err := dbtx.Exec(strings.Join(statements, " ; ")); err != nil {
           dbtx.Rollback()
           stats := db.Stats()
           log.Printf("WARN: Failed to insert logs: %v", err.Error())
