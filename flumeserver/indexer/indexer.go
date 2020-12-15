@@ -206,7 +206,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
           ))
           for _, logRecord := range txwr.Receipt.Logs {
             statements = append(statements, applyParameters(
-              "INSERT OR IGNORE INTO event_logs(address, topic0, topic1, topic2, topic3, topic4, data, block, logIndex, tx) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, (SELECT max(rowid) from transactions))",
+              "INSERT OR IGNORE INTO event_logs(address, topic0, topic1, topic2, topic3, topic4, data, block, logIndex, tx) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, (SELECT id FROM transactions WHERE hash = %v))",
               logRecord.Address,
               getTopicIndex(logRecord.Topics, 0),
               getTopicIndex(logRecord.Topics, 1),
@@ -216,6 +216,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
               compress(logRecord.Data),
               chainEvent.Block.Number,
               logRecord.Index,
+              txHash,
             ))
           }
         }
