@@ -36,12 +36,11 @@ func getTopicIndex(topics []common.Hash, idx int) []byte {
   return []byte{}
 }
 
-var compressor *zlib.Writer
-var compressionBuffer = bytes.NewBuffer(make([]byte, 0, 5 * 1024 * 1024))
 
 func compress(data []byte) []byte {
   if len(data) == 0 { return data }
-  compressionBuffer.Reset()
+  var compressionBuffer = bytes.NewBuffer(make([]byte, 0, 5 * 1024 * 1024))
+  var compressor *zlib.Writer
   if compressor == nil {
     compressor = zlib.NewWriter(compressionBuffer)
   } else {
@@ -149,6 +148,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
             chainEvent.Block.Size,
             chainEvent.Block.TotalDifficulty,
           )
+          close(blockCh)
         }()
         var signer types.Signer
         senderMap := make(map[common.Hash]<-chan common.Address)
@@ -183,6 +183,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
               stats := db.Stats()
               log.Printf("WARN: Failed to derive sender.")
               log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
+              txCh <- ""
               errCh <- fmt.Errorf("Failed to derive sender for %#x", txHash[:])
               return
             }
@@ -233,13 +234,12 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
         istart := time.Now()
         statements := []string{}
         for _, ch := range pendingStatements {
-          for {
-            select {
-            case statement := <-ch:
-              statements = append(statements, statement)
-            case <-errCh:
+          for statement := range ch {
+            if statement == "" {
+              <-errCh
               continue BLOCKLOOP
             }
+            statements = append(statements, statement)
           }
         }
         if _, err := dbtx.Exec(strings.Join(statements, " ; ")); err != nil {
