@@ -37,11 +37,10 @@ func getTopicIndex(topics []common.Hash, idx int) []byte {
 }
 
 var compressor *zlib.Writer
-var compressionBuffer = bytes.NewBuffer(make([]byte, 0, 5 * 1024 * 1024))
 
 func compress(data []byte) []byte {
   if len(data) == 0 { return data }
-  compressionBuffer.Reset()
+  var compressionBuffer = bytes.NewBuffer(make([]byte, 0, 5 * 1024 * 1024))
   if compressor == nil {
     compressor = zlib.NewWriter(compressionBuffer)
   } else {
