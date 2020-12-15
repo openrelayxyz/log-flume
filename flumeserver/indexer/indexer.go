@@ -139,6 +139,22 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
             ch <- sender
           }(txwr.Transaction, ch)
         }
+        txstmt, err := dbtx.Prepare("INSERT INTO transactions(block, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, value, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        if err != nil {
+          dbtx.Rollback()
+          stats := db.Stats()
+          log.Printf("WARN: Failed to create txstmt: %v", err.Error())
+          log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
+          continue BLOCKLOOP
+        }
+        logstmt, err := dbtx.Prepare("INSERT OR IGNORE INTO event_logs(address, topic0, topic1, topic2, topic3, topic4, data, tx, block, logIndex) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);")
+        if err != nil {
+          dbtx.Rollback()
+          stats := db.Stats()
+          log.Printf("WARN: Failed to create logstmt: %v", err.Error())
+          log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
+          continue BLOCKLOOP
+        }
         for _, txwr := range chainEvent.TxWithReceipts() {
           v, r, s := txwr.Transaction.RawSignatureValues()
           txHash := txwr.Transaction.Hash()
@@ -155,7 +171,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
             to = trimPrefix(txwr.Transaction.To().Bytes())
           }
           // log.Printf("Inserting transaction %#x", txwr.Transaction.Hash())
-          result, err := dbtx.Exec("INSERT INTO transactions(block, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, value, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          result, err := txstmt.Exec(
             chainEvent.Block.Number.ToInt().Int64(),
             txwr.Transaction.Gas(),
             txwr.Transaction.GasPrice().Uint64(),
@@ -192,8 +208,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
             continue BLOCKLOOP
           }
           for _, logRecord := range txwr.Receipt.Logs {
-            _, err := dbtx.Exec(
-              "INSERT OR IGNORE INTO event_logs(address, topic0, topic1, topic2, topic3, topic4, data, tx, block, logIndex) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+            _, err := logstmt.Exec(
               trimPrefix(logRecord.Address.Bytes()),
               trimPrefix(getTopicIndex(logRecord.Topics, 0)),
               trimPrefix(getTopicIndex(logRecord.Topics, 1)),
@@ -220,6 +235,8 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
           log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
           continue BLOCKLOOP
         }
+        txstmt.Close()
+        logstmt.Close()
         log.Printf("Committed Block %v (%#x) in %v", uint64(chainEvent.Block.Number.ToInt().Int64()), chainEvent.Block.Hash.Bytes(), time.Since(start))
         break
       }
