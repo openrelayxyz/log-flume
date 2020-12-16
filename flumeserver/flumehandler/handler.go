@@ -20,6 +20,7 @@ import (
   "github.com/ethereum/go-ethereum/rlp"
   "github.com/ethereum/go-ethereum/rpc"
   "io/ioutil"
+  "io"
   "context"
   "fmt"
   "log"
