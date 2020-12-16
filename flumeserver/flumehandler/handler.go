@@ -6,7 +6,7 @@ package flumehandler
 
 import (
   "bytes"
-  "compress/zlib"
+  "github.com/klauspost/compress/zlib"
   "strings"
   "time"
   "encoding/json"
@@ -924,7 +924,10 @@ func getBlocks(ctx context.Context, db *sql.DB, includeTxs bool, whereClause str
     err := rows.Scan(&hash, &parentHash, &uncleHash, &coinbase, &root, &txRoot, &receiptRoot, &bloomBytes, &difficulty, &extra, &mixDigest, &uncles, &td, &number, &gasLimit, &gasUsed, &time, &nonce, &size)
     if err != nil { return nil, err }
     logsBloom, err := decompress(bloomBytes)
-    if err != nil { return nil, err }
+    if err != nil {
+      log.Printf("Error decompressing data: '%#x'", bloomBytes)
+      return nil, err
+    }
     unclesList := []common.Hash{}
     rlp.DecodeBytes(uncles, &unclesList)
     fields := map[string]interface{}{
