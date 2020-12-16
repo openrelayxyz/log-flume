@@ -460,7 +460,11 @@ func decompress(data []byte) ([]byte, error) {
   if len(data) == 0 { return data, nil }
   r, err := zlib.NewReader(bytes.NewBuffer(data))
   if err != nil { return []byte{}, err }
-  return ioutil.ReadAll(r)
+  raw, err := ioutil.ReadAll(r)
+  if err != io.EOF {
+    return raw, err
+  }
+  return raw, nil
 }
 
 
