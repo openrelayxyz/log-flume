@@ -925,7 +925,8 @@ func getBlocks(ctx context.Context, db *sql.DB, includeTxs bool, whereClause str
   results := []map[string]interface{}{}
   for rows.Next() {
     var hash, parentHash, uncleHash, coinbase, root, txRoot, receiptRoot, bloomBytes, extra, mixDigest, uncles []byte
-    var number, gasLimit, gasUsed, time, nonce, size, difficulty, td uint64
+    var number, gasLimit, gasUsed, time, size, difficulty, td uint64
+    var nonce int64
     err := rows.Scan(&hash, &parentHash, &uncleHash, &coinbase, &root, &txRoot, &receiptRoot, &bloomBytes, &difficulty, &extra, &mixDigest, &uncles, &td, &number, &gasLimit, &gasUsed, &time, &nonce, &size)
     if err != nil { return nil, err }
     logsBloom, err := decompress(bloomBytes)
@@ -944,7 +945,7 @@ func getBlocks(ctx context.Context, db *sql.DB, includeTxs bool, whereClause str
       "logsBloom": hexutil.Bytes(logsBloom),
       "miner": bytesToAddress(coinbase),
       "mixHash": bytesToHash(mixDigest),
-      "nonce": types.EncodeNonce(nonce),
+      "nonce": types.EncodeNonce(uint64(nonce)),
       "number": hexutil.Uint64(number),
       "parentHash": bytesToHash(parentHash),
       "receiptsRoot": bytesToHash(receiptRoot),
