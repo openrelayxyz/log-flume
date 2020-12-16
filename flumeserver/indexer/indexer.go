@@ -48,7 +48,7 @@ func compress(data []byte) []byte {
     compressor.Reset(compressionBuffer)
   }
   compressor.Write(data)
-  compressor.Flush()
+  compressor.Close()
   return compressionBuffer.Bytes()
 }
 
