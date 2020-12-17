@@ -8,7 +8,9 @@ import (
   "github.com/openrelayxyz/flume/flumeserver/datafeed"
   "github.com/openrelayxyz/flume/flumeserver/indexer"
   "github.com/openrelayxyz/flume/flumeserver/migrations"
+  "github.com/openrelayxyz/flume/flumeserver/notify"
   gethLog "github.com/ethereum/go-ethereum/log"
+  "github.com/ethereum/go-ethereum/event"
   "net/http"
   "flag"
   "fmt"
@@ -39,6 +41,7 @@ func main() {
   mmap := flag.Int("mmap-size", 1073741824, "Set mmap size")
   cacheSize := flag.Int("cache-size", 2000, "Set cache size (in 4 kb pages")
   memstore := flag.Bool("memstore", false, "Store temporary tables in memory")
+  completionTopic := flag.String("completion-topic", "", "A kafka topic to broadcast newly indexed blocks")
 
   flag.CommandLine.Parse(os.Args[1:])
 
@@ -103,14 +106,13 @@ func main() {
   if err := migrations.Migrate(logsdb, chainid); err != nil {
     log.Fatalf(err.Error())
   }
-
-
+  var completionFeed event.Feed
   feed, err := datafeed.ResolveFeed(feedURL, logsdb)
   if err != nil { log.Fatalf(err.Error()) }
 
   quit := make(chan struct{})
   // go indexer.ProcessFeed(feed, logsdb, quit)
-  go indexer.ProcessDataFeed(feed, logsdb, quit, eip155Block, homesteadBlock)
+  go indexer.ProcessDataFeed(feed, completionFeed, logsdb, quit, eip155Block, homesteadBlock)
 
 
   mux := http.NewServeMux()
@@ -130,6 +132,9 @@ func main() {
   }
   go p.ListenAndServe()
   <-feed.Ready()
+  if *completionTopic != "" {
+    notify.SendKafkaNotifications(completionFeed, *completionTopic)
+  }
   var minBlock int
   logsdb.QueryRowContext(context.Background(), "SELECT min(blockNumber) FROM event_logs;").Scan(&minBlock)
   if minBlock > *minSafeBlock {

@@ -12,6 +12,7 @@ import (
   "github.com/ethereum/go-ethereum/common"
   "github.com/ethereum/go-ethereum/common/hexutil"
   "github.com/ethereum/go-ethereum/rlp"
+  "github.com/ethereum/go-ethereum/event"
   "log"
   "time"
   "github.com/klauspost/compress/zlib"
@@ -86,7 +87,7 @@ func applyParameters(query string, params ...interface{}) string {
   return fmt.Sprintf(query, preparedParams...)
 }
 
-func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, eip155Block, homesteadBlock uint64) {
+func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.DB, quit <-chan struct{}, eip155Block, homesteadBlock uint64) {
   log.Printf("Processing data feed")
   ch := make(chan *datafeed.ChainEvent, 10)
   sub := feed.Subscribe(ch)
@@ -236,6 +237,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, db *sql.DB, quit <-chan struct{}, e
           log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
           continue BLOCKLOOP
         }
+        completionFeed.Send(chainEvent.Block.Hash)
         log.Printf("Spent %v on commit", time.Since(cstart))
         log.Printf("Committed Block %v (%#x) in %v", uint64(chainEvent.Block.Number.ToInt().Int64()), chainEvent.Block.Hash.Bytes(), time.Since(start))
         break
