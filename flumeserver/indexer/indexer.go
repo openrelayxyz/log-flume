@@ -64,6 +64,10 @@ type bytesable interface {
   Bytes() []byte
 }
 
+// applyParameters applies a set of parameters into a SQL statement in a manner
+// that will be safe for execution. Note that this should only be used in the
+// context of blocks, transactions, and logs - beyond the datatypes used in
+// those datatypes, safety is not guaranteed.
 func applyParameters(query string, params ...interface{}) string {
   preparedParams := make([]interface{}, len(params))
   for i, param := range params {
@@ -109,7 +113,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
           log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
           continue BLOCKLOOP
         }
-        dstart := time.Now()
+        // dstart := time.Now()
         deleteRes, err := dbtx.Exec("DELETE FROM blocks WHERE number >= ?;", chainEvent.Block.Number.ToInt().Int64())
         if err != nil {
           dbtx.Rollback()
@@ -121,7 +125,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
         if count, _ := deleteRes.RowsAffected(); count > 0 {
           log.Printf("Deleted %v records for blocks >= %v", count, chainEvent.Block.Number.ToInt().Int64())
         }
-        log.Printf("Spent %v deleting reorged data", time.Since(dstart))
+        // log.Printf("Spent %v deleting reorged data", time.Since(dstart))
         uncles, _ := rlp.EncodeToBytes(chainEvent.Block.Uncles)
         statements := []string{}
         statements = append(statements, applyParameters(
@@ -221,7 +225,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
             ))
           }
         }
-        istart := time.Now()
+        // istart := time.Now()
         if _, err := dbtx.Exec(strings.Join(statements, " ; ")); err != nil {
           dbtx.Rollback()
           stats := db.Stats()
@@ -229,8 +233,8 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
           log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
           continue BLOCKLOOP
         }
-        log.Printf("Spent %v on %v inserts", time.Since(istart), len(statements))
-        cstart := time.Now()
+        // log.Printf("Spent %v on %v inserts", time.Since(istart), len(statements))
+        // cstart := time.Now()
         if err := dbtx.Commit(); err != nil {
           stats := db.Stats()
           log.Printf("WARN: Failed to insert logs: %v", err.Error())
@@ -238,8 +242,8 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
           continue BLOCKLOOP
         }
         completionFeed.Send(chainEvent.Block.Hash)
-        log.Printf("Spent %v on commit", time.Since(cstart))
-        log.Printf("Committed Block %v (%#x) in %v", uint64(chainEvent.Block.Number.ToInt().Int64()), chainEvent.Block.Hash.Bytes(), time.Since(start))
+        // log.Printf("Spent %v on commit", time.Since(cstart))
+        log.Printf("Committed Block %v (%#x) in %v (age %v)", uint64(chainEvent.Block.Number.ToInt().Int64()), chainEvent.Block.Hash.Bytes(), time.Since(start), time.Since(time.Unix(int64(chainEvent.Block.Timestamp), 0)))
         break
       }
     }
