@@ -127,7 +127,7 @@ func accountTxList(w http.ResponseWriter, r *http.Request, db *sql.DB) {
       blocks.number, blocks.time, transactions.hash, transactions.nonce, blocks.hash, transactions.transactionIndex, transactions.recipient, transactions.sender, transactions.value, transactions.gas, transactions.gasPrice, transactions.status, transactions.input, transactions.contractAddress, transactions.cumulativeGasUsed, transactions.gasUsed
     FROM transactions
     INNER JOIN blocks on blocks.number = transactions.block
-    WHERE (transactions.sender = ? OR transactions.recipient = ?) AND (blocks.number >= ? AND blocks.number <= ?)
+    WHERE (transactions.sender = ? OR transactions.recipient = ? OR transactions.contractAddress = ?) AND (blocks.number >= ? AND blocks.number <= ?)
     ORDER BY blocks.number %v, transactions.transactionIndex %v
     LIMIT ?
     OFFSET ?;`, sort, sort),
