@@ -91,7 +91,7 @@ func GetAPIHandler(db *sql.DB, network uint64) func(http.ResponseWriter, *http.R
       accountBlocksMined(w, r, db)
     case "blockgetblockcountdown":
       blockCountdown(w, r, db)
-    case "blockgetblocknobytime":
+      case "blockgetblocknobytime":
       blockByTimestamp(w, r, db)
     case "tokentokeninfo":
       getTokenInfo(w, r, db, chainTokens)
@@ -230,10 +230,14 @@ func accountTokenTransferList(w http.ResponseWriter, r *http.Request, db *sql.DB
     r.Context(),
     fmt.Sprintf(`SELECT
       blocks.number, blocks.time, transactions.hash, transactions.nonce, blocks.hash, event_logs.topic1, event_logs.topic2, event_logs.address, event_logs.data, transactions.transactionIndex, transactions.gas, transactions.gasPrice, transactions.input, transactions.cumulativeGasUsed, transactions.gasUsed
-    FROM event_logs
+    FROM event_logs NOT INDEXED
     INNER JOIN blocks on blocks.number = event_logs.block
     INNER JOIN transactions on event_logs.tx = transactions.id
-    WHERE event_logs.topic0 = X'ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef' AND (event_logs.topic1 = ? OR event_logs.topic2 = ?) AND event_logs.topic3 %v zeroblob(0) AND (blocks.number >= ? AND blocks.number <= ?)
+    WHERE
+      event_logs.topic0 = X'ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef' AND
+      event_logs.rowid IN ( SELECT rowid FROM event_logs WHERE event_logs.topic1 = ? UNION SELECT rowid FROM event_logs WHERE event_logs.topic2 = ?) AND
+      event_logs.topic3 %v zeroblob(0) AND
+      (blocks.number >= ? AND blocks.number <= ?)
     ORDER BY blocks.number %v, transactions.transactionIndex %v
     LIMIT ?
     OFFSET ?;`, topic3Comparison, sort, sort),
@@ -292,9 +296,9 @@ func accountBlocksMined(w http.ResponseWriter, r *http.Request, db *sql.DB) {
   if endBlock == 0 { endBlock = 99999999}
   page, _ := strconv.Atoi(query.Get("page"))
   offset, _ := strconv.Atoi(query.Get("offset"))
-  sort := "ASC"
-  if query.Get("sort") == "desc" {
-    sort = "DESC"
+  sort := "DESC"
+  if query.Get("sort") == "asc" {
+    sort = "ASC"
   }
   if offset == 0 || offset > 10000 { offset = 10000 }
   var headBlockNumber uint64
@@ -381,16 +385,16 @@ func blockCountdown(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 func blockByTimestamp(w http.ResponseWriter, r *http.Request, db *sql.DB) {
   query := r.URL.Query()
   timestamp, _ := strconv.Atoi(query.Get("timestamp"))
-  sort := "DESC"
   operand := "<="
+  value := "MAX(time)"
   if query.Get("closest") == "after" {
     operand = ">="
-    sort = "ASC"
+    value := "MIN(time)"
   }
   var blockNumber string
-  log.Printf(fmt.Sprintf("SELECT number FROM blocks WHERE time %v %v ORDER BY number %v LIMIT 1;", operand, timestamp, sort))
-  row := db.QueryRowContext(r.Context(), fmt.Sprintf("SELECT number FROM blocks WHERE time %v ? ORDER BY number %v LIMIT 1;", operand, sort), timestamp)
-  if err := row.Scan(&blockNumber); err == sql.ErrNoRows {
+  log.Printf(fmt.Sprintf("SELECT %v, number FROM blocks WHERE time %v %v;", value, operand, timestamp))
+  row := db.QueryRowContext(r.Context(), fmt.Sprintf("SELECT %v, number FROM blocks WHERE time %v ?;", value, operand), timestamp)
+  if err := row.Scan(&timestamp, &blockNumber); err == sql.ErrNoRows {
     handleApiResponse(w, 0, "NOTOK-missing", "Error! No closest block found", 400, false)
     return
   } else if handleApiError(err, w, "database error", "Error! Database error", "Error selecting", 500) { return }
