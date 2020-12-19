@@ -31,6 +31,12 @@ import (
 //   logs map[common.Hash][]*types.Log
 // }
 
+func bytesToHash(data []byte) (common.Hash) {
+  result := common.Hash{}
+  copy(result[32 - len(data):], data[:])
+  return result
+}
+
 func ChainEventFromKafka(kce *replica.ChainEvent) *ChainEvent {
   ce := &ChainEvent{
     Block: &miniBlock{
@@ -125,7 +131,10 @@ func NewKafkaDataFeed(urlStr string, db *sql.DB) (DataFeed, error) {
   }
   log.Printf("Parts: %v", parts)
   log.Printf("Resume offset: %v", offsets)
-  consumer, err := replica.NewKafkaEventConsumerFromURLs(strings.TrimPrefix(parts[0], "kafka://"), parts[1], common.Hash{}, offsets)
+  var startHash []byte
+  n := 0
+  db.QueryRowContext(context.Background(), "SELECT max(number), hash FROM blocks;").Scan(&n, &startHash)
+  consumer, err := replica.NewKafkaEventConsumerFromURLs(strings.TrimPrefix(parts[0], "kafka://"), parts[1], bytesToHash(startHash), offsets)
   if err != nil { return nil, err }
   feed := &kafkaDataFeed{
     lastBlockTime: &atomic.Value{},
