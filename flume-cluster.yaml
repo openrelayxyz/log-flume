@@ -733,7 +733,7 @@ Resources:
     Properties:
       LaunchTemplateData:
         ImageId: !If [HasFlumeImageAMI, !Ref FlumeImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
-        InstanceType: c5.large
+        InstanceType: m5.large
         TagSpecifications:
           - ResourceType: instance
             Tags:
@@ -1045,15 +1045,24 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3ECBucketName
-        S3Key: lambdaPackage-17.zip
+        S3Key: lambdaPackage-21.zip
       Description: "Launch instances to snapshot chaindata"
       Environment:
         Variables:
           LAUNCH_TEMPLATE_ID: !Ref FlumeSnapshotLaunchTemplate
           LAUNCH_TEMPLATE_VERSION: !Sub "${FlumeSnapshotLaunchTemplate.LatestVersionNumber}"
           SUBNET_ID:
-            "Fn::ImportValue":
-                !Sub "${InfrastructureStack}-PublicA"
+            "Fn::Sub":
+              - "${PublicA},${PublicB},${PublicC}"
+              - PublicA:
+                  "Fn::ImportValue":
+                      !Sub "${InfrastructureStack}-PublicA"
+                PublicB:
+                  "Fn::ImportValue":
+                      !Sub "${InfrastructureStack}-PublicB"
+                PublicC:
+                  "Fn::ImportValue":
+                      !Sub "${InfrastructureStack}-PublicC"
           VOLUME_SIZE: !Ref FlumeDiskSize
       Handler: "getSnapshot.handler"
       Role: !Sub ${FlumeSnapshotLambdaRole.Arn}
