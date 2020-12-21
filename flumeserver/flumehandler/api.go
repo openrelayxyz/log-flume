@@ -140,8 +140,11 @@ func accountTxList(w http.ResponseWriter, r *http.Request, db *sql.DB) {
     var blockHash, txRecipient, txHash, txSender, txValue, txInput, txContractAddress []byte
     err := rows.Scan(&blockNumber, &blockTime, &txHash, &txNonce, &blockHash, &txIndex, &txRecipient, &txSender, &txValue, &txGas, &txGasPrice, &txStatus, &txInput, &txContractAddress, &txCumulativeGasUsed, &txGasUsed)
     if handleApiError(err, w, "database error", "Error! Database error", "Error processing", 500) { return }
-    isError := "0"
-    if txStatus == "0" { isError = "1" }
+    isError := "1"
+    if txStatus == "0" {
+      isError = "0"
+      txStatus = ""
+    }
     input, err := decompress(txInput)
     if handleApiError(err, w, "database error", "Error! Database error", "Error decompressing", 500) { return }
     contractAddress := ""
