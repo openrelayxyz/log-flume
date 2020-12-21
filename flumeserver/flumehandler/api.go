@@ -22,7 +22,7 @@ type txResponse struct {
   BlockHash common.Hash `json:"blockHash"`
   TransactionIndex string `json:"transactionIndex"`
   From common.Address `json:"from"`
-  To common.Address `json:"to"`
+  To string `json:"to"`
   Value string `json:"value"`
   Gas string `json:"gas"`
   GasPrice string `json:"gasPrice"`
@@ -148,6 +148,7 @@ func accountTxList(w http.ResponseWriter, r *http.Request, db *sql.DB) {
     if addr := bytesToAddress(txContractAddress); addr != (common.Address{}) {
       contractAddress = addr.String()
     }
+    to := bytesToAddress(txRecipient)
     tx := &txResponse{
       BlockNumber: fmt.Sprintf("%v", blockNumber),
       TimeStamp: blockTime,
@@ -156,7 +157,6 @@ func accountTxList(w http.ResponseWriter, r *http.Request, db *sql.DB) {
       BlockHash: bytesToHash(blockHash),
       TransactionIndex: txIndex,
       From: bytesToAddress(txSender),
-      To: bytesToAddress(txRecipient),
       Value: new(big.Int).SetBytes(txValue).String(),
       Gas: txGas,
       GasPrice: txGasPrice,
@@ -167,6 +167,9 @@ func accountTxList(w http.ResponseWriter, r *http.Request, db *sql.DB) {
       Confirmations: fmt.Sprintf("%v", (headBlockNumber - blockNumber) + 1),
       IsError: isError,
       ContractAddress: contractAddress,
+    }
+    if len(txRecipient) > 0 {
+      tx.To = to.String()
     }
     result = append(result, tx)
   }
