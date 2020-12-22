@@ -132,7 +132,7 @@ func accountTxList(w http.ResponseWriter, r *http.Request, db *sql.DB) {
       UNION SELECT rowid FROM transactions WHERE recipient = ? AND (block >= ? AND block <= ?)
       UNION SELECT rowid FROM transactions WHERE contractAddress = ? AND (block >= ? AND block <= ?)
       ORDER BY rowid %v LIMIT ? OFFSET ?
-    ) ORDER BY rowid %v;`, sort, sort),
+    ) ORDER BY transactions.block %v transactions.transactionIndex %v;`, sort, sort, sort),
     trimPrefix(addr.Bytes()), startBlock, endBlock, trimPrefix(addr.Bytes()), startBlock, endBlock, trimPrefix(addr.Bytes()), startBlock, endBlock, offset, (page - 1) * offset)
   if handleApiError(err, w, "database error", "Error! Database error", "Error querying", 500) { return }
   result := []*txResponse{}
@@ -242,13 +242,12 @@ func accountTokenTransferList(w http.ResponseWriter, r *http.Request, db *sql.DB
     INNER JOIN blocks on blocks.number = event_logs.block
     INNER JOIN transactions on event_logs.tx = transactions.id
     WHERE
-      event_logs.topic0 = X'ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef' AND
-      event_logs.rowid IN ( SELECT rowid FROM event_logs WHERE event_logs.topic1 = ? UNION SELECT rowid FROM event_logs WHERE event_logs.topic2 = ?) AND
-      event_logs.topic3 %v zeroblob(0) AND
-      (blocks.number >= ? AND blocks.number <= ?)
-    ORDER BY blocks.number %v, transactions.transactionIndex %v
-    LIMIT ?
-    OFFSET ?;`, topic3Comparison, sort, sort),
+      event_logs.rowid IN (
+        SELECT rowid FROM event_logs INDEXED BY topic1 WHERE event_logs.topic0 = X'ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef' AND event_logs.topic1 = ? AND event_logs.topic3 %v zeroblob(0) AND (block >= ? AND block <= ?)
+        UNION SELECT rowid FROM event_logs INDEXED BY topic2 WHERE event_logs.topic0 = X'ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef' AND event_logs.topic2 = ? AND event_logs.topic3 %v zeroblob(0) AND (block >= ? AND block <= ?)
+        ORDER BY rowid %v LIMIT ? OFFSET ?
+      )
+    ORDER BY blocks.number %v, event_logs.logIndex %v`, topic3Comparison, topic3Comparison, sort, sort, sort),
     trimPrefix(addr.Bytes()), trimPrefix(addr.Bytes()), startBlock, endBlock, offset, (page - 1) * offset)
   if handleApiError(err, w, "database error", "Error! Database error", "Error processing", 500) { return }
   result := []*tokenTransfer{}
