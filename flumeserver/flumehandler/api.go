@@ -91,7 +91,7 @@ func GetAPIHandler(db *sql.DB, network uint64) func(http.ResponseWriter, *http.R
       accountBlocksMined(w, r, db)
     case "blockgetblockcountdown":
       blockCountdown(w, r, db)
-      case "blockgetblocknobytime":
+    case "blockgetblocknobytime":
       blockByTimestamp(w, r, db)
     case "tokentokeninfo":
       getTokenInfo(w, r, db, chainTokens)
@@ -124,14 +124,16 @@ func accountTxList(w http.ResponseWriter, r *http.Request, db *sql.DB) {
   rows, err := db.QueryContext(
     r.Context(),
     fmt.Sprintf(`SELECT
-      blocks.number, blocks.time, transactions.hash, transactions.nonce, blocks.hash, transactions.transactionIndex, transactions.recipient, transactions.sender, transactions.value, transactions.gas, transactions.gasPrice, transactions.status, transactions.input, transactions.contractAddress, transactions.cumulativeGasUsed, transactions.gasUsed
+      transactions.block, blocks.time, transactions.hash, transactions.nonce, blocks.hash, transactions.transactionIndex, transactions.recipient, transactions.sender, transactions.value, transactions.gas, transactions.gasPrice, transactions.status, transactions.input, transactions.contractAddress, transactions.cumulativeGasUsed, transactions.gasUsed
     FROM transactions
     INNER JOIN blocks on blocks.number = transactions.block
-    WHERE (transactions.sender = ? OR transactions.recipient = ? OR transactions.contractAddress = ?) AND (blocks.number >= ? AND blocks.number <= ?)
-    ORDER BY blocks.number %v, transactions.transactionIndex %v
-    LIMIT ?
-    OFFSET ?;`, sort, sort),
-    trimPrefix(addr.Bytes()), trimPrefix(addr.Bytes()), trimPrefix(addr.Bytes()), startBlock, endBlock, offset, (page - 1) * offset)
+    WHERE transactions.rowid in (
+      SELECT rowid FROM transactions WHERE sender = ? AND (block >= ? AND block <= ?)
+      UNION SELECT rowid FROM transactions WHERE recipient = ? AND (block >= ? AND block <= ?)
+      UNION SELECT rowid FROM transactions WHERE contractAddress = ? AND (block >= ? AND block <= ?)
+      ORDER BY rowid %v LIMIT ? OFFSET ?
+    ) ORDER BY rowid %v;`, sort, sort),
+    trimPrefix(addr.Bytes()), startBlock, endBlock, trimPrefix(addr.Bytes()), startBlock, endBlock, trimPrefix(addr.Bytes()), startBlock, endBlock, offset, (page - 1) * offset)
   if handleApiError(err, w, "database error", "Error! Database error", "Error querying", 500) { return }
   result := []*txResponse{}
   for rows.Next() {
