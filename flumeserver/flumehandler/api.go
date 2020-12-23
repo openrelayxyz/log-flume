@@ -256,7 +256,7 @@ func accountTokenTransferList(w http.ResponseWriter, r *http.Request, db *sql.DB
     var blockNumber uint64
     var blockTime, txNonce, txIndex,  txGas, txGasPrice, txCumulativeGasUsed, txGasUsed string
     var blockHash, tokenRecipient, txHash, tokenSender, tokenID, tokenValue, txInput, tokenContractAddress []byte
-    err := rows.Scan(&blockNumber, &blockTime, &txHash, &txNonce, &blockHash, &tokenRecipient, &tokenSender, &tokenID, &tokenContractAddress, &tokenValue, &txIndex, &txGas, &txGasPrice, &txInput, &txCumulativeGasUsed, &txGasUsed)
+    err := rows.Scan(&blockNumber, &blockTime, &txHash, &txNonce, &blockHash, &tokenSender, &tokenRecipient, &tokenID, &tokenContractAddress, &tokenValue, &txIndex, &txGas, &txGasPrice, &txInput, &txCumulativeGasUsed, &txGasUsed)
     if handleApiError(err, w, "database error", "Error! Database error", "Error processing", 500) { return }
     token := chainTokens[bytesToAddress(tokenContractAddress)]
     item := &tokenTransfer{
