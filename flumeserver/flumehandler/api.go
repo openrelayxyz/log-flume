@@ -193,7 +193,7 @@ type tokenTransfer struct {
   ContractAddress common.Address `json:"contractAddress"`
   To common.Address `json:"to"`
   Value string `json:"value,omitempty"`
-  TokenID *common.Hash `json:"tokenID,omitempty"`
+  TokenID string `json:"tokenID,omitempty"`
   TokenName string `json:"tokenName"`
   TokenSymbol string `json:"tokenSymbol"`
   TokenDecimal string `json:"tokenDecimal"`
@@ -283,8 +283,7 @@ func accountTokenTransferList(w http.ResponseWriter, r *http.Request, db *sql.DB
       if handleApiError(err, w, "database error", "Error! Database error", "Error decompressing", 500) { return }
       item.Value = new(big.Int).SetBytes(value).String()
     } else {
-      tokid := bytesToHash(tokenID)
-      item.TokenID = &tokid
+      item.TokenID = new(big.Int).SetBytes(tokenID).String()
     }
     result = append(result, item)
   }
