@@ -279,7 +279,9 @@ func accountTokenTransferList(w http.ResponseWriter, r *http.Request, db *sql.DB
       Confirmations: fmt.Sprintf("%v", (headBlockNumber - blockNumber) + 1),
     }
     if !nft {
-      item.Value = new(big.Int).SetBytes(tokenValue).String()
+      value, err := decompress(tokenValue)
+      if handleApiError(err, w, "database error", "Error! Database error", "Error decompressing", 500) { return }
+      item.Value = new(big.Int).SetBytes(value).String()
     } else {
       tokid := bytesToHash(tokenID)
       item.TokenID = &tokid
