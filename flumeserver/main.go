@@ -12,6 +12,7 @@ import (
   gethLog "github.com/ethereum/go-ethereum/log"
   "github.com/ethereum/go-ethereum/event"
   "net/http"
+  "path/filepath"
   "flag"
   "fmt"
   "time"
@@ -90,6 +91,7 @@ func main() {
   if err != nil { log.Fatalf(err.Error()) }
   logsdb.Exec(fmt.Sprintf("pragma mmap_size=%v", *mmap))
   logsdb.Exec(fmt.Sprintf("pragma cache_size=%v", *cacheSize))
+  logsdb.Exec(fmt.Sprintf("pragma temp_store_directory = '%v'", filepath.Dir(sqlitePath)))
   if *memstore {
     logsdb.Exec("pragma temp_store = memory")
   }

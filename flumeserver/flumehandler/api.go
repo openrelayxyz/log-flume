@@ -248,7 +248,7 @@ func accountTokenTransferList(w http.ResponseWriter, r *http.Request, db *sql.DB
         ORDER BY rowid %v LIMIT ? OFFSET ?
       )
     ORDER BY blocks.number %v, event_logs.logIndex %v`, topic3Comparison, topic3Comparison, sort, sort, sort),
-    trimPrefix(addr.Bytes()), trimPrefix(addr.Bytes()), startBlock, endBlock, offset, (page - 1) * offset)
+    trimPrefix(addr.Bytes()), startBlock, endBlock, trimPrefix(addr.Bytes()), startBlock, endBlock, offset, (page - 1) * offset)
   if handleApiError(err, w, "database error", "Error! Database error", "Error processing", 500) { return }
   result := []*tokenTransfer{}
   for rows.Next() {
