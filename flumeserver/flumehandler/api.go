@@ -192,7 +192,8 @@ type tokenTransfer struct {
   From common.Address `json:"from"`
   ContractAddress common.Address `json:"contractAddress"`
   To common.Address `json:"to"`
-  Value string `json:"value"`
+  Value string `json:"value,omitempty"`
+  TokenID *common.Hash `json:"tokenID,omitempty"`
   TokenName string `json:"tokenName"`
   TokenSymbol string `json:"tokenSymbol"`
   TokenDecimal string `json:"tokenDecimal"`
@@ -237,7 +238,7 @@ func accountTokenTransferList(w http.ResponseWriter, r *http.Request, db *sql.DB
   rows, err := db.QueryContext(
     r.Context(),
     fmt.Sprintf(`SELECT
-      blocks.number, blocks.time, transactions.hash, transactions.nonce, blocks.hash, event_logs.topic1, event_logs.topic2, event_logs.address, event_logs.data, transactions.transactionIndex, transactions.gas, transactions.gasPrice, transactions.input, transactions.cumulativeGasUsed, transactions.gasUsed
+      blocks.number, blocks.time, transactions.hash, transactions.nonce, blocks.hash, event_logs.topic1, event_logs.topic2, event_logs.topic3, event_logs.address, event_logs.data, transactions.transactionIndex, transactions.gas, transactions.gasPrice, transactions.input, transactions.cumulativeGasUsed, transactions.gasUsed
     FROM event_logs NOT INDEXED
     INNER JOIN blocks on blocks.number = event_logs.block
     INNER JOIN transactions on event_logs.tx = transactions.id
@@ -254,11 +255,11 @@ func accountTokenTransferList(w http.ResponseWriter, r *http.Request, db *sql.DB
   for rows.Next() {
     var blockNumber uint64
     var blockTime, txNonce, txIndex,  txGas, txGasPrice, txCumulativeGasUsed, txGasUsed string
-    var blockHash, tokenRecipient, txHash, tokenSender, tokenValue, txInput, tokenContractAddress []byte
-    err := rows.Scan(&blockNumber, &blockTime, &txHash, &txNonce, &blockHash, &tokenRecipient, &tokenSender, &tokenContractAddress, &tokenValue, &txIndex, &txGas, &txGasPrice, &txInput, &txCumulativeGasUsed, &txGasUsed)
+    var blockHash, tokenRecipient, txHash, tokenSender, tokenID, tokenValue, txInput, tokenContractAddress []byte
+    err := rows.Scan(&blockNumber, &blockTime, &txHash, &txNonce, &blockHash, &tokenRecipient, &tokenSender, &tokenID, &tokenContractAddress, &tokenValue, &txIndex, &txGas, &txGasPrice, &txInput, &txCumulativeGasUsed, &txGasUsed)
     if handleApiError(err, w, "database error", "Error! Database error", "Error processing", 500) { return }
     token := chainTokens[bytesToAddress(tokenContractAddress)]
-    result = append(result, &tokenTransfer{
+    item := &tokenTransfer{
       BlockNumber: fmt.Sprintf("%v", blockNumber),
       TimeStamp: blockTime,
       Hash: bytesToHash(txHash),
@@ -266,8 +267,7 @@ func accountTokenTransferList(w http.ResponseWriter, r *http.Request, db *sql.DB
       BlockHash: bytesToHash(blockHash),
       From: bytesToAddress(tokenSender),
       ContractAddress: bytesToAddress(tokenContractAddress),
-      To: bytesToAddress(tokenContractAddress),
-      Value: new(big.Int).SetBytes(tokenValue).String(),
+      To: bytesToAddress(tokenRecipient),
       TokenName: token.Name,
       TokenSymbol: token.Symbol,
       TokenDecimal: fmt.Sprintf("%v", token.Decimals),
@@ -277,7 +277,14 @@ func accountTokenTransferList(w http.ResponseWriter, r *http.Request, db *sql.DB
       CumulativeGasUsed: txCumulativeGasUsed,
       GasUsed: txGasUsed,
       Confirmations: fmt.Sprintf("%v", (headBlockNumber - blockNumber) + 1),
-    })
+    }
+    if !nft {
+      item.Value = new(big.Int).SetBytes(tokenValue).String()
+    } else {
+      tokid := bytesToHash(tokenID)
+      item.TokenID = &tokid
+    }
+    result = append(result, item)
   }
   if handleApiError(rows.Err(), w, "database error", "Error! Database error", "Error processing", 500) { return }
   handleApiResponse(w, 1, "OK", result, 200, len(result) == 0)
