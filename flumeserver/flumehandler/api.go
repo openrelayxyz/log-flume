@@ -407,7 +407,6 @@ func blockByTimestamp(w http.ResponseWriter, r *http.Request, db *sql.DB) {
     value = "MIN(time)"
   }
   var blockNumber string
-  log.Printf(fmt.Sprintf("SELECT %v, number FROM blocks WHERE time %v %v;", value, operand, timestamp))
   row := db.QueryRowContext(r.Context(), fmt.Sprintf("SELECT %v, number FROM blocks WHERE time %v ?;", value, operand), timestamp)
   if err := row.Scan(&timestamp, &blockNumber); err == sql.ErrNoRows {
     handleApiResponse(w, 0, "NOTOK-missing", "Error! No closest block found", 400, false)
