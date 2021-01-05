@@ -36,6 +36,16 @@ Parameters:
   NetworkId:
     Type: String
     Description: An identifier for the network this cluster represents. This should be common across all clusters representing the same network. (this is a subdirectory backups/snapshots will be stored)
+  FlumeNetworkFlag:
+    Type: String
+    AllowedValues:
+      - "--mainnet"
+      - "--classic"
+      - "--goerli"
+      - "--ropsten"
+      - "--rinkeby"
+    Default: "--mainnet"
+    Description: The Flume network flag
   FlumeClusterVersion:
     Type: String
     Default: v0.1
@@ -899,7 +909,7 @@ Resources:
                 Environment=HOME=/var/lib/flume
                 Type=simple
                 LimitNOFILE=655360
-                ExecStart=/usr/bin/flumeserver /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"
+                ExecStart=/usr/bin/flumeserver ${FlumeNetworkFlag} /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"
                 CPUSchedulingPolicy=fifo
                 CPUSchedulingPriority=20
                 KillMode=process
