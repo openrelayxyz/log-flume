@@ -187,7 +187,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
           // log.Printf("Inserting transaction %#x", txwr.Transaction.Hash())
           statements = append(statements, applyParameters(
             "INSERT INTO transactions(block, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, `value`, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, `status`) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
-            chainEvent.Block.Number,
+            chainEvent.Block.Number.ToInt().Int64(),
             txwr.Transaction.Gas(),
             txwr.Transaction.GasPrice().Uint64(),
             txHash,
@@ -217,7 +217,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
               getTopicIndex(logRecord.Topics, 3),
               getTopicIndex(logRecord.Topics, 4),
               compress(logRecord.Data),
-              chainEvent.Block.Number,
+              chainEvent.Block.Number.ToInt().Int64(),
               logRecord.Index,
               txHash,
             ))
