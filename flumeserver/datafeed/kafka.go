@@ -131,9 +131,9 @@ func NewKafkaDataFeed(urlStr string, db *sql.DB) (DataFeed, error) {
   }
   log.Printf("Parts: %v", parts)
   log.Printf("Resume offset: %v", offsets)
-  var startHash []byte
+  var startHash, td []byte
   n := 0
-  db.QueryRowContext(context.Background(), "SELECT max(number), hash FROM blocks;").Scan(&n, &startHash)
+  db.QueryRowContext(context.Background(), "SELECT max(number), hash, td FROM blocks;").Scan(&n, &startHash, &td)
   consumer, err := replica.NewKafkaEventConsumerFromURLs(strings.TrimPrefix(parts[0], "kafka://"), parts[1], bytesToHash(startHash), offsets)
   if err != nil { return nil, err }
   feed := &kafkaDataFeed{

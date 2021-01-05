@@ -78,8 +78,6 @@ func applyParameters(query string, params ...interface{}) string {
       preparedParams[i] = fmt.Sprintf("X'%x'", trimPrefix(value.Bytes()))
     case hexutil.Bytes:
       preparedParams[i] = fmt.Sprintf("X'%x'", value[:])
-    case hexutil.Big:
-      preparedParams[i] = fmt.Sprintf("%v", value.ToInt().Int64())
     case hexutil.Uint64:
       preparedParams[i] = fmt.Sprintf("%v", uint64(value))
     case types.BlockNonce:
@@ -129,8 +127,8 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
         uncles, _ := rlp.EncodeToBytes(chainEvent.Block.Uncles)
         statements := []string{}
         statements = append(statements, applyParameters(
-          "INSERT INTO blocks(number, hash, parentHash, uncleHash, coinbase, root, txRoot, receiptRoot, bloom, difficulty, gasLimit, gasUsed, time, extra, mixDigest, nonce, uncles, size, td) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
-          chainEvent.Block.Number,
+          "INSERT INTO blocks(number, hash, parentHash, uncleHash, coinbase, root, txRoot, receiptRoot, bloom, difficulty, gasLimit, gasUsed, `time`, extra, mixDigest, nonce, uncles, size, td) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
+          chainEvent.Block.Number.ToInt().Int64(),
           chainEvent.Block.Hash,
           chainEvent.Block.ParentHash,
           chainEvent.Block.Sha3Uncles,
@@ -139,7 +137,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
           chainEvent.Block.TransactionsRoot,
           chainEvent.Block.ReceiptRoot,
           compress(chainEvent.Block.LogsBloom),
-          chainEvent.Block.Difficulty,
+          chainEvent.Block.Difficulty.ToInt().Int64(),
           chainEvent.Block.GasLimit,
           chainEvent.Block.GasUsed,
           chainEvent.Block.Timestamp,
@@ -148,7 +146,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
           chainEvent.Block.Nonce,
           uncles, // rlp
           chainEvent.Block.Size,
-          chainEvent.Block.TotalDifficulty,
+          chainEvent.Block.TotalDifficulty.ToInt().Bytes(),
         ))
         var signer types.Signer
         senderMap := make(map[common.Hash]<-chan common.Address)
@@ -188,7 +186,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
           }
           // log.Printf("Inserting transaction %#x", txwr.Transaction.Hash())
           statements = append(statements, applyParameters(
-            "INSERT INTO transactions(block, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, value, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, status) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
+            "INSERT INTO transactions(block, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, `value`, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, `status`) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
             chainEvent.Block.Number,
             txwr.Transaction.Gas(),
             txwr.Transaction.GasPrice().Uint64(),
