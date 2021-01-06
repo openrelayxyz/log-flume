@@ -2,9 +2,8 @@ Description: A  pool of flume servers for Ether Cattle
 
 Parameters:
   FlumeDiskSize:
-    Default: '250'
+    Default: '850'
     Description: Size of each node's chaindata storage volume in GiB
-    MaxValue: '1024'
     MinValue: '8'
     Type: Number
   FlumeImageAMI:
@@ -72,11 +71,18 @@ Parameters:
     Description: The percentage (0 - 100) CPU utilization target for auto scaling flume
   FlumeSize:
     Type: String
-    Description: Whether to use full size flume or smaller ones. "full" will use a pool of large instances from the m5d, m5ad, r5d, and r5ad families. "small" will use a pool of medium instances from the t3 and t3a families. Use "small" if you expect a small request volume.
+    Description: Whether to use full size flume or smaller ones. Use "small" if you expect a small request volume.
     AllowedValues:
       - full
       - small
     Default: full
+  FlumeProcessorArchitecture:
+    Type: String
+    Description: Whether to use ARM64 or AMD64 instance types
+    AllowedValues:
+      - arm64
+      - amd64
+    Default: arm64
   FlumeAlternateTargetGroup:
     Type: String
     Description: An alternative comma-separated list of target groups that flume should be assigned to.
@@ -130,6 +136,7 @@ Metadata:
           - NotificationEmail
           - KeyName
           - FlumeSnapshotScheduleExpression
+          - FlumeProcessorArchitecture
       - Label:
           default: Cluster
         Parameters:
@@ -190,7 +197,7 @@ Metadata:
 
 Mappings:
   InstanceSizes:
-    Flume:
+    amd64:
       full:
         - InstanceType: i3en.large
         - InstanceType: m5.xlarge
@@ -204,53 +211,77 @@ Mappings:
       small:
         - InstanceType: t3.medium
         - InstanceType: t3a.medium
+    arm64:
+      full:
+        - InstanceType: r6g.large
+        - InstanceType: r6gd.large
+        - InstanceType: m6g.xlarge
+        - InstanceType: m6gd.xlarge
+      small:
+        - InstanceType: t4g.medium
+        - InstanceType: m6g.medium
+        - InstanceType: m6gd.medium
+        - InstanceType: c6g.large
+        - InstanceType: c6gd.large
+        - InstanceType: c6gn.large
+        - InstanceType: a1.large
   PoolSize:
-    Size:
+    amd64:
       full: 11
       small: 6
+    arm64:
+      full: 8
+      small: 12
   RegionMap:
     us-west-1:
-      AL2AMI: ami-056ee704806822732
+      amd64: ami-03130878b60947df3
+      arm64: ami-0cf4073a76054906c
     eu-central-1:
-      AL2AMI: ami-0cc293023f983ed53
-    cn-north-1:
-      AL2AMI: ami-0cad3dea07a7c36f9
+      amd64: ami-03c3a7e4263fd998c
+      arm64: ami-0f6ccb60ef96d13d2
     us-east-1:
-      AL2AMI: ami-0b898040803850657
+      amd64: ami-0be2609ba883822ec
+      arm64: ami-0c582118883b46f4f
     ap-northeast-2:
-      AL2AMI: ami-095ca789e0549777d
-    us-gov-west1:
-      AL2AMI:  ami-6b157f0a
+      amd64: ami-0094965d55b3bb1ff
+      arm64: ami-01b0796a552129792
     sa-east-1:
-      AL2AMI: ami-058943e7d9b9cabfb
-    ap-northeast-3:
-      AL2AMI: ami-088d713d672ed235e
+      amd64: ami-022082b7f1da62478
+      arm64: ami-08688c4914619fb44
     ap-northeast-1:
-      AL2AMI: ami-0c3fd0f5d33134a76
+      amd64: ami-01748a72bed07727c
+      arm64: ami-0f53b51ee1388fd0b
     ap-southeast-1:
-      AL2AMI: ami-01f7527546b557442
+      amd64: ami-00b8d9cb8a7161e41
+      arm64: ami-0486bf17047964f1b
     us-east-2:
-      AL2AMI: ami-0d8f6eb4f641ef691
+      amd64: ami-0a0ad6b70e61be944
+      arm64: ami-0f278a714e7f68bd9
     ap-southeast-2:
-      AL2AMI: ami-0dc96254d5535925f
-    cn-northwest-1:
-      AL2AMI: ami-094b7433620966eb5
+      amd64: ami-06ce513624b435a22
+      arm64: ami-047a2b61bb2e57c40
     eu-west-1:
-      AL2AMI: ami-0bbc25e23a7640b9b
+      amd64: ami-01720b5f421cf0179
+      arm64: ami-04c2a5c7e6c051fb2
     eu-north-1:
-      AL2AMI: ami-d16fe6af
-    us-gov-east1:
-      AL2AMI: ami-1208ee63
+      amd64: ami-02cb52d7ba9887a93
+      arm64: ami-0f6cd3afd736539c1
     ap-south-1:
-      AL2AMI: ami-0d2692b6acea72ee6
+      amd64: ami-04b1ddd35fd71475a
+      arm64: ami-0d5c7546de7618191
     eu-west-3:
-      AL2AMI: ami-0adcddd3324248c4c
+      amd64: ami-00798d7180f25aac2
+      arm64: ami-0aa574b370b00dac3
     eu-west-2:
-      AL2AMI: ami-0d8e27447ec2c8410
+      amd64: ami-0e80a462ede03e653
+      arm64: ami-03144ab666315a8a3
     ca-central-1:
-      AL2AMI: ami-0d4ae09ec9361d8ac
+      amd64: ami-0c3e7f50c89a372ae
+      arm64: ami-094c99c33f7bb0f28
     us-west-2:
-      AL2AMI: ami-082b5a644766e0e6f
+      amd64: ami-0a36eb8fadc976275
+      arm64: ami-0bdfb42effc4b150f
+
 
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
@@ -262,6 +293,7 @@ Conditions:
   SmallFlume: !Equals [ !Ref FlumeSize, "small"]
   FlumeSpotLowestPrice: !Equals [!Ref FlumeSpotAllocationStrategy, "lowest-price"]
   SpecifiesConsulRegion: !Not [ !Equals [ !Ref ConsulPrimaryRegion, "" ] ]
+  IsArm: !Equals [ !Ref FlumeProcessorArchitecture, "arm64" ]
 
 
 Resources:
@@ -277,48 +309,19 @@ Resources:
       Path: "/"
       ManagedPolicyArns:
       - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-  MulMin:
-    Type: AWS::Lambda::Function
-    Properties:
-      Handler: index.handler
-      Role: !GetAtt LambdaExecutionRole.Arn
-      Code:
-        ZipFile: !Sub |
-          var response = require('./cfn-response');
-          exports.handler = function(event, context) {
-            var result = parseInt(event.ResourceProperties.Op1) * parseInt(event.ResourceProperties.Op2);
-            if(event.ResourceProperties.Max) {
-              result = Math.min(result, parseInt(event.ResourceProperties.Max));
-            }
-            response.send(event, context, response.SUCCESS, {Value: result});
-          };
-      Runtime: nodejs12.x
-  Max:
-    Type: AWS::Lambda::Function
-    Properties:
-      Handler: index.handler
-      Role: !GetAtt LambdaExecutionRole.Arn
-      Code:
-        ZipFile: !Sub |
-          var response = require('./cfn-response');
-          exports.handler = function(event, context) {
-            var result = Math.max(parseInt(event.ResourceProperties.Op1), parseInt(event.ResourceProperties.Op2));
-            response.send(event, context, response.SUCCESS, {Value: result});
-          };
-      Runtime: nodejs12.x
-  HDDSize:
-    Type: Custom::Max
-    Properties:
-      ServiceToken: !GetAtt Max.Arn
-      Op1: !Ref FlumeDiskSize
-      Op2: 500
-  VolumeIOPS:
-    Type: Custom::MulMin
-    Properties:
-      ServiceToken: !GetAtt MulMin.Arn
-      Op1: !Ref FlumeDiskSize
-      Op2: 50
-      Max: 5000
+  # Max:
+  #   Type: AWS::Lambda::Function
+  #   Properties:
+  #     Handler: index.handler
+  #     Role: !GetAtt LambdaExecutionRole.Arn
+  #     Code:
+  #       ZipFile: !Sub |
+  #         var response = require('./cfn-response');
+  #         exports.handler = function(event, context) {
+  #           var result = Math.max(parseInt(event.ResourceProperties.Op1), parseInt(event.ResourceProperties.Op2));
+  #           response.send(event, context, response.SUCCESS, {Value: result});
+  #         };
+  #     Runtime: nodejs12.x
 
   AggregatedNotifications:
     Type: AWS::SNS::Topic
@@ -625,10 +628,10 @@ Resources:
                 command: mkdir -p /opt/consul/data
           install_consul:
             sources:
-              /usr/bin/: https://releases.hashicorp.com/consul/1.7.0/consul_1.7.0_linux_amd64.zip
+              /usr/bin/: !Sub https://releases.hashicorp.com/consul/1.7.0/consul_1.7.0_linux_${FlumeProcessorArchitecture}.zip
           install_consul_template:
             sources:
-              /usr/bin/: https://releases.hashicorp.com/consul-template/0.24.0/consul-template_0.24.0_linux_amd64.zip
+              /usr/bin/: !Sub https://releases.hashicorp.com/consul-template/0.24.0/consul-template_0.24.0_linux_${FlumeProcessorArchitecture}.zip
           consul_bootstrap:
             files:
               /opt/consul/config/client.json:
@@ -793,8 +796,8 @@ Resources:
                 command: systemctl start flume-sidecar
     Properties:
       LaunchTemplateData:
-        ImageId: !If [HasFlumeImageAMI, !Ref FlumeImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
-        InstanceType: m5ad.large
+        ImageId: !If [HasFlumeImageAMI, !Ref FlumeImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", !Ref FlumeProcessorArchitecture]]
+        InstanceType: !If [ IsArm, r6g.large, 5ad.large ]
         TagSpecifications:
           - ResourceType: instance
             Tags:
@@ -820,9 +823,9 @@ Resources:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref FlumeDiskSize
-            VolumeType: io1
-            Iops: !GetAtt VolumeIOPS.Value
-            # SnapshotId: !Ref SnapshotId
+            VolumeType: gp3
+            Iops: 4000
+            Throughput: 1000
 
         UserData:
           "Fn::Base64":
@@ -872,7 +875,7 @@ Resources:
                 # fi
 
                 #Copy Down flumeserver
-                if ! aws s3 cp s3://${S3ECBucketName}/${S3FlumeBinaryDirectory}/flumeserver /usr/bin/flumeserver
+                if ! aws s3 cp s3://${S3ECBucketName}/${S3FlumeBinaryDirectory}/flumeserver-$ARCH /usr/bin/flumeserver
                 then
                   if [ "${AggregatedNotifications}" != "" ]
                     then
@@ -886,8 +889,11 @@ Resources:
                 fi
                 chmod +x /usr/bin/flumeserver
 
+                aws s3 cp s3://${S3ECBucketName}/backupmanager/v0.1.0/backupmanager-linux-$ARCH /usr/bin/backupmanager
+                chmod +x /usr/bin/backupmanager
+
                 #copy down the flume backup
-                if ! aws s3 cp s3://${S3FlumeBackup} - | lz4  -d - /var/lib/flume/item.sqlite
+                if ! backupmanager download s3://${S3FlumeBackup} /var/lib/flume/item.sqlite
                 then
                   if [ "${AggregatedNotifications}" != "" ]
                     then
@@ -957,7 +963,7 @@ Resources:
 
                 sleep 300
                 VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
-                aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp2 &
+                aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp3 --iops 3000 --throughput 128 &
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 BaseInfrastructure:
@@ -993,12 +999,12 @@ Resources:
         InstancesDistribution:
           SpotAllocationStrategy: !Ref FlumeSpotAllocationStrategy
           OnDemandPercentageAboveBaseCapacity: !Ref FlumeOnDemandPercentage
-          SpotInstancePools: !If [ FlumeSpotLowestPrice, !FindInMap [PoolSize, Size, !Ref FlumeSize], !Ref "AWS::NoValue"]
+          SpotInstancePools: !If [ FlumeSpotLowestPrice, !FindInMap [PoolSize, !Ref FlumeProcessorArchitecture, !Ref FlumeSize], !Ref "AWS::NoValue"]
         LaunchTemplate:
           LaunchTemplateSpecification:
             LaunchTemplateId: !Ref FlumeLaunchTemplate
             Version: !Sub ${FlumeLaunchTemplate.LatestVersionNumber}
-          Overrides: !FindInMap [InstanceSizes, Flume, !Ref FlumeSize]
+          Overrides: !FindInMap [InstanceSizes, !Ref FlumeProcessorArchitecture, !Ref FlumeSize]
       MinSize: !Ref FlumeTargetCapacity
       MaxSize: !Ref FlumeMaxCapacity
       HealthCheckType: EC2
@@ -1015,8 +1021,8 @@ Resources:
     Type: AWS::EC2::LaunchTemplate
     Properties:
       LaunchTemplateData:
-        ImageId: !If [HasFlumeImageAMI, !Ref FlumeImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
-        InstanceType: r5.large
+        ImageId: !If [HasFlumeImageAMI, !Ref FlumeImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", !Ref FlumeProcessorArchitecture ]]
+        InstanceType: !If [ IsArm, r6g.large, r5.large ]
         TagSpecifications:
           - ResourceType: instance
             Tags:
@@ -1043,9 +1049,9 @@ Resources:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref FlumeDiskSize
-            VolumeType: gp2
-            # Iops: !GetAtt VolumeIOPS.Value
-            # SnapshotId: !Ref SnapshotId
+            VolumeType: gp3
+            Iops: 4000
+            Throughput: 1000
 
         UserData:
           "Fn::Base64":
@@ -1088,7 +1094,7 @@ Resources:
                 # fi
 
                 #Copy Down flumeserver
-                if ! aws s3 cp s3://${S3ECBucketName}/${S3FlumeBinaryDirectory}/flumeserver /usr/bin/flumeserver
+                if ! aws s3 cp s3://${S3ECBucketName}/${S3FlumeBinaryDirectory}/flumeserver-$ARCH /usr/bin/flumeserver
                 then
                   if [ "${AggregatedNotifications}" != "" ]
                     then
@@ -1102,8 +1108,11 @@ Resources:
                 fi
                 chmod +x /usr/bin/flumeserver
 
+                aws s3 cp s3://${S3ECBucketName}/backupmanager/v0.1.0/backupmanager-linux-$ARCH /usr/bin/backupmanager
+                chmod +x /usr/bin/backupmanager
+
                 #copy down the flume backup
-                if ! aws s3 cp s3://${S3FlumeBackup} - | lz4  -d - /var/lib/flume/item.sqlite
+                if ! backupmanager download s3://${S3FlumeBackup} /var/lib/flume/item.sqlite
                 then
                   if [ "${AggregatedNotifications}" != "" ]
                     then
@@ -1139,8 +1148,8 @@ Resources:
                 sleep 60
 
                 # upload Backup
-                export BACKUPNAME="${S3FlumeBackupBucket}/${NetworkId}/logs-$(date '+%Y%m%d-%H%M%S').sqlite.lz4"
-                if ! lz4 /var/lib/flume/item.sqlite | aws s3 cp - s3://$BACKUPNAME --expected-size=${FlumeDiskSize}000000000; then
+                export BACKUPNAME="${S3FlumeBackupBucket}/${NetworkId}/logs-$(date '+%Y%m%d-%H%M%S').sqlite"
+                if ! backupmanager upload /var/lib/flume/item.sqlite s3://$BACKUPNAME; then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
                     aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking Backup Failed" --message="The snapshotting process for ${AWS::StackName} failed to upload the backup."
