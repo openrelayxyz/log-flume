@@ -323,6 +323,26 @@ Resources:
   #         };
   #     Runtime: nodejs12.x
 
+  GetBucketName:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: !Sub |
+          var response = require('./cfn-response');
+          exports.handler = function(event, context) {
+            response.send(event, context, response.SUCCESS, {Name: event.ResourceProperties.ObjectPath.split("/")[0]});
+          };
+      Runtime: nodejs12.x
+
+  CurrentBackupBucket:
+    Type: Custom::GetBucketName
+    Properties:
+      ServiceToken: !GetAtt GetBucketName.Arn
+      ObjectPath: !Ref S3FlumeBackup
+
+
   AggregatedNotifications:
     Type: AWS::SNS::Topic
     Properties:
@@ -499,7 +519,9 @@ Resources:
               - s3:GetBucketPolicy
               - s3:GetObjectTagging
               - s3:GetBucketLocation
-            Resource: !Sub arn:aws:s3:::${S3FlumeBackupBucket}/*
+            Resource:
+              - !Sub arn:aws:s3:::${S3FlumeBackupBucket}
+              - !Sub arn:aws:s3:::${S3FlumeBackupBucket}/*
             Effect: Allow
           - Action:
               - s3:GetObject
@@ -507,7 +529,9 @@ Resources:
               - s3:GetBucketPolicy
               - s3:GetObjectTagging
               - s3:GetBucketLocation
-            Resource: !Sub arn:aws:s3:::${S3FlumeBackup}
+            Resource:
+              - !Sub arn:aws:s3:::${CurrentBackupBucket.Name}
+              - !Sub arn:aws:s3:::${S3FlumeBackup}/*
             Effect: Allow
           - Action:
               - s3:GetObject
@@ -515,7 +539,9 @@ Resources:
               - s3:GetBucketPolicy
               - s3:GetObjectTagging
               - s3:GetBucketLocation
-            Resource: !Sub arn:aws:s3:::${S3ECBucketName}/*
+            Resource:
+              - !Sub arn:aws:s3:::${S3ECBucketName}
+              - !Sub arn:aws:s3:::${S3ECBucketName}/*
             Effect: Allow
           - Action:
               - cloudwatch:PutMetricData
@@ -1203,7 +1229,9 @@ Resources:
               - s3:GetObjectTagging
               - s3:GetBucketLocation
               - s3:PutObject
-            Resource: !Sub arn:aws:s3:::${S3FlumeBackupBucket}/*
+            Resource:
+              - !Sub arn:aws:s3:::${S3FlumeBackupBucket}
+              - !Sub arn:aws:s3:::${S3FlumeBackupBucket}/*
             Effect: Allow
           - Action:
               - s3:GetObject
@@ -1211,7 +1239,9 @@ Resources:
               - s3:GetBucketPolicy
               - s3:GetObjectTagging
               - s3:GetBucketLocation
-            Resource: !Sub arn:aws:s3:::${S3ECBucketName}/*
+            Resource:
+              - !Sub arn:aws:s3:::${S3ECBucketName}
+              - !Sub arn:aws:s3:::${S3ECBucketName}/*
             Effect: Allow
           - Action:
               - s3:GetObject
@@ -1219,7 +1249,9 @@ Resources:
               - s3:GetBucketPolicy
               - s3:GetObjectTagging
               - s3:GetBucketLocation
-            Resource: !Sub arn:aws:s3:::${S3FlumeBackup}
+            Resource:
+              - !Sub arn:aws:s3:::${CurrentBackupBucket.Name}
+              - !Sub arn:aws:s3:::${S3FlumeBackup}/*
             Effect: Allow
           - Action:
               - cloudformation:UpdateStack
