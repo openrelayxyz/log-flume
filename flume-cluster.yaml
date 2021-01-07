@@ -1274,6 +1274,7 @@ Resources:
               - lambda:GetFunctionConfiguration
             Resource:
               - !Sub ${FlumeSnapshotLambdaFunction.Arn}
+              - !Sub ${GetBucketName.Arn}
             Effect: Allow
           - Action:
               - iam:PassRole
