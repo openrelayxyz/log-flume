@@ -1271,6 +1271,8 @@ Resources:
             Effect: Allow
           - Action:
               - lambda:UpdateFunctionConfiguration
+              - lambda:InvokeFunction
+              - lambda:InvokeAsync
               - lambda:GetFunctionConfiguration
             Resource:
               - !Sub ${FlumeSnapshotLambdaFunction.Arn}
