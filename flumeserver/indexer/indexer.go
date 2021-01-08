@@ -32,7 +32,7 @@ func trimPrefix(data []byte) ([]byte) {
 
 func getTopicIndex(topics []common.Hash, idx int) []byte {
   if len(topics) > idx {
-    return topics[idx].Bytes()
+    return trimPrefix(topics[idx].Bytes())
   }
   return []byte{}
 }
