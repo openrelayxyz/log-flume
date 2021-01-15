@@ -234,53 +234,54 @@ Mappings:
       small: 12
   RegionMap:
     us-west-1:
-      amd64: ami-03130878b60947df3
-      arm64: ami-0cf4073a76054906c
+      arm64: ami-06da41549f55c94e2
+      amd64: ami-034bf895b736be04a
     eu-central-1:
-      amd64: ami-03c3a7e4263fd998c
-      arm64: ami-0f6ccb60ef96d13d2
+      arm64: ami-0ae8199ab6970fbab
+      amd64: ami-0bb75d95f668ff5a7
     us-east-1:
-      amd64: ami-0be2609ba883822ec
-      arm64: ami-0c582118883b46f4f
+      arm64: ami-0b250ac7d54af0ad8
+      amd64: ami-011899242bb902164
     ap-northeast-2:
-      amd64: ami-0094965d55b3bb1ff
-      arm64: ami-01b0796a552129792
+      arm64: ami-09517426951d1f0b3
+      amd64: ami-0de358223fd8dc276
     sa-east-1:
-      amd64: ami-022082b7f1da62478
-      arm64: ami-08688c4914619fb44
+      arm64: ami-0199924b6c357b2ae
+      amd64: ami-04ef59610885412b7
     ap-northeast-1:
-      amd64: ami-01748a72bed07727c
-      arm64: ami-0f53b51ee1388fd0b
+      arm64: ami-0a276f4ab43f64268
+      amd64: ami-08c925c2f4fe5aee0
     ap-southeast-1:
-      amd64: ami-00b8d9cb8a7161e41
-      arm64: ami-0486bf17047964f1b
+      arm64: ami-0a5fb7e26a54b13b8
+      amd64: ami-03425fe81e8a82dfb
     us-east-2:
-      amd64: ami-0a0ad6b70e61be944
-      arm64: ami-0f278a714e7f68bd9
+      arm64: ami-00a1c830981a54d96
+      amd64: ami-07d5003620a5450ee
     ap-southeast-2:
-      amd64: ami-06ce513624b435a22
-      arm64: ami-047a2b61bb2e57c40
+      arm64: ami-0e3dd8d5a4dc6c4eb
+      amd64: ami-0b31ea67df6098216
     eu-west-1:
-      amd64: ami-01720b5f421cf0179
-      arm64: ami-04c2a5c7e6c051fb2
+      arm64: ami-09e31e88ea2c3eb5d
+      amd64: ami-04ffbabc7935ec0e9
     eu-north-1:
-      amd64: ami-02cb52d7ba9887a93
-      arm64: ami-0f6cd3afd736539c1
+      arm64: ami-0fefce11d777066fe
+      amd64: ami-0000da4d489188a4b
     ap-south-1:
-      amd64: ami-04b1ddd35fd71475a
-      arm64: ami-0d5c7546de7618191
+      arm64: ami-011a054cc2d93e8b0
+      amd64: ami-097b711d946240d58
     eu-west-3:
-      amd64: ami-00798d7180f25aac2
-      arm64: ami-0aa574b370b00dac3
+      arm64: ami-09d0f429725cccc6d
+      amd64: ami-0b209583a4a1146dd
     eu-west-2:
-      amd64: ami-0e80a462ede03e653
-      arm64: ami-03144ab666315a8a3
+      arm64: ami-06b4a7b9c9ba238e0
+      amd64: ami-0d738342f2d2fd5fd
     ca-central-1:
-      amd64: ami-0c3e7f50c89a372ae
-      arm64: ami-094c99c33f7bb0f28
+      arm64: ami-0ce37fa160fc53d62
+      amd64: ami-0a20346326d3d1853
     us-west-2:
-      amd64: ami-0a36eb8fadc976275
-      arm64: ami-0bdfb42effc4b150f
+      arm64: ami-063326752a8929b25
+      amd64: ami-089668cd321f3cf82
+
 
 
 Conditions:
@@ -810,15 +811,13 @@ Resources:
                 command: systemctl enable consul
               05_start_consul:
                 command: systemctl start consul
-              06_get_envoy:
-                command: curl -L https://getenvoy.io/cli | bash -s -- -b /usr/local/bin
-              07_fetch_envoy:
-                command: /usr/local/bin/getenvoy fetch standard:1.16.0
-              08_install_envoy:
-                command: mv /root/.getenvoy/builds/standard/1.16.0/linux_glibc/bin/envoy /usr/bin/envoy
-              09_enable_flume_sidecar:
+              06_fetch_envoy:
+                command: !Sub aws s3 cp s3://ethercattle-binaries/envoy/v1.16.0/envoy-${FlumeProcessorArchitecture} /usr/bin/envoy
+              07_install_envoy:
+                command: chmod +x /usr/bin/envoy
+              08_enable_flume_sidecar:
                 command: systemctl enable flume-sidecar
-              10_start_flume_sidecar:
+              09_start_flume_sidecar:
                 command: systemctl start flume-sidecar
     Properties:
       LaunchTemplateData:
@@ -858,7 +857,18 @@ Resources:
             "Fn::Sub":
               - |
                 #!/bin/bash -xe
-                yum install -y aws-cfn-bootstrap
+                curl https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz --output - | tar xzf -
+                export PYTHONPATH=aws-cfn-bootstrap-2.0/
+                export PATH=$PATH:aws-cfn-bootstrap-2.0/bin/
+                chmod +x aws-cfn-bootstrap-2.0/bin/cfn-init
+
+                apt update
+                apt install -y jq unzip sqlite3
+
+                curl "https://awscli.amazonaws.com/awscli-exe-linux-$(arch).zip" -o "awscliv2.zip"
+
+                unzip awscliv2.zip
+                ./aws/install
 
                 if [ "$(arch)" == "x86_64" ]
                 then
@@ -872,19 +882,36 @@ Resources:
                 aws s3 cp s3://${S3ECBucketName}/$LOGS_BIN /usr/local/bin/journald-cloudwatch-logs
                 chmod +x /usr/local/bin/journald-cloudwatch-logs
                 mkdir -p /var/lib/journald-cloudwatch-logs/
-                yum install -y https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/$ARCH/latest/amazon-cloudwatch-agent.rpm jq
-                /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${MetricsConfigParameter} -s
+                wget https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/$ARCH/latest/amazon-cloudwatch-agent.deb
+                dpkg -i amazon-cloudwatch-agent.deb
+
+                /usr/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${MetricsConfigParameter} -s
 
                 printf "[Unit]\nDescription=journald-cloudwatch-logs\nWants=basic.target\nAfter=basic.target network.target\n\n[Service]\nExecStart=/usr/local/bin/journald-cloudwatch-logs /usr/local/etc/journald-cloudwatch-logs.conf\nKillMode=process\nRestart=on-failure\nRestartSec=42s" > /etc/systemd/system/journald-cloudwatch-logs.service
 
                 printf "log_group = \"${FlumeLG}\"\nstate_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
                 mkdir -p /var/lib/flume
                 export AWS_DEFAULT_REGION=${AWS::Region}
-                if [ -e /dev/sdf ]
+
+                printf 'import subprocess
+                import sys
+                import json
+                import requests
+                instance_id = requests.get("http://169.254.169.254/2012-01-12/meta-data/instance-id").text
+                x = subprocess.Popen(["aws", "ec2", "describe-volumes", "--region", "us-east-2", "--filters", "Name=attachment.instance-id,Values=" + instance_id, "--query", "Volumes[].Attachments[].[Device,VolumeId]", "--output", "json"], stdout=subprocess.PIPE)
+                y = {k: v for k, v in json.load(x.stdout)}
+                z = {line.split()[1]: line.split()[0] for line in subprocess.Popen(["lsblk", "-o", "NAME,SERIAL"], stdout=subprocess.PIPE).stdout.readlines() if len(line.split()) == 2}
+                print("/dev/" + z[y[sys.argv[1]].replace("-", "").encode("utf8")].decode("utf8"))' > /tmp/getvolume.py
+
+                FLUME_VOLUME=$(python3 /tmp/getvolume.py /dev/sdf)
+
+
+
+                if [ -e $FLUME_VOLUME ]
                 then
-                  mkfs.ext4 /dev/sdf
-                  mount -o barrier=0,data=writeback /dev/sdf /var/lib/flume
-                  echo "/dev/sdf  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                  mkfs.ext4 $FLUME_VOLUME
+                  mount -o barrier=0,data=writeback $FLUME_VOLUME /var/lib/flume
+                  echo "$FLUME_VOLUME  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
                 fi
 
                 # Disable NVME logic for now
@@ -899,6 +926,30 @@ Resources:
                 #   mount -o barrier=0,data=writeback $localnvme /var/lib/flume
                 #   echo "$localnvme  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
                 # fi
+
+                echo "flume        hard nofile 500000" >> /etc/security/limits.conf
+                echo "flume        soft nofile 500000" >> /etc/security/limits.conf
+                sysctl -w fs.file-max=12000500
+                sysctl -w fs.nr_open=20000500
+                # Set the maximum number of open file descriptors
+                ulimit -n 20000000
+
+                # Set the memory size for TCP with minimum, default and maximum thresholds
+                sysctl -w net.ipv4.tcp_mem='10000000 10000000 10000000'
+
+                # Set the receive buffer for each TCP connection with minumum, default and maximum thresholds
+                sysctl -w net.ipv4.tcp_rmem='1024 4096 16384'
+
+                # Set the TCP send buffer space with minumum, default and maximum thresholds
+                sysctl -w net.ipv4.tcp_wmem='1024 4096 16384'
+
+                # The maximum socket receive buffer sizemem_max=16384
+                sysctl -w net.core.rmem_max=16384
+
+                # The maximum socket send buffer size
+                sysctl -w net.core.wmem_max=16384
+
+                sysctl -w vm.swappiness=0
 
                 #Copy Down flumeserver
                 if ! aws s3 cp s3://${S3ECBucketName}/${S3FlumeBinaryDirectory}/flumeserver-$ARCH /usr/bin/flumeserver
@@ -935,6 +986,7 @@ Resources:
                   fi
                   poweroff
                 fi
+                chown -R flume /var/lib/flume
 
                 printf "[Unit]
                 Description=Flume getlogs go client
@@ -958,31 +1010,7 @@ Resources:
                 WantedBy=multi-user.target
                 " > /etc/systemd/system/flume.service
 
-                echo "flume        hard nofile 500000" >> /etc/security/limits.conf
-                echo "flume        soft nofile 500000" >> /etc/security/limits.conf
-                sysctl -w fs.file-max=12000500
-                sysctl -w fs.nr_open=20000500
-                chown -R flume /var/lib/flume
-                # Set the maximum number of open file descriptors
-                ulimit -n 20000000
-
-                # Set the memory size for TCP with minimum, default and maximum thresholds
-                sysctl -w net.ipv4.tcp_mem='10000000 10000000 10000000'
-
-                # Set the receive buffer for each TCP connection with minumum, default and maximum thresholds
-                sysctl -w net.ipv4.tcp_rmem='1024 4096 16384'
-
-                # Set the TCP send buffer space with minumum, default and maximum thresholds
-                sysctl -w net.ipv4.tcp_wmem='1024 4096 16384'
-
-                # The maximum socket receive buffer sizemem_max=16384
-                sysctl -w net.core.rmem_max=16384
-
-                # The maximum socket send buffer size
-                sysctl -w net.core.wmem_max=16384
-
-                sysctl -w vm.swappiness=0
-                /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource FlumeLaunchTemplate --configsets cs_install --region ${AWS::Region}
+                aws-cfn-bootstrap-2.0/bin/cfn-init -v --stack ${AWS::StackName} --resource FlumeLaunchTemplate --configsets cs_install --region ${AWS::Region}
                 systemctl daemon-reload
                 systemctl enable flume.service
                 systemctl enable amazon-cloudwatch-agent.service
@@ -1051,8 +1079,8 @@ Resources:
     Type: AWS::EC2::LaunchTemplate
     Properties:
       LaunchTemplateData:
-        ImageId: !If [HasFlumeImageAMI, !Ref FlumeImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", !Ref FlumeProcessorArchitecture ]]
-        InstanceType: !If [ IsArm, r6g.large, r5.large ]
+        ImageId: !If [HasFlumeImageAMI, !Ref FlumeImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", "amd64" ]]
+        InstanceType: r5a.large
         TagSpecifications:
           - ResourceType: instance
             Tags:
@@ -1097,15 +1125,33 @@ Resources:
                 fi
                 LOGS_BIN="journald-cloudwatch-logs-$ARCH"
 
-                yum install -y jq
+                apt update
+                apt install -y jq sqlite3
+
+                curl "https://awscli.amazonaws.com/awscli-exe-linux-$(arch).zip" -o "awscliv2.zip"
+
+                unzip awscliv2.zip
+                ./aws/install
 
                 mkdir -p /var/lib/flume
 
-                if [ -e /dev/sdf ]
+                printf 'import subprocess
+                import sys
+                import json
+                import requests
+                instance_id = requests.get("http://169.254.169.254/2012-01-12/meta-data/instance-id").text
+                x = subprocess.Popen(["aws", "ec2", "describe-volumes", "--region", "us-east-2", "--filters", "Name=attachment.instance-id,Values=" + instance_id, "--query", "Volumes[].Attachments[].[Device,VolumeId]", "--output", "json"], stdout=subprocess.PIPE)
+                y = {k: v for k, v in json.load(x.stdout)}
+                z = {line.split()[1]: line.split()[0] for line in subprocess.Popen(["lsblk", "-o", "NAME,SERIAL"], stdout=subprocess.PIPE).stdout.readlines() if len(line.split()) == 2}
+                print("/dev/" + z[y[sys.argv[1]].replace("-", "").encode("utf8")].decode("utf8"))' > /tmp/getvolume.py
+
+                FLUME_VOLUME=$(python3 /tmp/getvolume.py /dev/sdf)
+
+                if [ -e $FLUME_VOLUME ]
                 then
-                  mkfs.ext4 /dev/sdf
-                  mount -o barrier=0,data=writeback /dev/sdf /var/lib/flume
-                  echo "/dev/sdf  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                  mkfs.ext4 $FLUME_VOLUME
+                  mount -o barrier=0,data=writeback $FLUME_VOLUME /var/lib/flume
+                  echo "$FLUME_VOLUME  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
                 fi
 
                 export AWS_DEFAULT_REGION=${AWS::Region}
@@ -1405,6 +1451,7 @@ Resources:
       Handler: "getSnapshot.handler"
       Role: !Sub ${FlumeSnapshotLambdaRole.Arn}
       Runtime: python3.7
+      Timeout: 30
   SnapshotSchedulerRule:
     Type: AWS::Events::Rule
     Properties:

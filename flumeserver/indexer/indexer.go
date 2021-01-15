@@ -97,6 +97,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
   for {
     select {
     case <-quit:
+      log.Printf("Shutting down index process")
       return
     case chainEvent := <- ch:
       start := time.Now()
