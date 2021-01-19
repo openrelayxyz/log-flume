@@ -17,6 +17,7 @@ import (
   "time"
   "github.com/klauspost/compress/zlib"
   // "io/ioutil"
+  "sync"
 )
 
 func trimPrefix(data []byte) ([]byte) {
@@ -89,7 +90,7 @@ func applyParameters(query string, params ...interface{}) string {
   return fmt.Sprintf(query, preparedParams...)
 }
 
-func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.DB, quit <-chan struct{}, eip155Block, homesteadBlock uint64) {
+func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.DB, quit <-chan struct{}, eip155Block, homesteadBlock uint64, wg *sync.WaitGroup) {
   log.Printf("Processing data feed")
   ch := make(chan *datafeed.ChainEvent, 10)
   sub := feed.Subscribe(ch)
@@ -225,6 +226,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
           }
         }
         // istart := time.Now()
+        wg.Add(1)
         if _, err := dbtx.Exec(strings.Join(statements, " ; ")); err != nil {
           dbtx.Rollback()
           stats := db.Stats()
@@ -238,8 +240,10 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
           stats := db.Stats()
           log.Printf("WARN: Failed to insert logs: %v", err.Error())
           log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
+          wg.Done()
           continue BLOCKLOOP
         }
+        wg.Done()
         completionFeed.Send(chainEvent.Block.Hash)
         // log.Printf("Spent %v on commit", time.Since(cstart))
         log.Printf("Committed Block %v (%#x) in %v (age %v)", uint64(chainEvent.Block.Number.ToInt().Int64()), chainEvent.Block.Hash.Bytes(), time.Since(start), time.Since(time.Unix(int64(chainEvent.Block.Timestamp), 0)))

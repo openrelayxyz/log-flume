@@ -23,6 +23,7 @@ import (
   "os/signal"
   "syscall"
   "github.com/rs/cors"
+  "sync"
 )
 
 func main() {
@@ -114,12 +115,13 @@ func main() {
 
   quit := make(chan struct{})
   // go indexer.ProcessFeed(feed, logsdb, quit)
-  go indexer.ProcessDataFeed(feed, completionFeed, logsdb, quit, eip155Block, homesteadBlock)
+  wg := &sync.WaitGroup{}
+  go indexer.ProcessDataFeed(feed, completionFeed, logsdb, quit, eip155Block, homesteadBlock, wg)
 
 
   mux := http.NewServeMux()
-  mux.HandleFunc("/", flumehandler.GetHandler(logsdb))
-  mux.HandleFunc("/api", flumehandler.GetAPIHandler(logsdb, chainid))
+  mux.HandleFunc("/", flumehandler.GetHandler(logsdb, wg))
+  mux.HandleFunc("/api", flumehandler.GetAPIHandler(logsdb, chainid, wg))
   s := &http.Server{
     Addr: fmt.Sprintf(":%v", *port),
     Handler: gziphandler.GzipHandler(cors.Default().Handler(mux)),

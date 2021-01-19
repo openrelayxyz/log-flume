@@ -24,6 +24,7 @@ import (
   "context"
   "fmt"
   "log"
+  "sync"
 )
 
 type rpcCall struct {
@@ -79,7 +80,7 @@ var (
   fallbackId = json.RawMessage("-1")
 )
 
-func GetHandler(db *sql.DB) func(http.ResponseWriter, *http.Request) {
+func GetHandler(db *sql.DB, wg *sync.WaitGroup) func(http.ResponseWriter, *http.Request) {
   return func(w http.ResponseWriter, r *http.Request) {
     if r.Method == "GET" {
       if _, err := getLatestBlock(r.Context(), db); err != nil {
@@ -102,6 +103,7 @@ func GetHandler(db *sql.DB) func(http.ResponseWriter, *http.Request) {
       handleError(w, "error reading body", &fallbackId, 400)
       return
     }
+    wg.Wait()
     switch call.Method {
     case "eth_getLogs":
       getLogs(r.Context(), w, call, db)
