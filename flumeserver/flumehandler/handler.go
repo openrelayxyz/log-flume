@@ -473,7 +473,7 @@ func decompress(data []byte) ([]byte, error) {
 
 func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, whereClause string, params ...interface{}) ([]*rpcTransaction, error) {
   query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gas, transactions.gasPrice, transactions.hash, transactions.input, transactions.nonce, transactions.recipient, transactions.transactionIndex, transactions.value, transactions.v, transactions.r, transactions.s, transactions.sender FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE transactions.rowid IN (SELECT transactions.rowid FROM transactions WHERE %v) LIMIT ? OFFSET ?;", whereClause)
-  rows, err := db.QueryContext(ctx, query, append(params, offset, limit)...)
+  rows, err := db.QueryContext(ctx, query, append(params, limit, offset)...)
   if err != nil { return nil, err }
   defer rows.Close()
   results := []*rpcTransaction{}
@@ -523,7 +523,7 @@ func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, whereCl
 }
 func getTransactionReceipts(ctx context.Context, db *sql.DB, offset, limit int, whereClause string, params ...interface{}) ([]map[string]interface{}, error) {
   query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gasUsed, transactions.cumulativeGasUsed, transactions.hash, transactions.recipient, transactions.transactionIndex, transactions.sender, transactions.contractAddress, transactions.logsBloom, transactions.status FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE transactions.rowid IN (SELECT rowid FROM transactions WHERE %v) LIMIT ? OFFSET ?;", whereClause)
-  rows, err := db.QueryContext(ctx, query, append(params, offset, limit)...)
+  rows, err := db.QueryContext(ctx, query, append(params, limit, offset)...)
   if err != nil { return nil, err }
   defer rows.Close()
   results := []map[string]interface{}{}
