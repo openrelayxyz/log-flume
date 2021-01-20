@@ -472,7 +472,7 @@ func decompress(data []byte) ([]byte, error) {
 
 
 func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, whereClause string, params ...interface{}) ([]*rpcTransaction, error) {
-  query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gas, transactions.gasPrice, transactions.hash, transactions.input, transactions.nonce, transactions.recipient, transactions.transactionIndex, transactions.value, transactions.v, transactions.r, transactions.s, transactions.sender FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE transactions.rowid IN (SELECT transactions.rowid FROM transactions WHERE %v) LIMIT ? OFFSET ?;", whereClause)
+  query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gas, transactions.gasPrice, transactions.hash, transactions.input, transactions.nonce, transactions.recipient, transactions.transactionIndex, transactions.value, transactions.v, transactions.r, transactions.s, transactions.sender FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE transactions.rowid IN (SELECT transactions.rowid FROM transactions INNER JOIN blocks ON transactions.block = blocks.number WHERE %v) LIMIT ? OFFSET ?;", whereClause)
   rows, err := db.QueryContext(ctx, query, append(params, limit, offset)...)
   if err != nil { return nil, err }
   defer rows.Close()
@@ -522,7 +522,7 @@ func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, whereCl
   return results, nil
 }
 func getTransactionReceipts(ctx context.Context, db *sql.DB, offset, limit int, whereClause string, params ...interface{}) ([]map[string]interface{}, error) {
-  query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gasUsed, transactions.cumulativeGasUsed, transactions.hash, transactions.recipient, transactions.transactionIndex, transactions.sender, transactions.contractAddress, transactions.logsBloom, transactions.status FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE transactions.rowid IN (SELECT rowid FROM transactions WHERE %v) LIMIT ? OFFSET ?;", whereClause)
+  query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gasUsed, transactions.cumulativeGasUsed, transactions.hash, transactions.recipient, transactions.transactionIndex, transactions.sender, transactions.contractAddress, transactions.logsBloom, transactions.status FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE transactions.rowid IN (SELECT rowid FROM transactions INNER JOIN blocks ON transactions.block = blocks.number WHERE %v) LIMIT ? OFFSET ?;", whereClause)
   rows, err := db.QueryContext(ctx, query, append(params, limit, offset)...)
   if err != nil { return nil, err }
   defer rows.Close()
@@ -673,7 +673,7 @@ func getTransactionByBlockHashAndIndex(ctx context.Context ,w http.ResponseWrite
     handleError(w, "error reading params.1", call.ID, 400)
     return
   }
-  txs, err := getTransactions(ctx, db, 0, 1, "blockHash = ? AND transactionIndex = ?", trimPrefix(txHash.Bytes()), uint64(index))
+  txs, err := getTransactions(ctx, db, 0, 1, "blocks.hash = ? AND transactionIndex = ?", trimPrefix(txHash.Bytes()), uint64(index))
   if err != nil {
     log.Printf("Error getting transactions: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
@@ -682,7 +682,7 @@ func getTransactionByBlockHashAndIndex(ctx context.Context ,w http.ResponseWrite
   returnSingleTransaction(txs, w, call)
 }
 
-func getTransactionByBlockNumberAndIndex(ctx context.Context ,w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func getTransactionByBlockNumberAndIndex(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
   if len(call.Params) < 2 {
     handleError(w, "missing value for required argument 1", call.ID, 400)
     return
@@ -696,7 +696,7 @@ func getTransactionByBlockNumberAndIndex(ctx context.Context ,w http.ResponseWri
     handleError(w, "error reading params.1", call.ID, 400)
     return
   }
-  txs, err := getTransactions(ctx, db, 0, 1, "blockNumber = ? AND transactionIndex = ?", uint64(number), uint64(index))
+  txs, err := getTransactions(ctx, db, 0, 1, "block = ? AND transactionIndex = ?", uint64(number), uint64(index))
   if err != nil {
     log.Printf("Error getting transactions: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
@@ -948,7 +948,7 @@ func getTransactionReceiptsByBlockHash(ctx context.Context, w http.ResponseWrite
   }
   // Offset and limit aren't too relevant here, as there's a limit on
   // transactions per block.
-  receipts, err := getTransactionReceipts(ctx, db, 0, 100000, "blockHash = ?", trimPrefix(blockHash.Bytes()))
+  receipts, err := getTransactionReceipts(ctx, db, 0, 100000, "blocks.hash = ?", trimPrefix(blockHash.Bytes()))
   if err != nil {
     log.Printf("Error getting receipts: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
@@ -972,7 +972,7 @@ func getTransactionReceiptsByBlockNumber(ctx context.Context, w http.ResponseWri
     handleError(w, "error reading params.0", call.ID, 400)
     return
   }
-  receipts, err := getTransactionReceipts(ctx, db, 0, 100000, "blockNumber = ?", uint64(blockNumber))
+  receipts, err := getTransactionReceipts(ctx, db, 0, 100000, "block = ?", uint64(blockNumber))
   if err != nil {
     log.Printf("Error getting receipts: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
@@ -1028,7 +1028,7 @@ func getBlocks(ctx context.Context, db *sql.DB, includeTxs bool, whereClause str
       "uncles": unclesList,
     }
     if includeTxs {
-      fields["transactions"], err = getTransactions(ctx, db, 0, 100000, "blockNumber = ?", number)
+      fields["transactions"], err = getTransactions(ctx, db, 0, 100000, "block = ?", number)
       if err != nil { return nil, err }
     } else {
       txs := []common.Hash{}
