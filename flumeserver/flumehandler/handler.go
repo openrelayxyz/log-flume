@@ -471,9 +471,9 @@ func decompress(data []byte) ([]byte, error) {
 }
 
 
-func getTransactions(ctx context.Context, db *sql.DB, whereClause string, params ...interface{}) ([]*rpcTransaction, error) {
-  query := fmt.Sprintf("SELECT blockHash, blockNumber, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, value, v, r, s, sender FROM v_transactions WHERE %v ORDER BY transactionIndex ASC;", whereClause)
-  rows, err := db.QueryContext(ctx, query, params...)
+func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, whereClause string, params ...interface{}) ([]*rpcTransaction, error) {
+  query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gas, transactions.gasPrice, transactions.hash, transactions.input, transactions.nonce, transactions.recipient, transactions.transactionIndex, transactions.value, transactions.v, transactions.r, transactions.s, transactions.sender FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE transactions.rowid IN (SELECT transactions.rowid FROM transactions WHERE %v) OFFSET ? LIMIT ?;", whereClause)
+  rows, err := db.QueryContext(ctx, query, append(params, offset, limit)...)
   if err != nil { return nil, err }
   defer rows.Close()
   results := []*rpcTransaction{}
@@ -521,9 +521,9 @@ func getTransactions(ctx context.Context, db *sql.DB, whereClause string, params
   if err := rows.Err(); err != nil { return nil, err }
   return results, nil
 }
-func getTransactionReceipts(ctx context.Context, db *sql.DB, whereClause string, params ...interface{}) ([]map[string]interface{}, error) {
-  query := fmt.Sprintf("SELECT blockHash, blockNumber, gasUsed, cumulativeGasUsed, hash, recipient, transactionIndex, sender, contractAddress, logsBloom, status FROM v_transactions WHERE %v;", whereClause)
-  rows, err := db.QueryContext(ctx, query, params...)
+func getTransactionReceipts(ctx context.Context, db *sql.DB, offset, limit int, whereClause string, params ...interface{}) ([]map[string]interface{}, error) {
+  query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gasUsed, transactions.cumulativeGasUsed, transactions.hash, transactions.recipient, transactions.transactionIndex, transactions.sender, transactions.contractAddress, transactions.logsBloom, transactions.status FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE transactions.rowid IN (SELECT rowid FROM transactions WHERE %v) OFFSET ? LIMIT ?;", whereClause)
+  rows, err := db.QueryContext(ctx, query, append(params, offset, limit)...)
   if err != nil { return nil, err }
   defer rows.Close()
   results := []map[string]interface{}{}
@@ -649,7 +649,7 @@ func getTransactionByHash(ctx context.Context ,w http.ResponseWriter, call *rpcC
     handleError(w, "error reading params.0", call.ID, 400)
     return
   }
-  txs, err := getTransactions(ctx, db, "hash = ?", trimPrefix(txHash.Bytes()))
+  txs, err := getTransactions(ctx, db, 0, 1, "hash = ?", trimPrefix(txHash.Bytes()))
   if err != nil {
     log.Printf("Error getting transactions: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
@@ -673,7 +673,7 @@ func getTransactionByBlockHashAndIndex(ctx context.Context ,w http.ResponseWrite
     handleError(w, "error reading params.1", call.ID, 400)
     return
   }
-  txs, err := getTransactions(ctx, db, "blockHash = ? AND transactionIndex = ?", trimPrefix(txHash.Bytes()), uint64(index))
+  txs, err := getTransactions(ctx, db, 0, 1, "blockHash = ? AND transactionIndex = ?", trimPrefix(txHash.Bytes()), uint64(index))
   if err != nil {
     log.Printf("Error getting transactions: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
@@ -696,7 +696,7 @@ func getTransactionByBlockNumberAndIndex(ctx context.Context ,w http.ResponseWri
     handleError(w, "error reading params.1", call.ID, 400)
     return
   }
-  txs, err := getTransactions(ctx, db, "blockNumber = ? AND transactionIndex = ?", uint64(number), uint64(index))
+  txs, err := getTransactions(ctx, db, 0, 1, "blockNumber = ? AND transactionIndex = ?", uint64(number), uint64(index))
   if err != nil {
     log.Printf("Error getting transactions: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
@@ -715,7 +715,7 @@ func getTransactionReceipt(ctx context.Context, w http.ResponseWriter, call *rpc
     handleError(w, "error reading params.0", call.ID, 400)
     return
   }
-  receipts, err := getTransactionReceipts(ctx, db, "hash = ?", trimPrefix(txHash.Bytes()))
+  receipts, err := getTransactionReceipts(ctx, db, 0, 1, "hash = ?", trimPrefix(txHash.Bytes()))
   if err != nil {
     handleError(w, "error reading database", call.ID, 400)
     return
@@ -733,13 +733,24 @@ func getTransactionsBySender(ctx context.Context, w http.ResponseWriter, call *r
     handleError(w, "error reading params.0", call.ID, 400)
     return
   }
-  txs, err := getTransactions(ctx, db, "sender = ?", trimPrefix(address.Bytes()))
+  offset := 0
+  if len(call.Params) > 1 {
+    if err := json.Unmarshal(call.Params[1], &offset); err != nil {
+      handleError(w, err.Error(), call.ID, 400)
+      return
+    }
+  }
+  txs, err := getTransactions(ctx, db, offset, 1000, "sender = ?", trimPrefix(address.Bytes()))
   if err != nil {
     log.Printf("Error getting txs: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
     return
   }
-  responseBytes, err := json.Marshal(formatResponse(txs, call))
+  result := paginator{Items: txs}
+  if len(txs) == 1000 {
+    result.Token = offset + len(txs)
+  }
+  responseBytes, err := json.Marshal(formatResponse(result, call))
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
     return
@@ -758,13 +769,24 @@ func getTransactionReceiptsBySender(ctx context.Context, w http.ResponseWriter, 
     handleError(w, "error reading params.0", call.ID, 400)
     return
   }
-  receipts, err := getTransactionReceipts(ctx, db, "sender = ?", trimPrefix(address.Bytes()))
+  offset := 0
+  if len(call.Params) > 1 {
+    if err := json.Unmarshal(call.Params[1], &offset); err != nil {
+      handleError(w, err.Error(), call.ID, 400)
+      return
+    }
+  }
+  receipts, err := getTransactionReceipts(ctx, db, offset, 1000, "sender = ?", trimPrefix(address.Bytes()))
   if err != nil {
     log.Printf("Error getting receipts: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
     return
   }
-  responseBytes, err := json.Marshal(formatResponse(receipts, call))
+  result := paginator{Items: receipts}
+  if len(receipts) == 1000 {
+    result.Token = offset + len(receipts)
+  }
+  responseBytes, err := json.Marshal(formatResponse(result, call))
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
     return
@@ -782,13 +804,24 @@ func getTransactionsByRecipient(ctx context.Context, w http.ResponseWriter, call
     handleError(w, "error reading params.0", call.ID, 400)
     return
   }
-  txs, err := getTransactions(ctx, db, "recipient = ?", trimPrefix(address.Bytes()))
+  offset := 0
+  if len(call.Params) > 1 {
+    if err := json.Unmarshal(call.Params[1], &offset); err != nil {
+      handleError(w, err.Error(), call.ID, 400)
+      return
+    }
+  }
+  txs, err := getTransactions(ctx, db, offset, 1000, "recipient = ?", trimPrefix(address.Bytes()))
   if err != nil {
     log.Printf("Error getting txs: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
     return
   }
-  responseBytes, err := json.Marshal(formatResponse(txs, call))
+  result := paginator{Items: txs}
+  if len(txs) == 1000 {
+    result.Token = offset + len(txs)
+  }
+  responseBytes, err := json.Marshal(formatResponse(result, call))
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
     return
@@ -807,13 +840,24 @@ func getTransactionReceiptsByRecipient(ctx context.Context, w http.ResponseWrite
     handleError(w, "error reading params.0", call.ID, 400)
     return
   }
-  receipts, err := getTransactionReceipts(ctx, db, "recipient = ?", trimPrefix(address.Bytes()))
+  offset := 0
+  if len(call.Params) > 1 {
+    if err := json.Unmarshal(call.Params[1], &offset); err != nil {
+      handleError(w, err.Error(), call.ID, 400)
+      return
+    }
+  }
+  receipts, err := getTransactionReceipts(ctx, db, offset, 1000, "recipient = ?", trimPrefix(address.Bytes()))
   if err != nil {
     log.Printf("Error getting receipts: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
     return
   }
-  responseBytes, err := json.Marshal(formatResponse(receipts, call))
+  result := paginator{Items: receipts}
+  if len(receipts) == 1000 {
+    result.Token = offset + len(receipts)
+  }
+  responseBytes, err := json.Marshal(formatResponse(result, call))
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
     return
@@ -831,13 +875,24 @@ func getTransactionsByParticipant(ctx context.Context, w http.ResponseWriter, ca
     handleError(w, "error reading params.0", call.ID, 400)
     return
   }
-  txs, err := getTransactions(ctx, db, "sender = ? OR recipient = ?", trimPrefix(address.Bytes()), trimPrefix(address.Bytes()))
+  offset := 0
+  if len(call.Params) > 1 {
+    if err := json.Unmarshal(call.Params[1], &offset); err != nil {
+      handleError(w, err.Error(), call.ID, 400)
+      return
+    }
+  }
+  txs, err := getTransactions(ctx, db, offset, 1000, "sender = ? OR recipient = ?", trimPrefix(address.Bytes()), trimPrefix(address.Bytes()))
   if err != nil {
     log.Printf("Error getting txs: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
     return
   }
-  responseBytes, err := json.Marshal(formatResponse(txs, call))
+  result := paginator{Items: txs}
+  if len(txs) == 1000 {
+    result.Token = offset + len(txs)
+  }
+  responseBytes, err := json.Marshal(formatResponse(result, call))
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
     return
@@ -856,13 +911,24 @@ func getTransactionReceiptsByParticipant(ctx context.Context, w http.ResponseWri
     handleError(w, "error reading params.0", call.ID, 400)
     return
   }
-  receipts, err := getTransactionReceipts(ctx, db, "sender = ? OR recipient = ?", trimPrefix(address.Bytes()), trimPrefix(address.Bytes()))
+  offset := 0
+  if len(call.Params) > 1 {
+    if err := json.Unmarshal(call.Params[1], &offset); err != nil {
+      handleError(w, err.Error(), call.ID, 400)
+      return
+    }
+  }
+  receipts, err := getTransactionReceipts(ctx, db, offset, 1000, "sender = ? OR recipient = ?", trimPrefix(address.Bytes()), trimPrefix(address.Bytes()))
   if err != nil {
     log.Printf("Error getting receipts: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
     return
   }
-  responseBytes, err := json.Marshal(formatResponse(receipts, call))
+  result := paginator{Items: receipts}
+  if len(receipts) == 1000 {
+    result.Token = offset + len(receipts)
+  }
+  responseBytes, err := json.Marshal(formatResponse(result, call))
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
     return
@@ -880,7 +946,9 @@ func getTransactionReceiptsByBlockHash(ctx context.Context, w http.ResponseWrite
     handleError(w, "error reading params.0", call.ID, 400)
     return
   }
-  receipts, err := getTransactionReceipts(ctx, db, "blockHash = ?", trimPrefix(blockHash.Bytes()))
+  // Offset and limit aren't too relevant here, as there's a limit on
+  // transactions per block.
+  receipts, err := getTransactionReceipts(ctx, db, 0, 100000, "blockHash = ?", trimPrefix(blockHash.Bytes()))
   if err != nil {
     log.Printf("Error getting receipts: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
@@ -904,7 +972,7 @@ func getTransactionReceiptsByBlockNumber(ctx context.Context, w http.ResponseWri
     handleError(w, "error reading params.0", call.ID, 400)
     return
   }
-  receipts, err := getTransactionReceipts(ctx, db, "blockNumber = ?", uint64(blockNumber))
+  receipts, err := getTransactionReceipts(ctx, db, 0, 100000, "blockNumber = ?", uint64(blockNumber))
   if err != nil {
     log.Printf("Error getting receipts: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
@@ -960,7 +1028,7 @@ func getBlocks(ctx context.Context, db *sql.DB, includeTxs bool, whereClause str
       "uncles": unclesList,
     }
     if includeTxs {
-      fields["transactions"], err = getTransactions(ctx, db, "blockNumber = ?", number)
+      fields["transactions"], err = getTransactions(ctx, db, 0, 100000, "blockNumber = ?", number)
       if err != nil { return nil, err }
     } else {
       txs := []common.Hash{}
