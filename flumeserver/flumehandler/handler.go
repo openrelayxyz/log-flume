@@ -522,7 +522,7 @@ func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, whereCl
   return results, nil
 }
 func getTransactionReceipts(ctx context.Context, db *sql.DB, offset, limit int, whereClause string, params ...interface{}) ([]map[string]interface{}, error) {
-  query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gasUsed, transactions.cumulativeGasUsed, transactions.hash, transactions.recipient, transactions.transactionIndex, transactions.sender, transactions.contractAddress, transactions.logsBloom, transactions.status FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE transactions.rowid IN (SELECT rowid FROM transactions INNER JOIN blocks ON transactions.block = blocks.number WHERE %v) LIMIT ? OFFSET ?;", whereClause)
+  query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gasUsed, transactions.cumulativeGasUsed, transactions.hash, transactions.recipient, transactions.transactionIndex, transactions.sender, transactions.contractAddress, transactions.logsBloom, transactions.status FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE transactions.rowid IN (SELECT transactions.rowid FROM transactions INNER JOIN blocks ON transactions.block = blocks.number WHERE %v) LIMIT ? OFFSET ?;", whereClause)
   rows, err := db.QueryContext(ctx, query, append(params, limit, offset)...)
   if err != nil { return nil, err }
   defer rows.Close()
@@ -649,7 +649,7 @@ func getTransactionByHash(ctx context.Context ,w http.ResponseWriter, call *rpcC
     handleError(w, "error reading params.0", call.ID, 400)
     return
   }
-  txs, err := getTransactions(ctx, db, 0, 1, "hash = ?", trimPrefix(txHash.Bytes()))
+  txs, err := getTransactions(ctx, db, 0, 1, "transactions.hash = ?", trimPrefix(txHash.Bytes()))
   if err != nil {
     log.Printf("Error getting transactions: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
@@ -715,7 +715,7 @@ func getTransactionReceipt(ctx context.Context, w http.ResponseWriter, call *rpc
     handleError(w, "error reading params.0", call.ID, 400)
     return
   }
-  receipts, err := getTransactionReceipts(ctx, db, 0, 1, "hash = ?", trimPrefix(txHash.Bytes()))
+  receipts, err := getTransactionReceipts(ctx, db, 0, 1, "transactions.hash = ?", trimPrefix(txHash.Bytes()))
   if err != nil {
     handleError(w, "error reading database", call.ID, 400)
     return
