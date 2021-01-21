@@ -6,6 +6,12 @@ Parameters:
     Description: Size of each node's chaindata storage volume in GiB
     MinValue: '8'
     Type: Number
+  FlumeDiskIOPS:
+    Default: '3000'
+    Description: Size of each node's chaindata storage volume in GiB
+    MinValue: '3000'
+    MaxValue: '16000'
+    Type: Number
   FlumeImageAMI:
     Default: ""
     Description: Custom AMI to use for the flume servers, empty string for default AWS AMI image
@@ -866,7 +872,6 @@ Resources:
                 apt install -y jq unzip sqlite3
 
                 curl "https://awscli.amazonaws.com/awscli-exe-linux-$(arch).zip" -o "awscliv2.zip"
-
                 unzip awscliv2.zip
                 ./aws/install
 
@@ -1021,7 +1026,7 @@ Resources:
 
                 sleep 300
                 VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
-                aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp3 --iops 3000 --throughput 125 &
+                aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp3 --iops ${FlumeIOPS} --throughput 125 &
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 BaseInfrastructure:
