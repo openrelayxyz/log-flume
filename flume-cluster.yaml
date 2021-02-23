@@ -1022,7 +1022,7 @@ Resources:
                 fi
                 chmod +x /usr/bin/flumeserver
 
-                aws s3 cp s3://${S3ECBucketName}/backupmanager/v0.1.1/backupmanager-linux-$ARCH /usr/bin/backupmanager
+                aws s3 cp s3://${S3ECBucketName}/backupmanager/v0.1.2/backupmanager-linux-$ARCH /usr/bin/backupmanager
                 chmod +x /usr/bin/backupmanager
 
                 totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
@@ -1313,7 +1313,7 @@ Resources:
                 fi
                 chmod +x /usr/bin/flumeserver
 
-                aws s3 cp s3://${S3ECBucketName}/backupmanager/v0.1.1/backupmanager-linux-$ARCH /usr/bin/backupmanager
+                aws s3 cp s3://${S3ECBucketName}/backupmanager/v0.1.2/backupmanager-linux-$ARCH /usr/bin/backupmanager
                 chmod +x /usr/bin/backupmanager
 
                 sysctl -w net.ipv4.tcp_mem='10000000 10000000 10000000'
@@ -1374,8 +1374,8 @@ Resources:
                 sleep 60
 
                 # upload Backup
-                export BACKUPNAME="${S3FlumeBackupBucket}/${NetworkId}/logs-$(date '+%Y%m%d-%H%M%S').sqlite"
-                if ! backupmanager upload /var/lib/flume/item.sqlite s3://$BACKUPNAME; then
+                export BACKUPNAME="${S3FlumeBackupBucket}/${NetworkId}/flume-$(date '+%Y%m%d-%H%M%S').sqlite"
+                if ! backupmanager upload --concurrency=$concurrency /var/lib/flume/item.sqlite s3://$BACKUPNAME; then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
                     aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking Backup Failed" --message="The snapshotting process for ${AWS::StackName} failed to upload the backup."
