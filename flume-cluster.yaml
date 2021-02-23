@@ -857,6 +857,13 @@ Resources:
             VolumeType: gp3
             Iops: 4000
             Throughput: 1000
+        BlockDeviceMappings:
+        - DeviceName: "/dev/sds"
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp3
+            Iops: 3000
+            Throughput: 125
 
         UserData:
           "Fn::Base64":
@@ -906,17 +913,20 @@ Resources:
                 x = subprocess.Popen(["aws", "ec2", "describe-volumes", "--region", "us-east-2", "--filters", "Name=attachment.instance-id,Values=" + instance_id, "--query", "Volumes[].Attachments[].[Device,VolumeId]", "--output", "json"], stdout=subprocess.PIPE)
                 y = {k: v for k, v in json.load(x.stdout)}
                 z = {line.split()[1]: line.split()[0] for line in subprocess.Popen(["lsblk", "-o", "NAME,SERIAL"], stdout=subprocess.PIPE).stdout.readlines() if len(line.split()) == 2}
-                print("/dev/" + z[y[sys.argv[1]].replace("-", "").encode("utf8")].decode("utf8"))' > /tmp/getvolume.py
+                for dest,vol in y.items():
+                  print (z[vol.replace("-","").encode("utf8")].decode("utf8"),dest)
+                  subprocess.Popen(["ln","-s","/dev/"+z[vol.replace("-","").encode("utf8")].decode("utf8"),dest], stdout=subprocess.PIPE)
+                ' > /tmp/setvolumes.py
+                python3 /tmp/setvolumes.py
 
-                FLUME_VOLUME=$(python3 /tmp/getvolume.py /dev/sdf)
+                mkswap /dev/sds
+                swapon /dev/sds
 
-
-
-                if [ -e $FLUME_VOLUME ]
+                if [ -e /dev/sdf ]
                 then
-                  mkfs.ext4 $FLUME_VOLUME
-                  mount -o barrier=0,data=writeback $FLUME_VOLUME /var/lib/flume
-                  echo "$FLUME_VOLUME  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                  mkfs.ext4 /dev/sdf
+                  mount -o barrier=0,data=writeback /dev/sdf /var/lib/flume
+                  echo "/dev/sdf  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
                 fi
 
                 # Disable NVME logic for now
@@ -1166,6 +1176,13 @@ Resources:
             VolumeType: gp3
             Iops: 4000
             Throughput: 1000
+        BlockDeviceMappings:
+        - DeviceName: "/dev/sds"
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp3
+            Iops: 3000
+            Throughput: 125
 
         UserData:
           "Fn::Base64":
@@ -1199,15 +1216,20 @@ Resources:
                 x = subprocess.Popen(["aws", "ec2", "describe-volumes", "--region", "us-east-2", "--filters", "Name=attachment.instance-id,Values=" + instance_id, "--query", "Volumes[].Attachments[].[Device,VolumeId]", "--output", "json"], stdout=subprocess.PIPE)
                 y = {k: v for k, v in json.load(x.stdout)}
                 z = {line.split()[1]: line.split()[0] for line in subprocess.Popen(["lsblk", "-o", "NAME,SERIAL"], stdout=subprocess.PIPE).stdout.readlines() if len(line.split()) == 2}
-                print("/dev/" + z[y[sys.argv[1]].replace("-", "").encode("utf8")].decode("utf8"))' > /tmp/getvolume.py
+                for dest,vol in y.items():
+                  print (z[vol.replace("-","").encode("utf8")].decode("utf8"),dest)
+                  subprocess.Popen(["ln","-s","/dev/"+z[vol.replace("-","").encode("utf8")].decode("utf8"),dest], stdout=subprocess.PIPE)
+                ' > /tmp/setvolumes.py
+                python3 /tmp/setvolumes.py
 
-                FLUME_VOLUME=$(python3 /tmp/getvolume.py /dev/sdf)
+                mkswap /dev/sds
+                swapon /dev/sds
 
-                if [ -e $FLUME_VOLUME ]
+                if [ -e /dev/sdf ]
                 then
-                  mkfs.ext4 $FLUME_VOLUME
-                  mount -o barrier=0,data=writeback $FLUME_VOLUME /var/lib/flume
-                  echo "$FLUME_VOLUME  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                  mkfs.ext4 /dev/sdf
+                  mount -o barrier=0,data=writeback /dev/sdf /var/lib/flume
+                  echo "/dev/sdf  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
                 fi
 
                 export AWS_DEFAULT_REGION=${AWS::Region}
