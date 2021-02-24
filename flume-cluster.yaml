@@ -850,14 +850,12 @@ Resources:
           Ebs:
             VolumeSize: 8
             VolumeType: gp2
-        BlockDeviceMappings:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref FlumeDiskSize
             VolumeType: gp3
             Iops: 4000
             Throughput: 1000
-        BlockDeviceMappings:
         - DeviceName: "/dev/sds"
           Ebs:
             VolumeSize: 8
@@ -1169,14 +1167,12 @@ Resources:
           Ebs:
             VolumeSize: 8
             VolumeType: gp2
-        BlockDeviceMappings:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref FlumeDiskSize
             VolumeType: gp3
             Iops: 4000
             Throughput: 1000
-        BlockDeviceMappings:
         - DeviceName: "/dev/sds"
           Ebs:
             VolumeSize: 8
