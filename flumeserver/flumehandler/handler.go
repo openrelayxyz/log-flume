@@ -80,7 +80,7 @@ var (
   fallbackId = json.RawMessage("-1")
 )
 
-func GetHandler(db *sql.DB, wg *sync.WaitGroup) func(http.ResponseWriter, *http.Request) {
+func GetHandler(db *sql.DB, chainid uint64, wg *sync.WaitGroup) func(http.ResponseWriter, *http.Request) {
   return func(w http.ResponseWriter, r *http.Request) {
     if r.Method == "GET" {
       if _, err := getLatestBlock(r.Context(), db); err != nil {
@@ -106,51 +106,51 @@ func GetHandler(db *sql.DB, wg *sync.WaitGroup) func(http.ResponseWriter, *http.
     wg.Wait()
     switch call.Method {
     case "eth_getLogs":
-      getLogs(r.Context(), w, call, db)
+      getLogs(r.Context(), w, call, db, chainid)
     case "eth_blockNumber":
-      getBlockNumber(r.Context(), w, call, db)
+      getBlockNumber(r.Context(), w, call, db, chainid)
     case "eth_getTransactionByHash":
-      getTransactionByHash(r.Context(), w, call, db)
+      getTransactionByHash(r.Context(), w, call, db, chainid)
     case "eth_getTransactionByBlockHashAndIndex":
-      getTransactionByBlockHashAndIndex(r.Context(), w, call, db)
+      getTransactionByBlockHashAndIndex(r.Context(), w, call, db, chainid)
     case "eth_getTransactionByBlockNumberAndIndex":
-      getTransactionByBlockNumberAndIndex(r.Context(), w, call, db)
+      getTransactionByBlockNumberAndIndex(r.Context(), w, call, db, chainid)
     case "eth_getTransactionReceipt":
-      getTransactionReceipt(r.Context(), w, call, db)
+      getTransactionReceipt(r.Context(), w, call, db, chainid)
     case "eth_getBlockByNumber":
-      getBlockByNumber(r.Context(), w, call, db)
+      getBlockByNumber(r.Context(), w, call, db, chainid)
     case "eth_getBlockByHash":
-      getBlockByHash(r.Context(), w, call, db)
+      getBlockByHash(r.Context(), w, call, db, chainid)
     case "eth_getBlockTransactionCountByNumber":
-      getBlockTransactionCountByNumber(r.Context(), w, call, db)
+      getBlockTransactionCountByNumber(r.Context(), w, call, db, chainid)
     case "eth_getBlockTransactionCountByHash":
-      getBlockTransactionCountByHash(r.Context(), w, call, db)
+      getBlockTransactionCountByHash(r.Context(), w, call, db, chainid)
     case "eth_getUncleCountByBlockNumber":
-      getUncleCountByBlockNumber(r.Context(), w, call, db)
+      getUncleCountByBlockNumber(r.Context(), w, call, db, chainid)
     case "eth_getUncleCountByBlockHash":
-      getUncleCountByBlockHash(r.Context(), w, call, db)
+      getUncleCountByBlockHash(r.Context(), w, call, db, chainid)
     case "eth_gasPrice":
-      gasPrice(r.Context(), w, call, db)
+      gasPrice(r.Context(), w, call, db, chainid)
     case "flume_erc20ByAccount":
-      getERC20ByAccount(r.Context(), w, call, db)
+      getERC20ByAccount(r.Context(), w, call, db, chainid)
     case "flume_erc20Holders":
-      getERC20Holders(r.Context(), w, call, db)
+      getERC20Holders(r.Context(), w, call, db, chainid)
     case "flume_getTransactionsBySender":
-      getTransactionsBySender(r.Context(), w, call, db)
+      getTransactionsBySender(r.Context(), w, call, db, chainid)
     case "flume_getTransactionReceiptsBySender":
-      getTransactionReceiptsBySender(r.Context(), w, call, db)
+      getTransactionReceiptsBySender(r.Context(), w, call, db, chainid)
     case "flume_getTransactionsByRecipient":
-      getTransactionsByRecipient(r.Context(), w, call, db)
+      getTransactionsByRecipient(r.Context(), w, call, db, chainid)
     case "flume_getTransactionReceiptsByRecipient":
-      getTransactionReceiptsByRecipient(r.Context(), w, call, db)
+      getTransactionReceiptsByRecipient(r.Context(), w, call, db, chainid)
     case "flume_getTransactionsByParticipant":
-      getTransactionsByParticipant(r.Context(), w, call, db)
+      getTransactionsByParticipant(r.Context(), w, call, db, chainid)
     case "flume_getTransactionReceiptsByParticipant":
-      getTransactionReceiptsByParticipant(r.Context(), w, call, db)
+      getTransactionReceiptsByParticipant(r.Context(), w, call, db, chainid)
     case "flume_getTransactionReceiptsByBlockHash":
-      getTransactionReceiptsByBlockHash(r.Context(), w, call, db)
+      getTransactionReceiptsByBlockHash(r.Context(), w, call, db, chainid)
     case "flume_getTransactionReceiptsByBlockNumber":
-      getTransactionReceiptsByBlockNumber(r.Context(), w, call, db)
+      getTransactionReceiptsByBlockNumber(r.Context(), w, call, db, chainid)
     default:
       handleError(w, "unsupported method", call.ID, 400)
     }
@@ -164,7 +164,7 @@ func getLatestBlock(ctx context.Context, db *sql.DB) (int64, error) {
   return result, err
 }
 
-func getBlockNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func getBlockNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   blockNo, err := getLatestBlock(ctx, db)
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
@@ -179,7 +179,7 @@ func getBlockNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall, d
   w.Write(responseBytes)
 }
 
-func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   latestBlock, err := getLatestBlock(ctx, db)
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
@@ -313,7 +313,7 @@ type paginator struct {
   Token interface{} `json:"next,omitempty"`
 }
 
-func getERC20ByAccount(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func getERC20ByAccount(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   if len(call.Params) < 1 || len(call.Params) > 2 {
     handleError(w, "expected 1 - 2 parameters", call.ID, 400)
     return
@@ -372,7 +372,7 @@ func getERC20ByAccount(ctx context.Context, w http.ResponseWriter, call *rpcCall
   w.Write(responseBytes)
 }
 
-func getERC20Holders(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func getERC20Holders(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   if len(call.Params) < 1 || len(call.Params) > 2 {
     handleError(w, "expected 1 - 2 parameters", call.ID, 400)
     return
@@ -433,24 +433,27 @@ func getERC20Holders(ctx context.Context, w http.ResponseWriter, call *rpcCall, 
 
 
 type rpcTransaction struct {
-  BlockHash        *common.Hash    `json:"blockHash"`
-  BlockNumber      *hexutil.Big    `json:"blockNumber"`
-  From             common.Address  `json:"from"`
-  Gas              hexutil.Uint64  `json:"gas"`
-  GasPrice         *hexutil.Big    `json:"gasPrice"`
-  Hash             common.Hash     `json:"hash"`
-  Input            hexutil.Bytes   `json:"input"`
-  Nonce            hexutil.Uint64  `json:"nonce"`
-  To               *common.Address `json:"to"`
-  TransactionIndex *hexutil.Uint64 `json:"transactionIndex"`
-  Value            *hexutil.Big    `json:"value"`
-  V                *hexutil.Big    `json:"v"`
-  R                *hexutil.Big    `json:"r"`
-  S                *hexutil.Big    `json:"s"`
+  BlockHash        *common.Hash      `json:"blockHash"`
+  BlockNumber      *hexutil.Big      `json:"blockNumber"`
+  From             common.Address    `json:"from"`
+  Gas              hexutil.Uint64    `json:"gas"`
+  GasPrice         *hexutil.Big      `json:"gasPrice"`
+  Hash             common.Hash       `json:"hash"`
+  Input            hexutil.Bytes     `json:"input"`
+  Nonce            hexutil.Uint64    `json:"nonce"`
+  To               *common.Address   `json:"to"`
+  TransactionIndex *hexutil.Uint64   `json:"transactionIndex"`
+  Value            *hexutil.Big      `json:"value"`
+  Type             hexutil.Uint64    `json:"type"`
+  Accesses         *types.AccessList `json:"accessList,omitempty"`
+  ChainID          *hexutil.Big      `json:"chainId,omitempty"`
+  V                *hexutil.Big      `json:"v"`
+  R                *hexutil.Big      `json:"r"`
+  S                *hexutil.Big      `json:"s"`
 }
 
 func uintToHexBig(a uint64) *hexutil.Big {
-  x := hexutil.Big(*big.NewInt(int64(a)))
+  x := hexutil.Big(*new(big.Int).SetUint64(a))
   return &x
 }
 
@@ -470,16 +473,31 @@ func decompress(data []byte) ([]byte, error) {
   return raw, err
 }
 
+func deriveChainID(x uint64) *hexutil.Big {
+  v := new(big.Int).SetUint64(x)
+  if v.BitLen() <= 64 {
+		if x == 27 || x == 28 {
+			return nil
+		}
+    y := hexutil.Big(*new(big.Int).SetUint64((x - 35) / 2))
+		return &y
+	}
+	v = new(big.Int).Sub(v, big.NewInt(35))
+  y := hexutil.Big(*v.Div(v, big.NewInt(2)))
+	return &y
+}
 
-func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, whereClause string, params ...interface{}) ([]*rpcTransaction, error) {
-  query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gas, transactions.gasPrice, transactions.hash, transactions.input, transactions.nonce, transactions.recipient, transactions.transactionIndex, transactions.value, transactions.v, transactions.r, transactions.s, transactions.sender FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE transactions.rowid IN (SELECT transactions.rowid FROM transactions INNER JOIN blocks ON transactions.block = blocks.number WHERE %v) LIMIT ? OFFSET ?;", whereClause)
+
+func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, chainid uint64, whereClause string, params ...interface{}) ([]*rpcTransaction, error) {
+  query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gas, transactions.gasPrice, transactions.hash, transactions.input, transactions.nonce, transactions.recipient, transactions.transactionIndex, transactions.value, transactions.v, transactions.r, transactions.s, transactions.sender, transactions.type, transactions.access_list FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE transactions.rowid IN (SELECT transactions.rowid FROM transactions INNER JOIN blocks ON transactions.block = blocks.number WHERE %v) LIMIT ? OFFSET ?;", whereClause)
   rows, err := db.QueryContext(ctx, query, append(params, limit, offset)...)
   if err != nil { return nil, err }
   defer rows.Close()
   results := []*rpcTransaction{}
   for rows.Next() {
-    var amount, to, from, data, blockHashBytes, txHash, r, s []byte
+    var amount, to, from, data, blockHashBytes, txHash, r, s, cAccessListRLP []byte
     var nonce, gasLimit, blockNumber, gasPrice, txIndex, v uint64
+    var txType uint8
     err := rows.Scan(
       &blockHashBytes,
       &blockNumber,
@@ -495,12 +513,26 @@ func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, whereCl
       &r,
       &s,
       &from,
+      &txType,
+      &cAccessListRLP,
     )
     if err != nil { return nil, err }
     blockHash := bytesToHash(blockHashBytes)
     txIndexHex := hexutil.Uint64(txIndex)
     inputBytes, err := decompress(data)
     if err != nil { return nil, err }
+    accessListRLP, err := decompress(cAccessListRLP)
+    if err != nil { return nil, err }
+    var accessList *types.AccessList
+    var chainID *hexutil.Big
+    switch txType {
+    case types.AccessListTxType:
+      accessList = &types.AccessList{}
+      rlp.DecodeBytes(accessListRLP, accessList)
+      chainID = uintToHexBig(chainid)
+    case types.LegacyTxType:
+      chainID = deriveChainID(v)
+    }
     results = append(results, &rpcTransaction{
       BlockHash: &blockHash,        //*common.Hash
       BlockNumber: uintToHexBig(blockNumber),       //*hexutil.Big
@@ -513,16 +545,19 @@ func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, whereCl
       To: bytesToAddressPtr(to),                //*common.Address
       TransactionIndex: &txIndexHex,  //*hexutil.Uint64
       Value: bytesToHexBig(amount),           //*hexutil.Big
-      V:  uintToHexBig(v),                 //*hexutil.Big
+      V: uintToHexBig(v),                 //*hexutil.Big
       R: bytesToHexBig(r),                //*hexutil.Big
       S: bytesToHexBig(s),                //*hexutil.Big
+      Type: hexutil.Uint64(txType),
+      ChainID: chainID,
+      Accesses: accessList,
     })
   }
   if err := rows.Err(); err != nil { return nil, err }
   return results, nil
 }
-func getTransactionReceipts(ctx context.Context, db *sql.DB, offset, limit int, whereClause string, params ...interface{}) ([]map[string]interface{}, error) {
-  query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gasUsed, transactions.cumulativeGasUsed, transactions.hash, transactions.recipient, transactions.transactionIndex, transactions.sender, transactions.contractAddress, transactions.logsBloom, transactions.status FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE transactions.rowid IN (SELECT transactions.rowid FROM transactions INNER JOIN blocks ON transactions.block = blocks.number WHERE %v) LIMIT ? OFFSET ?;", whereClause)
+func getTransactionReceipts(ctx context.Context, db *sql.DB, offset, limit int, chainid uint64, whereClause string, params ...interface{}) ([]map[string]interface{}, error) {
+  query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gasUsed, transactions.cumulativeGasUsed, transactions.hash, transactions.recipient, transactions.transactionIndex, transactions.sender, transactions.contractAddress, transactions.logsBloom, transactions.status, transactions.type FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE transactions.rowid IN (SELECT transactions.rowid FROM transactions INNER JOIN blocks ON transactions.block = blocks.number WHERE %v) LIMIT ? OFFSET ?;", whereClause)
   rows, err := db.QueryContext(ctx, query, append(params, limit, offset)...)
   if err != nil { return nil, err }
   defer rows.Close()
@@ -530,6 +565,7 @@ func getTransactionReceipts(ctx context.Context, db *sql.DB, offset, limit int, 
   for rows.Next() {
     var to, from, blockHash, txHash, contractAddress, bloomBytes []byte
     var blockNumber, txIndex, gasUsed, cumulativeGasUsed, status  uint64
+    var txType uint8
     err := rows.Scan(
       &blockHash,
       &blockNumber,
@@ -542,6 +578,7 @@ func getTransactionReceipts(ctx context.Context, db *sql.DB, offset, limit int, 
       &contractAddress,
       &bloomBytes,
       &status,
+      &txType,
     )
     if err != nil { return nil, err }
     logsBloom, err := decompress(bloomBytes)
@@ -558,6 +595,9 @@ func getTransactionReceipts(ctx context.Context, db *sql.DB, offset, limit int, 
       "contractAddress":   nil,
       "logsBloom":         hexutil.Bytes(logsBloom),
       "status":            hexutil.Uint(status),
+    }
+    if txType > 0 {
+      fields["type"] = txType
     }
     fieldLogs := []*types.Log{}
     // If the ContractAddress is 20 0x0 bytes, assume it is not a contract creation
@@ -639,7 +679,7 @@ func returnSingleReceipt(txs []map[string]interface{}, w http.ResponseWriter, ca
   w.Write(responseBytes)
 }
 
-func getTransactionByHash(ctx context.Context ,w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func getTransactionByHash(ctx context.Context ,w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   if len(call.Params) < 1 {
     handleError(w, "missing value for required argument 0", call.ID, 400)
     return
@@ -649,7 +689,7 @@ func getTransactionByHash(ctx context.Context ,w http.ResponseWriter, call *rpcC
     handleError(w, "error reading params.0", call.ID, 400)
     return
   }
-  txs, err := getTransactions(ctx, db, 0, 1, "transactions.hash = ?", trimPrefix(txHash.Bytes()))
+  txs, err := getTransactions(ctx, db, 0, 1, chainid, "transactions.hash = ?", trimPrefix(txHash.Bytes()))
   if err != nil {
     log.Printf("Error getting transactions: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
@@ -658,7 +698,7 @@ func getTransactionByHash(ctx context.Context ,w http.ResponseWriter, call *rpcC
   returnSingleTransaction(txs, w, call)
 }
 
-func getTransactionByBlockHashAndIndex(ctx context.Context ,w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func getTransactionByBlockHashAndIndex(ctx context.Context ,w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   if len(call.Params) < 2 {
     handleError(w, "missing value for required argument 1", call.ID, 400)
     return
@@ -673,7 +713,7 @@ func getTransactionByBlockHashAndIndex(ctx context.Context ,w http.ResponseWrite
     handleError(w, "error reading params.1", call.ID, 400)
     return
   }
-  txs, err := getTransactions(ctx, db, 0, 1, "blocks.hash = ? AND transactionIndex = ?", trimPrefix(txHash.Bytes()), uint64(index))
+  txs, err := getTransactions(ctx, db, 0, 1, chainid, "blocks.hash = ? AND transactionIndex = ?", trimPrefix(txHash.Bytes()), uint64(index))
   if err != nil {
     log.Printf("Error getting transactions: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
@@ -682,7 +722,7 @@ func getTransactionByBlockHashAndIndex(ctx context.Context ,w http.ResponseWrite
   returnSingleTransaction(txs, w, call)
 }
 
-func getTransactionByBlockNumberAndIndex(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func getTransactionByBlockNumberAndIndex(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   if len(call.Params) < 2 {
     handleError(w, "missing value for required argument 1", call.ID, 400)
     return
@@ -696,7 +736,7 @@ func getTransactionByBlockNumberAndIndex(ctx context.Context, w http.ResponseWri
     handleError(w, "error reading params.1", call.ID, 400)
     return
   }
-  txs, err := getTransactions(ctx, db, 0, 1, "block = ? AND transactionIndex = ?", uint64(number), uint64(index))
+  txs, err := getTransactions(ctx, db, 0, 1, chainid, "block = ? AND transactionIndex = ?", uint64(number), uint64(index))
   if err != nil {
     log.Printf("Error getting transactions: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
@@ -705,7 +745,7 @@ func getTransactionByBlockNumberAndIndex(ctx context.Context, w http.ResponseWri
   returnSingleTransaction(txs, w, call)
 }
 
-func getTransactionReceipt(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func getTransactionReceipt(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   if len(call.Params) < 1 {
     handleError(w, "missing value for required argument 0", call.ID, 400)
     return
@@ -715,7 +755,7 @@ func getTransactionReceipt(ctx context.Context, w http.ResponseWriter, call *rpc
     handleError(w, "error reading params.0", call.ID, 400)
     return
   }
-  receipts, err := getTransactionReceipts(ctx, db, 0, 1, "transactions.hash = ?", trimPrefix(txHash.Bytes()))
+  receipts, err := getTransactionReceipts(ctx, db, 0, 1, chainid, "transactions.hash = ?", trimPrefix(txHash.Bytes()))
   if err != nil {
     handleError(w, "error reading database", call.ID, 400)
     return
@@ -723,7 +763,7 @@ func getTransactionReceipt(ctx context.Context, w http.ResponseWriter, call *rpc
   returnSingleReceipt(receipts, w, call)
 }
 
-func getTransactionsBySender(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func getTransactionsBySender(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   if len(call.Params) < 1 {
     handleError(w, "missing value for required argument 0", call.ID, 400)
     return
@@ -740,7 +780,7 @@ func getTransactionsBySender(ctx context.Context, w http.ResponseWriter, call *r
       return
     }
   }
-  txs, err := getTransactions(ctx, db, offset, 1000, "sender = ?", trimPrefix(address.Bytes()))
+  txs, err := getTransactions(ctx, db, offset, 1000, chainid, "sender = ?", trimPrefix(address.Bytes()))
   if err != nil {
     log.Printf("Error getting txs: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
@@ -759,7 +799,7 @@ func getTransactionsBySender(ctx context.Context, w http.ResponseWriter, call *r
   w.Write(responseBytes)
 }
 
-func getTransactionReceiptsBySender(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func getTransactionReceiptsBySender(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   if len(call.Params) < 1 {
     handleError(w, "missing value for required argument 0", call.ID, 400)
     return
@@ -776,7 +816,7 @@ func getTransactionReceiptsBySender(ctx context.Context, w http.ResponseWriter, 
       return
     }
   }
-  receipts, err := getTransactionReceipts(ctx, db, offset, 1000, "sender = ?", trimPrefix(address.Bytes()))
+  receipts, err := getTransactionReceipts(ctx, db, offset, 1000, chainid, "sender = ?", trimPrefix(address.Bytes()))
   if err != nil {
     log.Printf("Error getting receipts: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
@@ -794,7 +834,7 @@ func getTransactionReceiptsBySender(ctx context.Context, w http.ResponseWriter, 
   w.WriteHeader(200)
   w.Write(responseBytes)
 }
-func getTransactionsByRecipient(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func getTransactionsByRecipient(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   if len(call.Params) < 1 {
     handleError(w, "missing value for required argument 0", call.ID, 400)
     return
@@ -811,7 +851,7 @@ func getTransactionsByRecipient(ctx context.Context, w http.ResponseWriter, call
       return
     }
   }
-  txs, err := getTransactions(ctx, db, offset, 1000, "recipient = ?", trimPrefix(address.Bytes()))
+  txs, err := getTransactions(ctx, db, offset, 1000, chainid, "recipient = ?", trimPrefix(address.Bytes()))
   if err != nil {
     log.Printf("Error getting txs: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
@@ -830,7 +870,7 @@ func getTransactionsByRecipient(ctx context.Context, w http.ResponseWriter, call
   w.Write(responseBytes)
 }
 
-func getTransactionReceiptsByRecipient(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func getTransactionReceiptsByRecipient(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   if len(call.Params) < 1 {
     handleError(w, "missing value for required argument 0", call.ID, 400)
     return
@@ -847,7 +887,7 @@ func getTransactionReceiptsByRecipient(ctx context.Context, w http.ResponseWrite
       return
     }
   }
-  receipts, err := getTransactionReceipts(ctx, db, offset, 1000, "recipient = ?", trimPrefix(address.Bytes()))
+  receipts, err := getTransactionReceipts(ctx, db, offset, 1000, chainid, "recipient = ?", trimPrefix(address.Bytes()))
   if err != nil {
     log.Printf("Error getting receipts: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
@@ -865,7 +905,7 @@ func getTransactionReceiptsByRecipient(ctx context.Context, w http.ResponseWrite
   w.WriteHeader(200)
   w.Write(responseBytes)
 }
-func getTransactionsByParticipant(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func getTransactionsByParticipant(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   if len(call.Params) < 1 {
     handleError(w, "missing value for required argument 0", call.ID, 400)
     return
@@ -882,7 +922,7 @@ func getTransactionsByParticipant(ctx context.Context, w http.ResponseWriter, ca
       return
     }
   }
-  txs, err := getTransactions(ctx, db, offset, 1000, "sender = ? OR recipient = ?", trimPrefix(address.Bytes()), trimPrefix(address.Bytes()))
+  txs, err := getTransactions(ctx, db, offset, 1000, chainid, "sender = ? OR recipient = ?", trimPrefix(address.Bytes()), trimPrefix(address.Bytes()))
   if err != nil {
     log.Printf("Error getting txs: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
@@ -901,7 +941,7 @@ func getTransactionsByParticipant(ctx context.Context, w http.ResponseWriter, ca
   w.Write(responseBytes)
 }
 
-func getTransactionReceiptsByParticipant(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func getTransactionReceiptsByParticipant(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   if len(call.Params) < 1 {
     handleError(w, "missing value for required argument 0", call.ID, 400)
     return
@@ -918,7 +958,7 @@ func getTransactionReceiptsByParticipant(ctx context.Context, w http.ResponseWri
       return
     }
   }
-  receipts, err := getTransactionReceipts(ctx, db, offset, 1000, "sender = ? OR recipient = ?", trimPrefix(address.Bytes()), trimPrefix(address.Bytes()))
+  receipts, err := getTransactionReceipts(ctx, db, offset, 1000, chainid, "sender = ? OR recipient = ?", trimPrefix(address.Bytes()), trimPrefix(address.Bytes()))
   if err != nil {
     log.Printf("Error getting receipts: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
@@ -936,7 +976,7 @@ func getTransactionReceiptsByParticipant(ctx context.Context, w http.ResponseWri
   w.WriteHeader(200)
   w.Write(responseBytes)
 }
-func getTransactionReceiptsByBlockHash(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func getTransactionReceiptsByBlockHash(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   if len(call.Params) < 1 {
     handleError(w, "missing value for required argument 0", call.ID, 400)
     return
@@ -948,7 +988,7 @@ func getTransactionReceiptsByBlockHash(ctx context.Context, w http.ResponseWrite
   }
   // Offset and limit aren't too relevant here, as there's a limit on
   // transactions per block.
-  receipts, err := getTransactionReceipts(ctx, db, 0, 100000, "blocks.hash = ?", trimPrefix(blockHash.Bytes()))
+  receipts, err := getTransactionReceipts(ctx, db, 0, 100000, chainid, "blocks.hash = ?", trimPrefix(blockHash.Bytes()))
   if err != nil {
     log.Printf("Error getting receipts: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
@@ -962,7 +1002,7 @@ func getTransactionReceiptsByBlockHash(ctx context.Context, w http.ResponseWrite
   w.WriteHeader(200)
   w.Write(responseBytes)
 }
-func getTransactionReceiptsByBlockNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func getTransactionReceiptsByBlockNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   if len(call.Params) < 1 {
     handleError(w, "missing value for required argument 0", call.ID, 400)
     return
@@ -972,7 +1012,7 @@ func getTransactionReceiptsByBlockNumber(ctx context.Context, w http.ResponseWri
     handleError(w, "error reading params.0", call.ID, 400)
     return
   }
-  receipts, err := getTransactionReceipts(ctx, db, 0, 100000, "block = ?", uint64(blockNumber))
+  receipts, err := getTransactionReceipts(ctx, db, 0, 100000, chainid, "block = ?", uint64(blockNumber))
   if err != nil {
     log.Printf("Error getting receipts: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
@@ -987,7 +1027,7 @@ func getTransactionReceiptsByBlockNumber(ctx context.Context, w http.ResponseWri
   w.Write(responseBytes)
 }
 
-func getBlocks(ctx context.Context, db *sql.DB, includeTxs bool, whereClause string, params ...interface{}) ([]map[string]interface{}, error) {
+func getBlocks(ctx context.Context, db *sql.DB, includeTxs bool, chainid uint64, whereClause string, params ...interface{}) ([]map[string]interface{}, error) {
   query := fmt.Sprintf("SELECT hash, parentHash, uncleHash, coinbase, root, txRoot, receiptRoot, bloom, difficulty, extra, mixDigest, uncles, td, number, gasLimit, gasUsed, time, nonce, size FROM blocks WHERE %v;", whereClause)
   rows, err := db.QueryContext(ctx, query, params...)
   if err != nil { return nil, err }
@@ -1028,7 +1068,7 @@ func getBlocks(ctx context.Context, db *sql.DB, includeTxs bool, whereClause str
       "uncles": unclesList,
     }
     if includeTxs {
-      fields["transactions"], err = getTransactions(ctx, db, 0, 100000, "block = ?", number)
+      fields["transactions"], err = getTransactions(ctx, db, 0, 100000, chainid, "block = ?", number)
       if err != nil { return nil, err }
     } else {
       txs := []common.Hash{}
@@ -1050,7 +1090,7 @@ func getBlocks(ctx context.Context, db *sql.DB, includeTxs bool, whereClause str
   return results, nil
 }
 
-func getBlockByNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func getBlockByNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   if len(call.Params) < 2 {
     handleError(w, "missing value for required argument 1", call.ID, 400)
     return
@@ -1073,7 +1113,7 @@ func getBlockByNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall,
     handleError(w, "error reading params.1", call.ID, 400)
     return
   }
-  blocks, err := getBlocks(ctx, db, includeTxs, "number = ?", blockNumber)
+  blocks, err := getBlocks(ctx, db, includeTxs, chainid, "number = ?", blockNumber)
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
     return
@@ -1087,7 +1127,7 @@ func getBlockByNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall,
   w.Write(responseBytes)
 }
 
-func getBlockByHash(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func getBlockByHash(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   if len(call.Params) < 2 {
     handleError(w, "missing value for required argument 1", call.ID, 400)
     return
@@ -1102,7 +1142,7 @@ func getBlockByHash(ctx context.Context, w http.ResponseWriter, call *rpcCall, d
     handleError(w, "error reading params.1", call.ID, 400)
     return
   }
-  blocks, err := getBlocks(ctx, db, includeTxs, "hash = ?", trimPrefix(blockHash.Bytes()))
+  blocks, err := getBlocks(ctx, db, includeTxs, chainid, "hash = ?", trimPrefix(blockHash.Bytes()))
   responseBytes, err := json.Marshal(formatResponse(blocks[0], call))
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
@@ -1116,7 +1156,7 @@ func getBlockByHash(ctx context.Context, w http.ResponseWriter, call *rpcCall, d
   w.Write(responseBytes)
 }
 
-func getBlockTransactionCountByNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func getBlockTransactionCountByNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   if len(call.Params) < 1 {
     handleError(w, "missing value for required argument 0", call.ID, 400)
     return
@@ -1148,7 +1188,7 @@ func getBlockTransactionCountByNumber(ctx context.Context, w http.ResponseWriter
   w.Write(responseBytes)
 }
 
-func getBlockTransactionCountByHash(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func getBlockTransactionCountByHash(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   if len(call.Params) < 1 {
     handleError(w, "missing value for required argument 0", call.ID, 400)
     return
@@ -1172,7 +1212,7 @@ func getBlockTransactionCountByHash(ctx context.Context, w http.ResponseWriter, 
   w.Write(responseBytes)
 }
 
-func getUncleCountByBlockNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func getUncleCountByBlockNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   if len(call.Params) < 1 {
     handleError(w, "missing value for required argument 0", call.ID, 400)
     return
@@ -1206,7 +1246,7 @@ func getUncleCountByBlockNumber(ctx context.Context, w http.ResponseWriter, call
   w.Write(responseBytes)
 }
 
-func getUncleCountByBlockHash(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func getUncleCountByBlockHash(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   if len(call.Params) < 1 {
     handleError(w, "missing value for required argument 0", call.ID, 400)
     return
@@ -1232,7 +1272,7 @@ func getUncleCountByBlockHash(ctx context.Context, w http.ResponseWriter, call *
   w.Write(responseBytes)
 }
 
-func gasPrice(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB) {
+func gasPrice(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   latestBlock, err := getLatestBlock(ctx, db)
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)

@@ -178,6 +178,11 @@ func Migrate(db *sql.DB, chainid uint64) error {
     db.Exec(`CREATE INDEX contractAddress ON transactions(contractAddress);`)
     db.Exec(`UPDATE migrations SET version = 3;`)
   }
+  if schemaVersion < 4 {
+    db.Exec(`ALTER TABLE transactions ADD type TINYINT;`)
+    db.Exec(`ALTER TABLE transactions ADD access_list blob;`)
+    db.Exec(`UPDATE migrations SET version = 4;`)
+  }
   // chainid
   return nil
 }

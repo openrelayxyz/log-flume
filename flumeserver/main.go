@@ -120,7 +120,7 @@ func main() {
 
 
   mux := http.NewServeMux()
-  mux.HandleFunc("/", flumehandler.GetHandler(logsdb, wg))
+  mux.HandleFunc("/", flumehandler.GetHandler(logsdb, chainid, wg))
   mux.HandleFunc("/api", flumehandler.GetAPIHandler(logsdb, chainid, wg))
   s := &http.Server{
     Addr: fmt.Sprintf(":%v", *port),

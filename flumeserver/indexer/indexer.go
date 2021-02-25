@@ -186,9 +186,13 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
           if txwr.Transaction.To() != nil {
             to = trimPrefix(txwr.Transaction.To().Bytes())
           }
+          var accessListRLP []byte
+          if txwr.Transaction.AccessList() != nil {
+            accessListRLP, _ = rlp.EncodeToBytes(txwr.Transaction.AccessList())
+          }
           // log.Printf("Inserting transaction %#x", txwr.Transaction.Hash())
           statements = append(statements, applyParameters(
-            "INSERT INTO transactions(block, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, `value`, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, `status`) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
+            "INSERT INTO transactions(block, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, `value`, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, `status`, `type`, access_list) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
             chainEvent.Block.Number.ToInt().Int64(),
             txwr.Transaction.Gas(),
             txwr.Transaction.GasPrice().Uint64(),
@@ -208,6 +212,8 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
             txwr.Receipt.GasUsed,
             compress(txwr.Receipt.Bloom.Bytes()),
             txwr.Receipt.Status,
+            txwr.Transaction.Type(),
+            compress(accessListRLP),
           ))
           for _, logRecord := range txwr.Receipt.Logs {
             statements = append(statements, applyParameters(
