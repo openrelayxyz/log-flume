@@ -44,6 +44,7 @@ func main() {
   cacheSize := flag.Int("cache-size", 2000, "Set cache size (in 4 kb pages")
   memstore := flag.Bool("memstore", false, "Store temporary tables in memory")
   completionTopic := flag.String("completion-topic", "", "A kafka topic to broadcast newly indexed blocks")
+  kafkaRollback := flag.Int64("kafka-rolback", 5000, "A number of Kafka offsets to roll back before resumption")
 
   flag.CommandLine.Parse(os.Args[1:])
 
@@ -110,7 +111,7 @@ func main() {
     log.Fatalf(err.Error())
   }
   var completionFeed event.Feed
-  feed, err := datafeed.ResolveFeed(feedURL, logsdb)
+  feed, err := datafeed.ResolveFeed(feedURL, logsdb, *kafkaRollback)
   if err != nil { log.Fatalf(err.Error()) }
 
   quit := make(chan struct{})

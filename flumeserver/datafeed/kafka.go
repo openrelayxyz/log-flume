@@ -111,7 +111,7 @@ func (kdf *kafkaDataFeed) Healthy(d time.Duration) bool {
   return true
 }
 
-func NewKafkaDataFeed(urlStr string, db *sql.DB) (DataFeed, error) {
+func NewKafkaDataFeed(urlStr string, db *sql.DB, rollback int64) (DataFeed, error) {
   var tableName string
   db.QueryRowContext(context.Background(), "SELECT name FROM sqlite_master WHERE type='table' and name='event_offsets';").Scan(&tableName)
   if tableName != "event_offsets" {
@@ -134,7 +134,7 @@ func NewKafkaDataFeed(urlStr string, db *sql.DB) (DataFeed, error) {
   var startHash, td []byte
   n := 0
   db.QueryRowContext(context.Background(), "SELECT max(number), hash, td FROM blocks;").Scan(&n, &startHash, &td)
-  consumer, err := replica.NewKafkaEventConsumerFromURLs(strings.TrimPrefix(parts[0], "kafka://"), parts[1], bytesToHash(startHash), offsets)
+  consumer, err := replica.NewKafkaEventConsumerFromURLs(strings.TrimPrefix(parts[0], "kafka://"), parts[1], bytesToHash(startHash), offsets, rollback)
   if err != nil { return nil, err }
   feed := &kafkaDataFeed{
     lastBlockTime: &atomic.Value{},
@@ -145,9 +145,9 @@ func NewKafkaDataFeed(urlStr string, db *sql.DB) (DataFeed, error) {
 }
 
 func (kdf *kafkaDataFeed) subscribe() {
-  kdf.consumer.Start()
   eventCh := make(chan *replica.ChainEvents)
   eventSub := kdf.consumer.SubscribeChainEvents(eventCh)
+  kdf.consumer.Start()
   go func() {
     defer eventSub.Unsubscribe()
     for chainEvents := range eventCh {
