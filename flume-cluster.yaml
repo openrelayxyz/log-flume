@@ -128,6 +128,10 @@ Parameters:
   ConsulPrimaryRegion:
       Description: The AWS region of the primary Consul cluster. If not set, defaults to this region.
       Type: String
+  FlumeKafkaRollback:
+    Description: The number of Kafka messages to roll back upon resumption
+    Type: Number
+    Default: 5000
 
 
 Metadata:
@@ -301,6 +305,7 @@ Conditions:
   FlumeSpotLowestPrice: !Equals [!Ref FlumeSpotAllocationStrategy, "lowest-price"]
   SpecifiesConsulRegion: !Not [ !Equals [ !Ref ConsulPrimaryRegion, "" ] ]
   IsArm: !Equals [ !Ref FlumeProcessorArchitecture, "arm64" ]
+  HasRollback: !Not [ !Equals [!Ref FlumeKafkaRollback, 0] ]
 
 
 Resources:
@@ -1061,7 +1066,7 @@ Resources:
                 Environment=HOME=/var/lib/flume
                 Type=simple
                 LimitNOFILE=655360
-                ExecStart=/usr/bin/flumeserver ${FlumeNetworkFlag} /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"
+                ExecStart=/usr/bin/flumeserver ${RollbackFlag} ${FlumeNetworkFlag} /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"
                 CPUSchedulingPolicy=fifo
                 CPUSchedulingPriority=20
                 KillMode=process
@@ -1090,6 +1095,7 @@ Resources:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 BaseInfrastructure:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                RollbackFlag: !If [ HasRollback, !Sub "--kafka-rollback=${FlumeKafkaRollback}", ""]
   FlumeAutoScalingPolicy:
     Type: AWS::AutoScaling::ScalingPolicy
     Properties:
@@ -1372,7 +1378,7 @@ Resources:
                 sleep 60
 
                 #Deal with double escapes in url if exist
-                printf "/usr/bin/flumeserver -shutdown.sync /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"" > /tmp/flumesync.sh
+                printf "/usr/bin/flumeserver ${RollbackFlag} -shutdown.sync /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"" > /tmp/flumesync.sh
                 chmod +x /tmp/flumesync.sh
 
                 # sync and shutdown
@@ -1414,6 +1420,7 @@ Resources:
                 poweroff
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                RollbackFlag: !If [ HasRollback, !Sub "--kafka-rollback=${FlumeKafkaRollback}", ""]
 
   FlumeSnapshotNodeRole:
     Type: "AWS::IAM::Role"

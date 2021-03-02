@@ -44,7 +44,7 @@ func main() {
   cacheSize := flag.Int("cache-size", 2000, "Set cache size (in 4 kb pages")
   memstore := flag.Bool("memstore", false, "Store temporary tables in memory")
   completionTopic := flag.String("completion-topic", "", "A kafka topic to broadcast newly indexed blocks")
-  kafkaRollback := flag.Int64("kafka-rolback", 5000, "A number of Kafka offsets to roll back before resumption")
+  kafkaRollback := flag.Int64("kafka-rollback", 5000, "A number of Kafka offsets to roll back before resumption")
 
   flag.CommandLine.Parse(os.Args[1:])
 
