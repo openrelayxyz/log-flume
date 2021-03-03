@@ -216,6 +216,9 @@ github.com/google/pprof v0.0.0-20181206194817-3ea8567a2e57/go.mod h1:zfwlbNMJ+OI
 github.com/google/pprof v0.0.0-20190515194954-54271f7e092f/go.mod h1:zfwlbNMJ+OItoe0UupaVj+oy1omPYYDuagoSzA8v9mc=
 github.com/google/pprof v0.0.0-20191218002539-d4f498aebedc/go.mod h1:ZgVRPoUq/hfqzAqh7sHMqb3I9Rq5C59dIz2SbBwJ4eM=
 github.com/google/renameio v0.1.0/go.mod h1:KWCgfxg9yswjAJkECMjeO8J8rahYeXnNhOm40UhjYkI=
+github.com/google/uuid v1.0.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+github.com/google/uuid v1.1.5 h1:kxhtnfFVi+rYdOALN0B3k9UT86zVJKfBimRaciULW4I=
+github.com/google/uuid v1.1.5/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/googleapis/gax-go/v2 v2.0.4/go.mod h1:0Wqv26UfaUD9n4G6kQubkQ+KchISgw+vpHVxEJEs9eg=
 github.com/googleapis/gax-go/v2 v2.0.5/go.mod h1:DWXyrwAJ9X0FpwwEdw+IPEYBICEFu5mhpdKc/us6bOk=
 github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1/go.mod h1:wJfORRmW1u3UXTncJ5qlYoELFm8eSnnEO6hX4iZ3EWY=
@@ -395,8 +398,6 @@ github.com/notegio/go-ethereum v0.0.0-20200929214105-06c5928ca4a2 h1:WYasatm3Mm7
 github.com/notegio/go-ethereum v0.0.0-20200929214105-06c5928ca4a2/go.mod h1:HJqOxRNXAWcxylBhg25hnQpPGV+7QK9X0Zi3smgc9PA=
 github.com/notegio/go-ethereum v0.0.0-20200930195028-b6b5f086629e h1:Kvydxge7IW75MPaboEO1/xj55Tb5KTyMHdVKoDmtdEg=
 github.com/notegio/go-ethereum v0.0.0-20200930195028-b6b5f086629e/go.mod h1:HJqOxRNXAWcxylBhg25hnQpPGV+7QK9X0Zi3smgc9PA=
-github.com/notegio/go-ethereum v0.0.0-20210225161239-037fa5b6f598 h1:Z7wvRHTE3JnXSRxH9Jar7JYn1F1QPU5w1JC1WLlLCSM=
-github.com/notegio/go-ethereum v0.0.0-20210225161239-037fa5b6f598/go.mod h1:ulEy0PmGU0AoTT4uPQ+37xg701oQMvcqUzFhJ7ohs/o=
 github.com/notegio/go-ethereum v1.9.24-chain-event-0 h1:5B1BL+O4mDbKZRoKmYSN3GK2n8+Lvp5+JBXUHy31rxU=
 github.com/notegio/go-ethereum v1.9.24-chain-event-0/go.mod h1:6G82HQIgIHQ0UDhq2DEoCnn+sZv2SPGI/Y1FBenA/z0=
 github.com/notegio/go-ethereum v1.9.24-chain-event-1 h1:+AuxdL3ypo14wvHhyMJjnDddigRNWYex3aJjhJJBMEU=
@@ -427,6 +428,14 @@ github.com/notegio/go-ethereum v1.9.24-chain-event-DEBUG-4 h1:IXh6+1Gt49pzbPq+Nt
 github.com/notegio/go-ethereum v1.9.24-chain-event-DEBUG-4/go.mod h1:6G82HQIgIHQ0UDhq2DEoCnn+sZv2SPGI/Y1FBenA/z0=
 github.com/notegio/go-ethereum v1.9.24-chain-event-DEBUG-5 h1:dBdAq+Wxspfz+9nkalP608ruAKJzLaxmp3uxxdw4zpc=
 github.com/notegio/go-ethereum v1.9.24-chain-event-DEBUG-5/go.mod h1:6G82HQIgIHQ0UDhq2DEoCnn+sZv2SPGI/Y1FBenA/z0=
+github.com/notegio/go-ethereum v1.9.25-event-stream-0 h1:CK9OdvUfOBHfzNtB/eKWb+KDEoOI6KqRneC+vCPurmU=
+github.com/notegio/go-ethereum v1.9.25-event-stream-0/go.mod h1:5Wz/XXdiGqxgixr5bGGoQ3yg7k5NRhl5/ub3VmVSFdE=
+github.com/notegio/go-ethereum v1.9.25-event-stream-2 h1:pSYZ1wxnVlt+06z26WlsOA5ONt0ViSwkTPqMiFKmtls=
+github.com/notegio/go-ethereum v1.9.25-event-stream-2/go.mod h1:5Wz/XXdiGqxgixr5bGGoQ3yg7k5NRhl5/ub3VmVSFdE=
+github.com/notegio/go-ethereum v1.9.25-event-stream-3 h1:HcjMJG+dKI28mz/JRcOcokng3KCYxnBFhtz1xaIKtJc=
+github.com/notegio/go-ethereum v1.9.25-event-stream-3/go.mod h1:5Wz/XXdiGqxgixr5bGGoQ3yg7k5NRhl5/ub3VmVSFdE=
+github.com/notegio/go-ethereum v1.10.0-testing-0 h1:vXwf4fmDgJ4q78pD3MY8D2Yp0E1aMJqqP0VJu47bkM8=
+github.com/notegio/go-ethereum v1.10.0-testing-0/go.mod h1:U8FQssfgYDo0yAKjPWOdRWofeMh9AeU18SWUx6G3v08=
 github.com/nxadm/tail v1.4.4/go.mod h1:kenIhsEOeOJmVchQTgglprH7qJGnHDVpk1VPCcaMI8A=
 github.com/oklog/ulid v1.3.1/go.mod h1:CirwcVhetQ6Lv90oh/F+FBtV6XMibvdAFo93nm5qn4U=
 github.com/olekukonko/tablewriter v0.0.1/go.mod h1:vsDQFd/mU46D+Z4whnwzcISnGGzXWMclvtLoiIKAKIo=
@@ -451,6 +460,8 @@ github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c/go.mod h1:lzWF7FI
 github.com/paulbellamy/ratecounter v0.2.0/go.mod h1:Hfx1hDpSGoqxkVVpBi/IlYD7kChlfo5C6hzIHwPqfFE=
 github.com/pborman/uuid v0.0.0-20170112150404-1b00554d8222 h1:goeTyGkArOZIVOMA0dQbyuPWGNQJZGPwPu/QS9GlpnA=
 github.com/pborman/uuid v0.0.0-20170112150404-1b00554d8222/go.mod h1:VyrYX9gd7irzKovcSS6BIIEwPRkP2Wm2m9ufcdFSJ34=
+github.com/pborman/uuid v1.2.1 h1:+ZZIw58t/ozdjRaXh/3awHfmWRbzYxJoAdNJxe/3pvw=
+github.com/pborman/uuid v1.2.1/go.mod h1:X/NO0urCmaxf9VXbdlT7C2Yzkj2IKimNn4k+gtPdI/k=
 github.com/pelletier/go-toml v1.2.0/go.mod h1:5z9KED0ma1S8pY6P1sdut58dfprrGBbd/94hg7ilaic=
 github.com/peterh/liner v1.0.1-0.20180619022028-8c1271fcf47f/go.mod h1:xIteQHvHuaLYG9IFj6mSxM0fCKrs34IrEQUhOYuGPHc=
 github.com/peterh/liner v1.1.1-0.20190123174540-a2c9a5303de7 h1:oYW+YCJ1pachXTQmzR3rNLYGGz4g/UgFcjb28p/viDM=
