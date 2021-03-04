@@ -242,6 +242,8 @@ github.com/notegio/go-ethereum v1.9.25-event-stream-2 h1:pSYZ1wxnVlt+06z26WlsOA5
 github.com/notegio/go-ethereum v1.9.25-event-stream-2/go.mod h1:5Wz/XXdiGqxgixr5bGGoQ3yg7k5NRhl5/ub3VmVSFdE=
 github.com/notegio/go-ethereum v1.9.25-event-stream-3 h1:HcjMJG+dKI28mz/JRcOcokng3KCYxnBFhtz1xaIKtJc=
 github.com/notegio/go-ethereum v1.9.25-event-stream-3/go.mod h1:5Wz/XXdiGqxgixr5bGGoQ3yg7k5NRhl5/ub3VmVSFdE=
+github.com/notegio/go-ethereum v1.9.25-event-stream-4 h1:USTmWX7afpUeP/eRVOpMd4SDI7jmScqX2s5w6oMKvLg=
+github.com/notegio/go-ethereum v1.9.25-event-stream-4/go.mod h1:5Wz/XXdiGqxgixr5bGGoQ3yg7k5NRhl5/ub3VmVSFdE=
 github.com/nxadm/tail v1.4.4/go.mod h1:kenIhsEOeOJmVchQTgglprH7qJGnHDVpk1VPCcaMI8A=
 github.com/oklog/ulid v1.3.1/go.mod h1:CirwcVhetQ6Lv90oh/F+FBtV6XMibvdAFo93nm5qn4U=
 github.com/olekukonko/tablewriter v0.0.1/go.mod h1:vsDQFd/mU46D+Z4whnwzcISnGGzXWMclvtLoiIKAKIo=
