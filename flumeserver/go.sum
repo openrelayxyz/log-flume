@@ -436,6 +436,10 @@ github.com/notegio/go-ethereum v1.9.25-event-stream-3 h1:HcjMJG+dKI28mz/JRcOcokn
 github.com/notegio/go-ethereum v1.9.25-event-stream-3/go.mod h1:5Wz/XXdiGqxgixr5bGGoQ3yg7k5NRhl5/ub3VmVSFdE=
 github.com/notegio/go-ethereum v1.10.0-testing-0 h1:vXwf4fmDgJ4q78pD3MY8D2Yp0E1aMJqqP0VJu47bkM8=
 github.com/notegio/go-ethereum v1.10.0-testing-0/go.mod h1:U8FQssfgYDo0yAKjPWOdRWofeMh9AeU18SWUx6G3v08=
+github.com/notegio/go-ethereum v1.10.0-testing-2 h1:tTyivqS3UsY5QQgHLjbzZhVrrsc90X3aD075c/m/Jc0=
+github.com/notegio/go-ethereum v1.10.0-testing-2/go.mod h1:Yt1lugv4l8iW2yrOaijMLwMD2bzn+sZjk+ignF0bG3E=
+github.com/notegio/go-ethereum v1.10.1-1 h1:yeexyoV3Pi3sjvPf8WBLRQyKMgQlWg1qOcKOl0hRmrY=
+github.com/notegio/go-ethereum v1.10.1-1/go.mod h1:K2O0IPAtvPE8ngvaH5BSx5EorIaZvjnAO8tHqy5DH/E=
 github.com/nxadm/tail v1.4.4/go.mod h1:kenIhsEOeOJmVchQTgglprH7qJGnHDVpk1VPCcaMI8A=
 github.com/oklog/ulid v1.3.1/go.mod h1:CirwcVhetQ6Lv90oh/F+FBtV6XMibvdAFo93nm5qn4U=
 github.com/olekukonko/tablewriter v0.0.1/go.mod h1:vsDQFd/mU46D+Z4whnwzcISnGGzXWMclvtLoiIKAKIo=
@@ -450,6 +454,8 @@ github.com/onsi/gomega v1.7.1/go.mod h1:XdKZgCCFLUoM/7CFJVPcG8C1xQ1AJ0vpAezJrB7J
 github.com/onsi/gomega v1.10.1/go.mod h1:iN09h71vgCQne3DLsj+A5owkum+a2tYe+TOCB1ybHNo=
 github.com/openrelayxyz/drumline v0.1.0 h1:w7kd2VDDXkwU22DaBpdV1HpRt6xwkcUftGp/TaSBDqU=
 github.com/openrelayxyz/drumline v0.1.0/go.mod h1:tuP4gn2CYgrEIpVJSfwePU1mVBJfppApZZUU731OOkk=
+github.com/openrelayxyz/drumline v0.3.0 h1:EkEWuKDDsAE6ceXOMcHDYMqZsNqOBcNprxljNhHSMIE=
+github.com/openrelayxyz/drumline v0.3.0/go.mod h1:tuP4gn2CYgrEIpVJSfwePU1mVBJfppApZZUU731OOkk=
 github.com/openrelayxyz/sarama v0.0.0-20200619041629-a7760f73892f h1:3owlAAVcR2ovMr/frh4a1dbo7qlZS8fbjgzSY+/L4U4=
 github.com/openrelayxyz/sarama v0.0.0-20200619041629-a7760f73892f/go.mod h1:n15tbMY1a+QNW5mjOLsYBvxm7/dqJQah45YC/Wd2zTM=
 github.com/opentracing/opentracing-go v1.0.2/go.mod h1:UkNAQd3GIcIGf0SeVgPpRdFStlNbqXla1AfSYxPUl2o=

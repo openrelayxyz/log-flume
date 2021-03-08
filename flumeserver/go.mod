@@ -9,11 +9,11 @@ require (
 	github.com/gorilla/websocket v1.4.2
 	github.com/klauspost/compress v1.10.7
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible
-	github.com/openrelayxyz/drumline v0.1.0 // indirect
+	github.com/openrelayxyz/drumline v0.3.0 // indirect
 	github.com/pborman/uuid v1.2.1 // indirect
 	github.com/rs/cors v1.7.0
 )
 
-replace github.com/ethereum/go-ethereum => github.com/notegio/go-ethereum v1.10.0-testing-2
+replace github.com/ethereum/go-ethereum => github.com/notegio/go-ethereum v1.10.1-1
 
 replace github.com/Shopify/sarama => github.com/openrelayxyz/sarama v0.0.0-20200619041629-a7760f73892f
