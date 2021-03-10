@@ -157,6 +157,8 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
           senderMap[txwr.Transaction.Hash()] = ch
           go func(tx *types.Transaction, ch chan<- common.Address) {
             switch {
+            case tx.Type() == types.AccessListTxType:
+              signer = types.NewEIP2930Signer(tx.ChainId())
             case uint64(chainEvent.Block.Number.ToInt().Int64()) > eip155Block:
               signer = types.NewEIP155Signer(tx.ChainId())
             case uint64(chainEvent.Block.Number.ToInt().Int64()) > homesteadBlock:
