@@ -183,6 +183,54 @@ func Migrate(db *sql.DB, chainid uint64) error {
     db.Exec(`ALTER TABLE transactions ADD access_list blob;`)
     db.Exec(`UPDATE migrations SET version = 4;`)
   }
+  if schemaVersion < 5 {
+    db.Exec(`DROP VIEW v_event_logs;`)
+    db.Exec(`DROP VIEW v_transactions;`)
+    db.Exec(`CREATE VIEW v_event_logs AS
+      SELECT
+        address,
+        topic0,
+        topic1,
+        topic2,
+        topic3,
+        topic4,
+        data,
+        logIndex,
+        event_logs.block as blockNumber,
+        transactions.transactionIndex as transactionIndex,
+        transactions.hash as transactionHash,
+        blocks.hash as blockHash
+      FROM
+        event_logs
+      INNER JOIN transactions on transactions.id = event_logs.tx
+      INNER JOIN blocks on blocks.number = event_logs.block;`)
+    db.Exec(`CREATE VIEW v_transactions AS
+      SELECT
+        gas,
+        gasPrice,
+        transactions.hash as hash,
+        input,
+        transactions.nonce as nonce,
+        recipient,
+        transactionIndex,
+        value,
+        v,
+        r,
+        s,
+        sender,
+        func,
+        contractAddress,
+        cumulativeGasUsed,
+        transactions.gasUsed as gasUsed,
+        logsBloom,
+        status,
+        transactions.block as blockNumber,
+        blocks.hash as blockHash
+      FROM
+        transactions
+      INNER JOIN blocks on blocks.number = transactions.block;`)
+    db.Exec(`UPDATE migrations SET version = 5;`)
+  }
   // chainid
   return nil
 }
