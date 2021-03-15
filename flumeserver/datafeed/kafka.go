@@ -132,11 +132,11 @@ func NewKafkaDataFeed(urlStr string, db *sql.DB, rollback int64) (DataFeed, erro
   log.Printf("Parts: %v", parts)
   log.Printf("Resume offset: %v", offsets)
   var startHash, td []byte
-  n := 0
+  n := uint64(0)
   db.QueryRowContext(context.Background(), "SELECT max(number) FROM blocks;").Scan(&n)
   // Start 3 blocks back to reduce likelihood of reorgs
   db.QueryRowContext(context.Background(), "SELECT number, hash, td FROM blocks WHERE number = ?;", n - 3).Scan(&n, &startHash, &td)
-  consumer, err := replica.NewKafkaEventConsumerFromURLs(strings.TrimPrefix(parts[0], "kafka://"), parts[1], bytesToHash(startHash), offsets, rollback)
+  consumer, err := replica.NewKafkaEventConsumerFromURLs(strings.TrimPrefix(parts[0], "kafka://"), parts[1], bytesToHash(startHash), offsets, rollback, n)
   if err != nil { return nil, err }
   feed := &kafkaDataFeed{
     lastBlockTime: &atomic.Value{},

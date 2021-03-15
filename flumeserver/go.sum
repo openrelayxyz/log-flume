@@ -440,6 +440,8 @@ github.com/notegio/go-ethereum v1.10.0-testing-2 h1:tTyivqS3UsY5QQgHLjbzZhVrrsc9
 github.com/notegio/go-ethereum v1.10.0-testing-2/go.mod h1:Yt1lugv4l8iW2yrOaijMLwMD2bzn+sZjk+ignF0bG3E=
 github.com/notegio/go-ethereum v1.10.1-1 h1:yeexyoV3Pi3sjvPf8WBLRQyKMgQlWg1qOcKOl0hRmrY=
 github.com/notegio/go-ethereum v1.10.1-1/go.mod h1:K2O0IPAtvPE8ngvaH5BSx5EorIaZvjnAO8tHqy5DH/E=
+github.com/notegio/go-ethereum v1.10.1-2 h1:YNO06jj68UNWqbuKO+kE0HfvLg73M0rjHhG358W0qwY=
+github.com/notegio/go-ethereum v1.10.1-2/go.mod h1:K2O0IPAtvPE8ngvaH5BSx5EorIaZvjnAO8tHqy5DH/E=
 github.com/nxadm/tail v1.4.4/go.mod h1:kenIhsEOeOJmVchQTgglprH7qJGnHDVpk1VPCcaMI8A=
 github.com/oklog/ulid v1.3.1/go.mod h1:CirwcVhetQ6Lv90oh/F+FBtV6XMibvdAFo93nm5qn4U=
 github.com/olekukonko/tablewriter v0.0.1/go.mod h1:vsDQFd/mU46D+Z4whnwzcISnGGzXWMclvtLoiIKAKIo=
