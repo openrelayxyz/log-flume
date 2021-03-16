@@ -497,7 +497,7 @@ func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, chainid
   for rows.Next() {
     var amount, to, from, data, blockHashBytes, txHash, r, s, cAccessListRLP []byte
     var nonce, gasLimit, blockNumber, gasPrice, txIndex, v uint64
-    var txType uint8
+    var txTypeRaw sql.NullInt32
     err := rows.Scan(
       &blockHashBytes,
       &blockNumber,
@@ -513,9 +513,10 @@ func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, chainid
       &r,
       &s,
       &from,
-      &txType,
+      &txTypeRaw,
       &cAccessListRLP,
     )
+    txType := uint8(txTypeRaw.Int32)
     if err != nil { return nil, err }
     blockHash := bytesToHash(blockHashBytes)
     txIndexHex := hexutil.Uint64(txIndex)
