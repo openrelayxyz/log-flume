@@ -516,8 +516,8 @@ func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, chainid
       &txTypeRaw,
       &cAccessListRLP,
     )
-    txType := uint8(txTypeRaw.Int32)
     if err != nil { return nil, err }
+    txType := uint8(txTypeRaw.Int32)
     blockHash := bytesToHash(blockHashBytes)
     txIndexHex := hexutil.Uint64(txIndex)
     inputBytes, err := decompress(data)
@@ -566,7 +566,7 @@ func getTransactionReceipts(ctx context.Context, db *sql.DB, offset, limit int, 
   for rows.Next() {
     var to, from, blockHash, txHash, contractAddress, bloomBytes []byte
     var blockNumber, txIndex, gasUsed, cumulativeGasUsed, status  uint64
-    var txType uint8
+    var txTypeRaw sql.NullInt32
     err := rows.Scan(
       &blockHash,
       &blockNumber,
@@ -579,9 +579,10 @@ func getTransactionReceipts(ctx context.Context, db *sql.DB, offset, limit int, 
       &contractAddress,
       &bloomBytes,
       &status,
-      &txType,
+      &txTypeRaw,
     )
     if err != nil { return nil, err }
+    txType := uint8(txTypeRaw.Int32)
     logsBloom, err := decompress(bloomBytes)
     if err != nil { return nil, err }
     fields := map[string]interface{}{
