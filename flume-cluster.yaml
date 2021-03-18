@@ -851,10 +851,6 @@ Resources:
         KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
         CreditSpecification: !If [SmallFlume, {CpuCredits: standard}, !Ref 'AWS::NoValue']
         BlockDeviceMappings:
-        - DeviceName: "/dev/xvda"
-          Ebs:
-            VolumeSize: 8
-            VolumeType: gp2
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref FlumeDiskSize
@@ -913,7 +909,7 @@ Resources:
                 import json
                 import requests
                 instance_id = requests.get("http://169.254.169.254/2012-01-12/meta-data/instance-id").text
-                x = subprocess.Popen(["aws", "ec2", "describe-volumes", "--region", "us-east-2", "--filters", "Name=attachment.instance-id,Values=" + instance_id, "--query", "Volumes[].Attachments[].[Device,VolumeId]", "--output", "json"], stdout=subprocess.PIPE)
+                x = subprocess.Popen(["aws", "ec2", "describe-volumes", "--region", "${AWS::Region}", "--filters", "Name=attachment.instance-id,Values=" + instance_id, "--query", "Volumes[].Attachments[].[Device,VolumeId]", "--output", "json"], stdout=subprocess.PIPE)
                 y = {k: v for k, v in json.load(x.stdout)}
                 z = {line.split()[1]: line.split()[0] for line in subprocess.Popen(["lsblk", "-o", "NAME,SERIAL"], stdout=subprocess.PIPE).stdout.readlines() if len(line.split()) == 2}
                 for dest,vol in y.items():
@@ -1169,10 +1165,6 @@ Resources:
         #   CpuCredits: standard
         InstanceInitiatedShutdownBehavior: terminate
         BlockDeviceMappings:
-        - DeviceName: "/dev/xvda"
-          Ebs:
-            VolumeSize: 8
-            VolumeType: gp2
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref FlumeDiskSize
@@ -1215,7 +1207,7 @@ Resources:
                 import json
                 import requests
                 instance_id = requests.get("http://169.254.169.254/2012-01-12/meta-data/instance-id").text
-                x = subprocess.Popen(["aws", "ec2", "describe-volumes", "--region", "us-east-2", "--filters", "Name=attachment.instance-id,Values=" + instance_id, "--query", "Volumes[].Attachments[].[Device,VolumeId]", "--output", "json"], stdout=subprocess.PIPE)
+                x = subprocess.Popen(["aws", "ec2", "describe-volumes", "--region", "${AWS::Region}", "--filters", "Name=attachment.instance-id,Values=" + instance_id, "--query", "Volumes[].Attachments[].[Device,VolumeId]", "--output", "json"], stdout=subprocess.PIPE)
                 y = {k: v for k, v in json.load(x.stdout)}
                 z = {line.split()[1]: line.split()[0] for line in subprocess.Popen(["lsblk", "-o", "NAME,SERIAL"], stdout=subprocess.PIPE).stdout.readlines() if len(line.split()) == 2}
                 for dest,vol in y.items():
@@ -1375,7 +1367,29 @@ Resources:
                   poweroff
                 fi
 
-                sleep 60
+                if [ -f /tmp/pre-sync.sql ]
+                then
+                  if ! cat /tmp/pre-sync.sql | sqlite3 /var/lib/flume/item.sqlite
+                  then
+                    touch /tmp/interactive
+                  fi
+                fi
+                if [ -f /tmp/interactive ]
+                then
+                  if [ "${AlarmSNSTopic}" != "" ]
+                    then
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Flume Backup: Interactive Session Ready" --message="The flume snapshotter on stack '${AWS::StackName}' is waiting for operator input. The hostname is $(hostname)."
+                  fi
+                  if [ "${AggregatedNotifications}" != "" ]
+                    then
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Flume Backup: Interactive Session Ready" --message="The flume snapshotter on stack '${AWS::StackName}' is waiting for operator input. The hostname is $(hostname)."
+                  fi
+                fi
+
+                while [ -f /tmp/interactive ]
+                do
+                  sleep 30
+                done
 
                 #Deal with double escapes in url if exist
                 printf "/usr/bin/flumeserver ${RollbackFlag} -shutdown.sync /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"" > /tmp/flumesync.sh
@@ -1386,16 +1400,38 @@ Resources:
                 then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
-                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Snapshot Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. This is possibly unrecoverable."
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Snapshot Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. ]"
                   fi
                   if [ "${AlarmSNSTopic}" != "" ]
                   then
-                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} -  Snapshot Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. This is possibly unrecoverable."
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} -  Snapshot Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. ]"
                   fi
                   poweroff
                 fi
 
-                sleep 60
+                if [ -f /tmp/post-sync.sql ]
+                then
+                  if ! cat /tmp/post-sync.sql | sqlite3 /var/lib/flume/item.sqlite
+                  then
+                    touch /tmp/interactive
+                  fi
+                fi
+                if [ -f /tmp/interactive ]
+                then
+                  if [ "${AlarmSNSTopic}" != "" ]
+                    then
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Flume Backup: Interactive Session Ready" --message="The flume snapshotter on stack '${AWS::StackName}' is waiting for operator input. The hostname is $(hostname)."
+                  fi
+                  if [ "${AggregatedNotifications}" != "" ]
+                    then
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Flume Backup: Interactive Session Ready" --message="The flume snapshotter on stack '${AWS::StackName}' is waiting for operator input. The hostname is $(hostname)."
+                  fi
+                fi
+
+                while [ -f /tmp/interactive ]
+                do
+                  sleep 30
+                done
 
                 # upload Backup
                 export BACKUPNAME="${S3FlumeBackupBucket}/${NetworkId}/flume-$(date '+%Y%m%d-%H%M%S').sqlite"
