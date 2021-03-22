@@ -607,7 +607,7 @@ func getTransactionReceipts(ctx context.Context, db *sql.DB, offset, limit int, 
       fields["contractAddress"] = address
     }
 
-    logRows, err := db.QueryContext(ctx, "SELECT address, topic0, topic1, topic2, topic3, topic4, data, logIndex FROM v_event_logs WHERE transactionHash = ?;", txHash)
+    logRows, err := db.QueryContext(ctx, "SELECT address, topic0, topic1, topic2, topic3, topic4, data, logIndex FROM v_event_logs WHERE blockNumber = ? AND transactionHash = ?;", blockNumber, txHash)
     if err != nil {
       log.Printf("Error selecting: %v - '%v'", err.Error(), query)
       return nil, err

@@ -231,6 +231,31 @@ func Migrate(db *sql.DB, chainid uint64) error {
       INNER JOIN blocks on blocks.number = transactions.block;`)
     db.Exec(`UPDATE migrations SET version = 5;`)
   }
+  if schemaVersion < 6 {
+    db.Exec(`ALTER TABLE event_logs ADD transactionHash varchar(32);`)
+    db.Exec(`ALTER TABLE event_logs ADD transactionIndex varchar(32);`)
+    db.Exec(`ALTER TABLE event_logs ADD blockHash varchar(32);`)
+    db.Exec(`UPDATE event_logs SET transactionHash = (SELECT hash from transactions WHERE id = event_logs.tx), transactionIndex = (SELECT transactionIndex from transactions WHERE id = event_logs.tx), blockHash = (SELECT hash from blocks WHERE number = event_logs.block);`)
+    db.Exec(`DROP VIEW v_event_logs;`)
+    db.Exec(`CREATE VIEW v_event_logs AS
+      SELECT
+        address,
+        topic0,
+        topic1,
+        topic2,
+        topic3,
+        topic4,
+        data,
+        logIndex,
+        event_logs.block as blockNumber,
+        transactionIndex,
+        transactionHash,
+        blockHash
+      FROM
+        event_logs;`)
+    db.Exec(`DROP INDEX eventtx;`)
+    db.Exec(`UPDATE migrations SET version = 6;`)
+  }
   // chainid
   return nil
 }
