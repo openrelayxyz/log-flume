@@ -235,7 +235,17 @@ func Migrate(db *sql.DB, chainid uint64) error {
     db.Exec(`ALTER TABLE event_logs ADD transactionHash varchar(32);`)
     db.Exec(`ALTER TABLE event_logs ADD transactionIndex varchar(32);`)
     db.Exec(`ALTER TABLE event_logs ADD blockHash varchar(32);`)
-    db.Exec(`UPDATE event_logs SET transactionHash = (SELECT hash from transactions WHERE id = event_logs.tx), transactionIndex = (SELECT transactionIndex from transactions WHERE id = event_logs.tx), blockHash = (SELECT hash from blocks WHERE number = event_logs.block);`)
+    var maxBlock, minBlock int
+    db.QueryRow(`SELECT max(block) FROM event_logs;`).Scan(&maxBlock)
+    db.QueryRow(`SELECT min(block) FROM event_logs WHERE transactionHash is null;`).Scan(&minBlock);
+    if maxBlock == 0 {
+      // Probably won't do anything, but if something's amiss this will pick anything up
+      db.Exec(`UPDATE event_logs SET transactionHash = (SELECT hash from transactions WHERE id = event_logs.tx), transactionIndex = (SELECT transactionIndex from transactions WHERE id = event_logs.tx), blockHash = (SELECT hash from blocks WHERE number = event_logs.block);`)
+    }
+    for i := minBlock; i < maxBlock; i += 1000 {
+      _, err := db.Exec(`UPDATE event_logs SET transactionHash = (SELECT hash from transactions WHERE id = event_logs.tx), transactionIndex = (SELECT transactionIndex from transactions WHERE id = event_logs.tx), blockHash = (SELECT hash from blocks WHERE number = event_logs.block) WHERE event_logs.block >= ? AND event_logs.block < ?;`, i, i + 1000)
+      if err != nil { return err }
+    }
     db.Exec(`DROP VIEW v_event_logs;`)
     db.Exec(`CREATE VIEW v_event_logs AS
       SELECT
