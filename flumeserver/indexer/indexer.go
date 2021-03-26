@@ -122,12 +122,18 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
           log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
           continue BLOCKLOOP
         }
+        statements := []string{}
         if count, _ := deleteRes.RowsAffected(); count > 0 {
+          statements = append(
+            statements,
+            applyParameters("DELETE FROM transactions WHERE block >= %v", chainEvent.Block.Number.ToInt().Int64()),
+            applyParameters("DELETE FROM event_logs WHERE block >= %v", chainEvent.Block.Number.ToInt().Int64()),
+          )
           log.Printf("Deleted %v records for blocks >= %v", count, chainEvent.Block.Number.ToInt().Int64())
         }
         // log.Printf("Spent %v deleting reorged data", time.Since(dstart))
         uncles, _ := rlp.EncodeToBytes(chainEvent.Block.Uncles)
-        statements := []string{}
+        logs := []string{}
         statements = append(statements, applyParameters(
           "INSERT INTO blocks(number, hash, parentHash, uncleHash, coinbase, root, txRoot, receiptRoot, bloom, difficulty, gasLimit, gasUsed, `time`, extra, mixDigest, nonce, uncles, size, td) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
           chainEvent.Block.Number.ToInt().Int64(),
@@ -218,7 +224,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
             compress(accessListRLP),
           ))
           for _, logRecord := range txwr.Receipt.Logs {
-            statements = append(statements, applyParameters(
+            logs = append(logs, applyParameters(
               "INSERT OR IGNORE INTO event_logs(address, topic0, topic1, topic2, topic3, topic4, data, block, logIndex, transactionHash, transactionIndex, blockhash) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
               logRecord.Address,
               getTopicIndex(logRecord.Topics, 0),
@@ -237,7 +243,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
         }
         // istart := time.Now()
         wg.Add(1)
-        if _, err := dbtx.Exec(strings.Join(statements, " ; ")); err != nil {
+        if _, err := dbtx.Exec(strings.Join(append(statements, logs...), " ; ")); err != nil {
           dbtx.Rollback()
           stats := db.Stats()
           log.Printf("WARN: Failed to insert logs: %v", err.Error())

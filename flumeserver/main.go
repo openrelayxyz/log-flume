@@ -89,7 +89,7 @@ func main() {
   sqlitePath := flag.CommandLine.Args()[0]
   feedURL := flag.CommandLine.Args()[1]
 
-  logsdb, err := sql.Open("sqlite3", fmt.Sprintf("file:%v?_sync=0&_journal_mode=WAL&_foreign_keys=on", sqlitePath))
+  logsdb, err := sql.Open("sqlite3", fmt.Sprintf("file:%v?_sync=0&_journal_mode=WAL", sqlitePath))
   if err != nil { log.Fatalf(err.Error()) }
   logsdb.Exec(fmt.Sprintf("pragma mmap_size=%v", *mmap))
   logsdb.Exec(fmt.Sprintf("pragma cache_size=%v", *cacheSize))
