@@ -208,20 +208,24 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
   } else {
     fromBlock = crit.FromBlock.Int64()
   }
-  whereClause = append(whereClause, "blockNumber >= ?")
+  whereClause = append(whereClause, "block >= ?")
   params = append(params, fromBlock)
   if crit.ToBlock == nil || crit.ToBlock.Int64() < 0{
     toBlock = latestBlock
   } else {
     toBlock = crit.ToBlock.Int64()
   }
-  whereClause = append(whereClause, "blockNumber <= ?")
+  whereClause = append(whereClause, "block <= ?")
   params = append(params, toBlock)
-  // if crit.BlockHash == nil && toBlock - fromBlock < 10000 {
-  //   // If the block range is smaller than 10k, that's probably the best index
-  //   // otherwise we'll lean on the query planner.
-  //   indexClause = "INDEXED BY blockNumber"
-  // }
+  if crit.BlockHash == nil && toBlock - fromBlock < 2500 {
+    // If the block range is smaller than 2.5k, that's probably the best index
+    // otherwise we'll lean on the query planner. Note that even if the result
+    // set for filtering by blocks is bigger than the result set filtering by
+    // other fields, it can still end up being more efficient because logs
+    // sorted by blocks are sequential and can be read with fewer disk
+    // operations, so while it might be tempting to
+    indexClause = "INDEXED BY eventblock"
+  }
   addressClause := []string{}
   for _, address := range crit.Addresses {
     addressClause = append(addressClause, "address = ?")
@@ -246,7 +250,7 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
   if len(topicsClause) > 0 {
     whereClause = append(whereClause, fmt.Sprintf("(%v)", strings.Join(topicsClause, " AND ")))
   }
-  query := fmt.Sprintf("SELECT address, topic0, topic1, topic2, topic3, topic4, data, blockNumber, transactionHash, transactionIndex, blockHash, logIndex FROM v_event_logs %v WHERE %v;", indexClause, strings.Join(whereClause, " AND "))
+  query := fmt.Sprintf("SELECT address, topic0, topic1, topic2, topic3, topic4, data, block, transactionHash, transactionIndex, blockHash, logIndex FROM event_logs %v WHERE %v;", indexClause, strings.Join(whereClause, " AND "))
   rows, err := db.QueryContext(ctx, query, params...)
   if err != nil {
     log.Printf("Error selecting: %v - '%v'", err.Error(), query)
@@ -336,7 +340,7 @@ func getERC20ByAccount(ctx context.Context, w http.ResponseWriter, call *rpcCall
 
   topic0 := common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
   // topic0 must match ERC20, topic3 must be empty (to exclude ERC721) and topic2 is the recipient address
-  rows, err := db.QueryContext(tctx, `SELECT distinct(address) FROM event_logs INDEXED BY topic2 WHERE topic0 = ? AND topic2 = ? AND topic3 = zeroblob(0) LIMIT 1000 OFFSET ?;`, trimPrefix(topic0.Bytes()), trimPrefix(addr.Bytes()), offset)
+  rows, err := db.QueryContext(tctx, `SELECT distinct(address) FROM event_logs INDEXED BY topic2_partial WHERE topic0 = ? AND topic2 = ? AND topic3 = zeroblob(0) LIMIT 1000 OFFSET ?;`, trimPrefix(topic0.Bytes()), trimPrefix(addr.Bytes()), offset)
   if err != nil {
     log.Printf("Error getting account addresses: %v", err.Error())
     handleError(w, "database error", call.ID, 500)
@@ -607,7 +611,7 @@ func getTransactionReceipts(ctx context.Context, db *sql.DB, offset, limit int, 
       fields["contractAddress"] = address
     }
 
-    logRows, err := db.QueryContext(ctx, "SELECT address, topic0, topic1, topic2, topic3, topic4, data, logIndex FROM v_event_logs WHERE blockNumber = ? AND transactionHash = ?;", blockNumber, txHash)
+    logRows, err := db.QueryContext(ctx, "SELECT address, topic0, topic1, topic2, topic3, topic4, data, logIndex FROM event_logs WHERE block = ? AND transactionHash = ?;", blockNumber, txHash)
     if err != nil {
       log.Printf("Error selecting: %v - '%v'", err.Error(), query)
       return nil, err
