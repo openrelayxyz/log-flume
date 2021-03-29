@@ -266,6 +266,27 @@ func Migrate(db *sql.DB, chainid uint64) error {
     db.Exec(`DROP INDEX eventtx;`)
     db.Exec(`UPDATE migrations SET version = 6;`)
   }
+  if schemaVersion < 7 {
+    db.Exec(`CREATE INDEX address_compound ON event_logs(address, block);`)
+    db.Exec(`DROP INDEX address;`)
+    db.Exec(`CREATE INDEX topic0_compound ON event_logs(topic0, block);`)
+    db.Exec(`DROP INDEX topic0;`)
+    db.Exec(`CREATE INDEX topic1_partial ON event_logs(topic1, block) WHERE topic1 IS NOT NULL;`)
+    db.Exec(`DROP INDEX topic1;`)
+    db.Exec(`CREATE INDEX topic2_partial ON event_logs(topic2, block) WHERE topic2 IS NOT NULL;`)
+    db.Exec(`DROP INDEX topic2;`)
+    db.Exec(`CREATE INDEX topic3_partial ON event_logs(topic3, block) WHERE topic3 IS NOT NULL;`)
+    db.Exec(`DROP INDEX topic3;`)
+    db.Exec(`CREATE INDEX topic4_partial ON event_logs(topic4, block) WHERE topic4 IS NOT NULL;`)
+    db.Exec(`DROP INDEX topic4;`)
+    db.Exec(`CREATE INDEX recipient_partial ON transactions(recipient) WHERE recipient IS NOT NULL;`)
+    db.Exec(`DROP INDEX recipient;`)
+    db.Exec(`CREATE INDEX func_partial ON transactions(func) WHERE func IS NOT NULL;`)
+    db.Exec(`DROP INDEX func;`)
+    db.Exec(`CREATE INDEX contractAddress_partial ON transactions(contractAddress) WHERE contractAddress != X"00";`)
+    db.Exec(`DROP INDEX contractAddress;`)
+    db.Exec(`UPDATE migrations SET version = 7;`)
+  }
   // chainid
   return nil
 }
