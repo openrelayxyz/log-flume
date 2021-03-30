@@ -107,6 +107,13 @@ func main() {
       log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
     }
   }()
+  p := &http.Server{
+    Addr: ":6969",
+    Handler: http.DefaultServeMux,
+    ReadHeaderTimeout: 5 * time.Second,
+    MaxHeaderBytes: 1 << 20,
+  }
+  go p.ListenAndServe()
   if err := migrations.Migrate(logsdb, chainid); err != nil {
     log.Fatalf(err.Error())
   }
@@ -129,13 +136,6 @@ func main() {
     ReadHeaderTimeout: 5 * time.Second,
     MaxHeaderBytes: 1 << 20,
   }
-  p := &http.Server{
-    Addr: ":6969",
-    Handler: http.DefaultServeMux,
-    ReadHeaderTimeout: 5 * time.Second,
-    MaxHeaderBytes: 1 << 20,
-  }
-  go p.ListenAndServe()
   <-feed.Ready()
   if *completionTopic != "" {
     notify.SendKafkaNotifications(completionFeed, *completionTopic)
