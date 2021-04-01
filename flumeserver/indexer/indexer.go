@@ -54,6 +54,12 @@ func compress(data []byte) []byte {
   return compressionBuffer.Bytes()
 }
 
+func getCopy(in []byte) []byte {
+  out := make([]byte, len(in))
+  copy(out, in)
+  return out
+}
+
 func getFuncSig(data []byte) ([]byte) {
   if len(data) >= 4 {
     return data[:4]
@@ -203,7 +209,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
             txwr.Transaction.Gas(),
             txwr.Transaction.GasPrice().Uint64(),
             txHash,
-            compress(txwr.Transaction.Data()),
+            getCopy(compress(txwr.Transaction.Data())),
             txwr.Transaction.Nonce(),
             to,
             txwr.Receipt.TransactionIndex,
@@ -216,7 +222,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
             txwr.Receipt.ContractAddress,
             txwr.Receipt.CumulativeGasUsed,
             txwr.Receipt.GasUsed,
-            compress(txwr.Receipt.Bloom.Bytes()),
+            getCopy(compress(txwr.Receipt.Bloom.Bytes())),
             txwr.Receipt.Status,
             txwr.Transaction.Type(),
             compress(accessListRLP),
