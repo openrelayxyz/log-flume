@@ -33,7 +33,9 @@ jobs:
           command: |
             export GOPATH=$HOME/go
             export GOARCH=amd64
-            cd flumeserver
+            cd flumeserver/tokens
+            go generate
+            cd ..
             go build
       # - run:
       #     name: build image
@@ -46,7 +48,7 @@ jobs:
           aws-region: AWS_REGION
       - run:
           name: push to s3
-          command: aws s3 cp ./flumeserver/flumeserver s3://ethercattle-binaries/flume/$CIRCLE_TAG/flumeserver --acl public-read
+          command: aws s3 cp ./flumeserver/flumeserver s3://ethercattle-binaries/flume/$CIRCLE_TAG/flumeserver --acl=public-read
       - run:
           name: Message Slack
           command: |

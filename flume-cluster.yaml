@@ -2,10 +2,15 @@ Description: A  pool of flume servers for Ether Cattle
 
 Parameters:
   FlumeDiskSize:
-    Default: '250'
+    Default: '850'
     Description: Size of each node's chaindata storage volume in GiB
-    MaxValue: '1024'
     MinValue: '8'
+    Type: Number
+  FlumeDiskIOPS:
+    Default: '3000'
+    Description: Size of each node's chaindata storage volume in GiB
+    MinValue: '3000'
+    MaxValue: '16000'
     Type: Number
   FlumeImageAMI:
     Default: ""
@@ -36,6 +41,16 @@ Parameters:
   NetworkId:
     Type: String
     Description: An identifier for the network this cluster represents. This should be common across all clusters representing the same network. (this is a subdirectory backups/snapshots will be stored)
+  FlumeNetworkFlag:
+    Type: String
+    AllowedValues:
+      - "--mainnet"
+      - "--classic"
+      - "--goerli"
+      - "--ropsten"
+      - "--rinkeby"
+    Default: "--mainnet"
+    Description: The Flume network flag
   FlumeClusterVersion:
     Type: String
     Default: v0.1
@@ -62,11 +77,18 @@ Parameters:
     Description: The percentage (0 - 100) CPU utilization target for auto scaling flume
   FlumeSize:
     Type: String
-    Description: Whether to use full size flume or smaller ones. "full" will use a pool of large instances from the m5d, m5ad, r5d, and r5ad families. "small" will use a pool of medium instances from the t3 and t3a families. Use "small" if you expect a small request volume.
+    Description: Whether to use full size flume or smaller ones. Use "small" if you expect a small request volume.
     AllowedValues:
       - full
       - small
     Default: full
+  FlumeProcessorArchitecture:
+    Type: String
+    Description: Whether to use ARM64 or AMD64 instance types
+    AllowedValues:
+      - arm64
+      - amd64
+    Default: arm64
   FlumeAlternateTargetGroup:
     Type: String
     Description: An alternative comma-separated list of target groups that flume should be assigned to.
@@ -106,7 +128,16 @@ Parameters:
   ConsulPrimaryRegion:
       Description: The AWS region of the primary Consul cluster. If not set, defaults to this region.
       Type: String
-
+  FlumeKafkaRollback:
+    Description: The number of Kafka messages to roll back upon resumption
+    Type: Number
+    Default: 5000
+  UrgentAlarmWebhook:
+    Description: URL for webhooks pertaining to urgent alarms
+    Type: String
+  WarningAlarmWebhook:
+    Description: URL for webhooks pertaining to warning alarms
+    Type: String
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -120,6 +151,7 @@ Metadata:
           - NotificationEmail
           - KeyName
           - FlumeSnapshotScheduleExpression
+          - FlumeProcessorArchitecture
       - Label:
           default: Cluster
         Parameters:
@@ -180,7 +212,7 @@ Metadata:
 
 Mappings:
   InstanceSizes:
-    Flume:
+    amd64:
       full:
         - InstanceType: i3en.large
         - InstanceType: m5.xlarge
@@ -194,53 +226,78 @@ Mappings:
       small:
         - InstanceType: t3.medium
         - InstanceType: t3a.medium
+    arm64:
+      full:
+        - InstanceType: r6g.large
+        - InstanceType: r6gd.large
+        - InstanceType: m6g.xlarge
+        - InstanceType: m6gd.xlarge
+      small:
+        - InstanceType: t4g.medium
+        - InstanceType: m6g.medium
+        - InstanceType: m6gd.medium
+        - InstanceType: c6g.large
+        - InstanceType: c6gd.large
+        - InstanceType: c6gn.large
+        - InstanceType: a1.large
   PoolSize:
-    Size:
+    amd64:
       full: 11
       small: 6
+    arm64:
+      full: 8
+      small: 12
   RegionMap:
     us-west-1:
-      AL2AMI: ami-056ee704806822732
+      arm64: ami-06da41549f55c94e2
+      amd64: ami-034bf895b736be04a
     eu-central-1:
-      AL2AMI: ami-0cc293023f983ed53
-    cn-north-1:
-      AL2AMI: ami-0cad3dea07a7c36f9
+      arm64: ami-0ae8199ab6970fbab
+      amd64: ami-0bb75d95f668ff5a7
     us-east-1:
-      AL2AMI: ami-0b898040803850657
+      arm64: ami-0b250ac7d54af0ad8
+      amd64: ami-011899242bb902164
     ap-northeast-2:
-      AL2AMI: ami-095ca789e0549777d
-    us-gov-west1:
-      AL2AMI:  ami-6b157f0a
+      arm64: ami-09517426951d1f0b3
+      amd64: ami-0de358223fd8dc276
     sa-east-1:
-      AL2AMI: ami-058943e7d9b9cabfb
-    ap-northeast-3:
-      AL2AMI: ami-088d713d672ed235e
+      arm64: ami-0199924b6c357b2ae
+      amd64: ami-04ef59610885412b7
     ap-northeast-1:
-      AL2AMI: ami-0c3fd0f5d33134a76
+      arm64: ami-0a276f4ab43f64268
+      amd64: ami-08c925c2f4fe5aee0
     ap-southeast-1:
-      AL2AMI: ami-01f7527546b557442
+      arm64: ami-0a5fb7e26a54b13b8
+      amd64: ami-03425fe81e8a82dfb
     us-east-2:
-      AL2AMI: ami-0d8f6eb4f641ef691
+      arm64: ami-00a1c830981a54d96
+      amd64: ami-07d5003620a5450ee
     ap-southeast-2:
-      AL2AMI: ami-0dc96254d5535925f
-    cn-northwest-1:
-      AL2AMI: ami-094b7433620966eb5
+      arm64: ami-0e3dd8d5a4dc6c4eb
+      amd64: ami-0b31ea67df6098216
     eu-west-1:
-      AL2AMI: ami-0bbc25e23a7640b9b
+      arm64: ami-09e31e88ea2c3eb5d
+      amd64: ami-04ffbabc7935ec0e9
     eu-north-1:
-      AL2AMI: ami-d16fe6af
-    us-gov-east1:
-      AL2AMI: ami-1208ee63
+      arm64: ami-0fefce11d777066fe
+      amd64: ami-0000da4d489188a4b
     ap-south-1:
-      AL2AMI: ami-0d2692b6acea72ee6
+      arm64: ami-011a054cc2d93e8b0
+      amd64: ami-097b711d946240d58
     eu-west-3:
-      AL2AMI: ami-0adcddd3324248c4c
+      arm64: ami-09d0f429725cccc6d
+      amd64: ami-0b209583a4a1146dd
     eu-west-2:
-      AL2AMI: ami-0d8e27447ec2c8410
+      arm64: ami-06b4a7b9c9ba238e0
+      amd64: ami-0d738342f2d2fd5fd
     ca-central-1:
-      AL2AMI: ami-0d4ae09ec9361d8ac
+      arm64: ami-0ce37fa160fc53d62
+      amd64: ami-0a20346326d3d1853
     us-west-2:
-      AL2AMI: ami-082b5a644766e0e6f
+      arm64: ami-063326752a8929b25
+      amd64: ami-089668cd321f3cf82
+
+
 
 Conditions:
   HasKeyName: !Not [!Equals [!Ref KeyName, '']]
@@ -252,9 +309,35 @@ Conditions:
   SmallFlume: !Equals [ !Ref FlumeSize, "small"]
   FlumeSpotLowestPrice: !Equals [!Ref FlumeSpotAllocationStrategy, "lowest-price"]
   SpecifiesConsulRegion: !Not [ !Equals [ !Ref ConsulPrimaryRegion, "" ] ]
+  IsArm: !Equals [ !Ref FlumeProcessorArchitecture, "arm64" ]
+  HasRollback: !Not [ !Equals [!Ref FlumeKafkaRollback, 0] ]
+  HasUrgentWebhook: !Not [ !Equals [ !Ref UrgentAlarmWebhook, "" ]]
+  HasWarningWebhook: !Not [ !Equals [ !Ref WarningAlarmWebhook, "" ]]
 
 
 Resources:
+  UrgentNotifications:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Urgent Notifications
+  UrgentNotificationsSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasUrgentWebhook
+    Properties:
+      Endpoint: !Ref UrgentAlarmWebhook
+      Protocol: https
+      TopicArn: !Ref UrgentNotifications
+  WarningNotifications:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Warning Notifications
+  WarningNotificationsSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasWarningWebhook
+    Properties:
+      Endpoint: !Ref WarningAlarmWebhook
+      Protocol: https
+      TopicArn: !Ref WarningNotifications
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -267,7 +350,21 @@ Resources:
       Path: "/"
       ManagedPolicyArns:
       - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-  MulMin:
+  # Max:
+  #   Type: AWS::Lambda::Function
+  #   Properties:
+  #     Handler: index.handler
+  #     Role: !GetAtt LambdaExecutionRole.Arn
+  #     Code:
+  #       ZipFile: !Sub |
+  #         var response = require('./cfn-response');
+  #         exports.handler = function(event, context) {
+  #           var result = Math.max(parseInt(event.ResourceProperties.Op1), parseInt(event.ResourceProperties.Op2));
+  #           response.send(event, context, response.SUCCESS, {Value: result});
+  #         };
+  #     Runtime: nodejs12.x
+
+  GetBucketName:
     Type: AWS::Lambda::Function
     Properties:
       Handler: index.handler
@@ -276,39 +373,16 @@ Resources:
         ZipFile: !Sub |
           var response = require('./cfn-response');
           exports.handler = function(event, context) {
-            var result = parseInt(event.ResourceProperties.Op1) * parseInt(event.ResourceProperties.Op2);
-            if(event.ResourceProperties.Max) {
-              result = Math.min(result, parseInt(event.ResourceProperties.Max));
-            }
-            response.send(event, context, response.SUCCESS, {Value: result});
+            response.send(event, context, response.SUCCESS, {Name: event.ResourceProperties.ObjectPath.split("/")[0]});
           };
       Runtime: nodejs12.x
-  Max:
-    Type: AWS::Lambda::Function
+
+  CurrentBackupBucket:
+    Type: Custom::GetBucketName
     Properties:
-      Handler: index.handler
-      Role: !GetAtt LambdaExecutionRole.Arn
-      Code:
-        ZipFile: !Sub |
-          var response = require('./cfn-response');
-          exports.handler = function(event, context) {
-            var result = Math.max(parseInt(event.ResourceProperties.Op1), parseInt(event.ResourceProperties.Op2));
-            response.send(event, context, response.SUCCESS, {Value: result});
-          };
-      Runtime: nodejs12.x
-  HDDSize:
-    Type: Custom::Max
-    Properties:
-      ServiceToken: !GetAtt Max.Arn
-      Op1: !Ref FlumeDiskSize
-      Op2: 500
-  VolumeIOPS:
-    Type: Custom::MulMin
-    Properties:
-      ServiceToken: !GetAtt MulMin.Arn
-      Op1: !Ref FlumeDiskSize
-      Op2: 50
-      Max: 5000
+      ServiceToken: !GetAtt GetBucketName.Arn
+      ObjectPath: !Ref S3FlumeBackup
+
 
   AggregatedNotifications:
     Type: AWS::SNS::Topic
@@ -337,6 +411,7 @@ Resources:
         - !Ref FlumeDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the overlay data directory > 95% full"
       ComparisonOperator: "GreaterThanThreshold"
       Metrics:
@@ -382,11 +457,13 @@ Resources:
         - !Ref FlumeDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 5
       OKActions:
         - !Ref FlumeDiskSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
       Threshold: 95
       TreatMissingData: missing
   FlumesCPUAlarm:
@@ -396,6 +473,7 @@ Resources:
         - !Ref FlumeCPUSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       AlarmDescription: "Alarms when the flume CPU > 80%"
       ComparisonOperator: "GreaterThanThreshold"
       Dimensions:
@@ -405,6 +483,7 @@ Resources:
         - !Ref FlumeCPUSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       EvaluationPeriods: 10
       DatapointsToAlarm: 7
       MetricName: "CPUUtilization"
@@ -413,6 +492,7 @@ Resources:
         - !Ref FlumeCPUSNS
         - !Ref AggregatedNotifications
         - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasUrgentWebhook, !Ref UrgentNotifications, !Ref 'AWS::NoValue' ]
       Period: 60
       Statistic: Maximum
       Threshold: 80
@@ -486,7 +566,9 @@ Resources:
               - s3:GetBucketPolicy
               - s3:GetObjectTagging
               - s3:GetBucketLocation
-            Resource: !Sub arn:aws:s3:::${S3FlumeBackupBucket}/*
+            Resource:
+              - !Sub arn:aws:s3:::${S3FlumeBackupBucket}
+              - !Sub arn:aws:s3:::${S3FlumeBackupBucket}/*
             Effect: Allow
           - Action:
               - s3:GetObject
@@ -494,7 +576,9 @@ Resources:
               - s3:GetBucketPolicy
               - s3:GetObjectTagging
               - s3:GetBucketLocation
-            Resource: !Sub arn:aws:s3:::${S3FlumeBackup}
+            Resource:
+              - !Sub arn:aws:s3:::${CurrentBackupBucket.Name}
+              - !Sub arn:aws:s3:::${S3FlumeBackup}/*
             Effect: Allow
           - Action:
               - s3:GetObject
@@ -502,7 +586,9 @@ Resources:
               - s3:GetBucketPolicy
               - s3:GetObjectTagging
               - s3:GetBucketLocation
-            Resource: !Sub arn:aws:s3:::${S3ECBucketName}/*
+            Resource:
+              - !Sub arn:aws:s3:::${S3ECBucketName}
+              - !Sub arn:aws:s3:::${S3ECBucketName}/*
             Effect: Allow
           - Action:
               - cloudwatch:PutMetricData
@@ -615,10 +701,10 @@ Resources:
                 command: mkdir -p /opt/consul/data
           install_consul:
             sources:
-              /usr/bin/: https://releases.hashicorp.com/consul/1.7.0/consul_1.7.0_linux_amd64.zip
+              /usr/bin/: !Sub https://releases.hashicorp.com/consul/1.9.1/consul_1.9.1_linux_${FlumeProcessorArchitecture}.zip
           install_consul_template:
             sources:
-              /usr/bin/: https://releases.hashicorp.com/consul-template/0.24.0/consul-template_0.24.0_linux_amd64.zip
+              /usr/bin/: !Sub https://releases.hashicorp.com/consul-template/0.24.0/consul-template_0.24.0_linux_${FlumeProcessorArchitecture}.zip
           consul_bootstrap:
             files:
               /opt/consul/config/client.json:
@@ -771,20 +857,18 @@ Resources:
                 command: systemctl enable consul
               05_start_consul:
                 command: systemctl start consul
-              06_get_envoy:
-                command: curl -L https://getenvoy.io/cli | bash -s -- -b /usr/local/bin
-              07_fetch_envoy:
-                command: /usr/local/bin/getenvoy fetch standard:1.13.1
-              08_install_envoy:
-                command: mv /root/.getenvoy/builds/standard/1.13.1/linux_glibc/bin/envoy /usr/bin/envoy
-              09_enable_flume_sidecar:
+              06_fetch_envoy:
+                command: !Sub aws s3 cp s3://${S3ECBucketName}/envoy/v1.16.0/envoy-${FlumeProcessorArchitecture} /usr/bin/envoy
+              07_install_envoy:
+                command: chmod +x /usr/bin/envoy
+              08_enable_flume_sidecar:
                 command: systemctl enable flume-sidecar
-              10_start_flume_sidecar:
+              09_start_flume_sidecar:
                 command: systemctl start flume-sidecar
     Properties:
       LaunchTemplateData:
-        ImageId: !If [HasFlumeImageAMI, !Ref FlumeImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
-        InstanceType: m5ad.large
+        ImageId: !If [HasFlumeImageAMI, !Ref FlumeImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", !Ref FlumeProcessorArchitecture]]
+        InstanceType: !If [ IsArm, r6g.large, 5ad.large ]
         TagSpecifications:
           - ResourceType: instance
             Tags:
@@ -802,24 +886,35 @@ Resources:
         KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
         CreditSpecification: !If [SmallFlume, {CpuCredits: standard}, !Ref 'AWS::NoValue']
         BlockDeviceMappings:
-        - DeviceName: "/dev/xvda"
-          Ebs:
-            VolumeSize: 8
-            VolumeType: gp2
-        BlockDeviceMappings:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref FlumeDiskSize
-            VolumeType: io1
-            Iops: !GetAtt VolumeIOPS.Value
-            # SnapshotId: !Ref SnapshotId
+            VolumeType: gp3
+            Iops: 4000
+            Throughput: 1000
+        - DeviceName: "/dev/sds"
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp3
+            Iops: 3000
+            Throughput: 125
 
         UserData:
           "Fn::Base64":
             "Fn::Sub":
               - |
                 #!/bin/bash -xe
-                yum install -y aws-cfn-bootstrap
+                curl https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz --output - | tar xzf -
+                export PYTHONPATH=aws-cfn-bootstrap-2.0/
+                export PATH=$PATH:aws-cfn-bootstrap-2.0/bin/
+                chmod +x aws-cfn-bootstrap-2.0/bin/cfn-init
+
+                apt update
+                apt install -y jq unzip sqlite3
+
+                curl "https://awscli.amazonaws.com/awscli-exe-linux-$(arch).zip" -o "awscliv2.zip"
+                unzip awscliv2.zip
+                ./aws/install
 
                 if [ "$(arch)" == "x86_64" ]
                 then
@@ -833,14 +928,34 @@ Resources:
                 aws s3 cp s3://${S3ECBucketName}/$LOGS_BIN /usr/local/bin/journald-cloudwatch-logs
                 chmod +x /usr/local/bin/journald-cloudwatch-logs
                 mkdir -p /var/lib/journald-cloudwatch-logs/
-                yum install -y https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/$ARCH/latest/amazon-cloudwatch-agent.rpm jq
-                /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${MetricsConfigParameter} -s
+                wget https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/$ARCH/latest/amazon-cloudwatch-agent.deb
+                dpkg -i amazon-cloudwatch-agent.deb
+
+                /usr/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${MetricsConfigParameter} -s
 
                 printf "[Unit]\nDescription=journald-cloudwatch-logs\nWants=basic.target\nAfter=basic.target network.target\n\n[Service]\nExecStart=/usr/local/bin/journald-cloudwatch-logs /usr/local/etc/journald-cloudwatch-logs.conf\nKillMode=process\nRestart=on-failure\nRestartSec=42s" > /etc/systemd/system/journald-cloudwatch-logs.service
 
                 printf "log_group = \"${FlumeLG}\"\nstate_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
                 mkdir -p /var/lib/flume
                 export AWS_DEFAULT_REGION=${AWS::Region}
+
+                printf 'import subprocess
+                import sys
+                import json
+                import requests
+                instance_id = requests.get("http://169.254.169.254/2012-01-12/meta-data/instance-id").text
+                x = subprocess.Popen(["aws", "ec2", "describe-volumes", "--region", "${AWS::Region}", "--filters", "Name=attachment.instance-id,Values=" + instance_id, "--query", "Volumes[].Attachments[].[Device,VolumeId]", "--output", "json"], stdout=subprocess.PIPE)
+                y = {k: v for k, v in json.load(x.stdout)}
+                z = {line.split()[1]: line.split()[0] for line in subprocess.Popen(["lsblk", "-o", "NAME,SERIAL"], stdout=subprocess.PIPE).stdout.readlines() if len(line.split()) == 2}
+                for dest,vol in y.items():
+                  print (z[vol.replace("-","").encode("utf8")].decode("utf8"),dest)
+                  subprocess.Popen(["ln","-s","/dev/"+z[vol.replace("-","").encode("utf8")].decode("utf8"),dest], stdout=subprocess.PIPE)
+                ' > /tmp/setvolumes.py
+                python3 /tmp/setvolumes.py
+
+                mkswap /dev/sds
+                swapon /dev/sds
+
                 if [ -e /dev/sdf ]
                 then
                   mkfs.ext4 /dev/sdf
@@ -861,8 +976,83 @@ Resources:
                 #   echo "$localnvme  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
                 # fi
 
+                echo "flume        hard nofile 500000" >> /etc/security/limits.conf
+                echo "flume        soft nofile 500000" >> /etc/security/limits.conf
+
+                printf '### IMPROVE SYSTEM MEMORY MANAGEMENT ###
+
+                # Increase size of file handles and inode cache
+                fs.file-max = 2097152
+
+                # Do less swapping
+                vm.swappiness = 10
+                vm.dirty_ratio = 60
+                vm.dirty_background_ratio = 2
+
+                ### GENERAL NETWORK SECURITY OPTIONS ###
+
+                # Number of times SYNACKs for passive TCP connection.
+                net.ipv4.tcp_synack_retries = 2
+
+                # Allowed local port range
+                net.ipv4.ip_local_port_range = 2000 65535
+
+                # Protect Against TCP Time-Wait
+                net.ipv4.tcp_rfc1337 = 1
+
+                # Decrease the time default value for tcp_fin_timeout connection
+                net.ipv4.tcp_fin_timeout = 15
+
+                # Decrease the time default value for connections to keep alive
+                net.ipv4.tcp_keepalive_time = 300
+                net.ipv4.tcp_keepalive_probes = 5
+                net.ipv4.tcp_keepalive_intvl = 15
+
+                ### TUNING NETWORK PERFORMANCE ###
+
+                # Default Socket Receive Buffer
+                net.core.rmem_default = 31457280
+
+                # Maximum Socket Receive Buffer
+                net.core.rmem_max = 12582912
+
+                # Default Socket Send Buffer
+                net.core.wmem_default = 31457280
+
+                # Maximum Socket Send Buffer
+                net.core.wmem_max = 12582912
+
+                # Increase number of incoming connections
+                net.core.somaxconn = 4096
+
+                # Increase number of incoming connections backlog
+                net.core.netdev_max_backlog = 65536
+
+                # Increase the maximum amount of option memory buffers
+                net.core.optmem_max = 25165824
+
+                # Increase the maximum total buffer-space allocatable
+                # This is measured in units of pages (4096 bytes)
+                net.ipv4.tcp_mem = 65536 131072 262144
+                net.ipv4.udp_mem = 65536 131072 262144
+
+                # Increase the read-buffer space allocatable
+                net.ipv4.tcp_rmem = 8192 87380 16777216
+                net.ipv4.udp_rmem_min = 16384
+
+                # Increase the write-buffer-space allocatable
+                net.ipv4.tcp_wmem = 8192 65536 16777216
+                net.ipv4.udp_wmem_min = 16384
+
+                # Increase the tcp-time-wait buckets pool size to prevent simple DOS attacks
+                net.ipv4.tcp_max_tw_buckets = 1440000
+                net.ipv4.tcp_tw_recycle = 1
+                net.ipv4.tcp_tw_reuse = 1' > /etc/sysctl.conf
+
+                sysctl -p || true
+
                 #Copy Down flumeserver
-                if ! aws s3 cp s3://${S3ECBucketName}/${S3FlumeBinaryDirectory}/flumeserver /usr/bin/flumeserver
+                if ! aws s3 cp s3://${S3ECBucketName}/${S3FlumeBinaryDirectory}/flumeserver-$ARCH /usr/bin/flumeserver
                 then
                   if [ "${AggregatedNotifications}" != "" ]
                     then
@@ -876,8 +1066,15 @@ Resources:
                 fi
                 chmod +x /usr/bin/flumeserver
 
+                aws s3 cp s3://${S3ECBucketName}/backupmanager/v0.1.2/backupmanager-linux-$ARCH /usr/bin/backupmanager
+                chmod +x /usr/bin/backupmanager
+
+                totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
+                concurrency=$((totalm / 1600 ))
+
+                export AWS_REGION=${AWS::Region}
                 #copy down the flume backup
-                if ! aws s3 cp s3://${S3FlumeBackup} - | lz4  -d - /var/lib/flume/item.sqlite
+                if ! backupmanager download --concurrency=$concurrency s3://${S3FlumeBackup} /var/lib/flume/item.sqlite
                 then
                   if [ "${AggregatedNotifications}" != "" ]
                     then
@@ -889,6 +1086,7 @@ Resources:
                   fi
                   poweroff
                 fi
+                chown -R flume /var/lib/flume
 
                 printf "[Unit]
                 Description=Flume getlogs go client
@@ -899,7 +1097,7 @@ Resources:
                 Environment=HOME=/var/lib/flume
                 Type=simple
                 LimitNOFILE=655360
-                ExecStart=/usr/bin/flumeserver /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"
+                ExecStart=/usr/bin/flumeserver ${RollbackFlag} ${FlumeNetworkFlag} /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"
                 CPUSchedulingPolicy=fifo
                 CPUSchedulingPriority=20
                 KillMode=process
@@ -912,31 +1110,7 @@ Resources:
                 WantedBy=multi-user.target
                 " > /etc/systemd/system/flume.service
 
-                echo "flume        hard nofile 500000" >> /etc/security/limits.conf
-                echo "flume        soft nofile 500000" >> /etc/security/limits.conf
-                sysctl -w fs.file-max=12000500
-                sysctl -w fs.nr_open=20000500
-                chown -R flume /var/lib/flume
-                # Set the maximum number of open file descriptors
-                ulimit -n 20000000
-
-                # Set the memory size for TCP with minimum, default and maximum thresholds
-                sysctl -w net.ipv4.tcp_mem='10000000 10000000 10000000'
-
-                # Set the receive buffer for each TCP connection with minumum, default and maximum thresholds
-                sysctl -w net.ipv4.tcp_rmem='1024 4096 16384'
-
-                # Set the TCP send buffer space with minumum, default and maximum thresholds
-                sysctl -w net.ipv4.tcp_wmem='1024 4096 16384'
-
-                # The maximum socket receive buffer sizemem_max=16384
-                sysctl -w net.core.rmem_max=16384
-
-                # The maximum socket send buffer size
-                sysctl -w net.core.wmem_max=16384
-
-                sysctl -w vm.swappiness=0
-                /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource FlumeLaunchTemplate --configsets cs_install --region ${AWS::Region}
+                aws-cfn-bootstrap-2.0/bin/cfn-init -v --stack ${AWS::StackName} --resource FlumeLaunchTemplate --configsets cs_install --region ${AWS::Region}
                 systemctl daemon-reload
                 systemctl enable flume.service
                 systemctl enable amazon-cloudwatch-agent.service
@@ -947,11 +1121,12 @@ Resources:
 
                 sleep 300
                 VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
-                aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp2 &
+                aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp3 --iops ${FlumeDiskIOPS} --throughput 125 &
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 BaseInfrastructure:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                RollbackFlag: !If [ HasRollback, !Sub "--kafka-rollback=${FlumeKafkaRollback}", ""]
   FlumeAutoScalingPolicy:
     Type: AWS::AutoScaling::ScalingPolicy
     Properties:
@@ -983,12 +1158,12 @@ Resources:
         InstancesDistribution:
           SpotAllocationStrategy: !Ref FlumeSpotAllocationStrategy
           OnDemandPercentageAboveBaseCapacity: !Ref FlumeOnDemandPercentage
-          SpotInstancePools: !If [ FlumeSpotLowestPrice, !FindInMap [PoolSize, Size, !Ref FlumeSize], !Ref "AWS::NoValue"]
+          SpotInstancePools: !If [ FlumeSpotLowestPrice, !FindInMap [PoolSize, !Ref FlumeProcessorArchitecture, !Ref FlumeSize], !Ref "AWS::NoValue"]
         LaunchTemplate:
           LaunchTemplateSpecification:
             LaunchTemplateId: !Ref FlumeLaunchTemplate
             Version: !Sub ${FlumeLaunchTemplate.LatestVersionNumber}
-          Overrides: !FindInMap [InstanceSizes, Flume, !Ref FlumeSize]
+          Overrides: !FindInMap [InstanceSizes, !Ref FlumeProcessorArchitecture, !Ref FlumeSize]
       MinSize: !Ref FlumeTargetCapacity
       MaxSize: !Ref FlumeMaxCapacity
       HealthCheckType: EC2
@@ -1005,8 +1180,8 @@ Resources:
     Type: AWS::EC2::LaunchTemplate
     Properties:
       LaunchTemplateData:
-        ImageId: !If [HasFlumeImageAMI, !Ref FlumeImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
-        InstanceType: r5.large
+        ImageId: !If [HasFlumeImageAMI, !Ref FlumeImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", "amd64" ]]
+        InstanceType: r5a.large
         TagSpecifications:
           - ResourceType: instance
             Tags:
@@ -1025,17 +1200,18 @@ Resources:
         #   CpuCredits: standard
         InstanceInitiatedShutdownBehavior: terminate
         BlockDeviceMappings:
-        - DeviceName: "/dev/xvda"
-          Ebs:
-            VolumeSize: 8
-            VolumeType: gp2
-        BlockDeviceMappings:
         - DeviceName: "/dev/sdf"
           Ebs:
             VolumeSize: !Ref FlumeDiskSize
-            VolumeType: gp2
-            # Iops: !GetAtt VolumeIOPS.Value
-            # SnapshotId: !Ref SnapshotId
+            VolumeType: gp3
+            Iops: 4000
+            Throughput: 1000
+        - DeviceName: "/dev/sds"
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp3
+            Iops: 3000
+            Throughput: 125
 
         UserData:
           "Fn::Base64":
@@ -1051,9 +1227,32 @@ Resources:
                 fi
                 LOGS_BIN="journald-cloudwatch-logs-$ARCH"
 
-                yum install -y jq
+                apt update
+                apt install -y jq sqlite3 unzip
+
+                curl "https://awscli.amazonaws.com/awscli-exe-linux-$(arch).zip" -o "awscliv2.zip"
+
+                unzip awscliv2.zip
+                ./aws/install
 
                 mkdir -p /var/lib/flume
+
+                printf 'import subprocess
+                import sys
+                import json
+                import requests
+                instance_id = requests.get("http://169.254.169.254/2012-01-12/meta-data/instance-id").text
+                x = subprocess.Popen(["aws", "ec2", "describe-volumes", "--region", "${AWS::Region}", "--filters", "Name=attachment.instance-id,Values=" + instance_id, "--query", "Volumes[].Attachments[].[Device,VolumeId]", "--output", "json"], stdout=subprocess.PIPE)
+                y = {k: v for k, v in json.load(x.stdout)}
+                z = {line.split()[1]: line.split()[0] for line in subprocess.Popen(["lsblk", "-o", "NAME,SERIAL"], stdout=subprocess.PIPE).stdout.readlines() if len(line.split()) == 2}
+                for dest,vol in y.items():
+                  print (z[vol.replace("-","").encode("utf8")].decode("utf8"),dest)
+                  subprocess.Popen(["ln","-s","/dev/"+z[vol.replace("-","").encode("utf8")].decode("utf8"),dest], stdout=subprocess.PIPE)
+                ' > /tmp/setvolumes.py
+                python3 /tmp/setvolumes.py
+
+                mkswap /dev/sds
+                swapon /dev/sds
 
                 if [ -e /dev/sdf ]
                 then
@@ -1077,8 +1276,81 @@ Resources:
                 #   echo "$localnvme  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
                 # fi
 
+
+                printf '### IMPROVE SYSTEM MEMORY MANAGEMENT ###
+
+                # Increase size of file handles and inode cache
+                fs.file-max = 2097152
+
+                # Do less swapping
+                vm.swappiness = 10
+                vm.dirty_ratio = 60
+                vm.dirty_background_ratio = 2
+
+                ### GENERAL NETWORK SECURITY OPTIONS ###
+
+                # Number of times SYNACKs for passive TCP connection.
+                net.ipv4.tcp_synack_retries = 2
+
+                # Allowed local port range
+                net.ipv4.ip_local_port_range = 2000 65535
+
+                # Protect Against TCP Time-Wait
+                net.ipv4.tcp_rfc1337 = 1
+
+                # Decrease the time default value for tcp_fin_timeout connection
+                net.ipv4.tcp_fin_timeout = 15
+
+                # Decrease the time default value for connections to keep alive
+                net.ipv4.tcp_keepalive_time = 300
+                net.ipv4.tcp_keepalive_probes = 5
+                net.ipv4.tcp_keepalive_intvl = 15
+
+                ### TUNING NETWORK PERFORMANCE ###
+
+                # Default Socket Receive Buffer
+                net.core.rmem_default = 31457280
+
+                # Maximum Socket Receive Buffer
+                net.core.rmem_max = 12582912
+
+                # Default Socket Send Buffer
+                net.core.wmem_default = 31457280
+
+                # Maximum Socket Send Buffer
+                net.core.wmem_max = 12582912
+
+                # Increase number of incoming connections
+                net.core.somaxconn = 4096
+
+                # Increase number of incoming connections backlog
+                net.core.netdev_max_backlog = 65536
+
+                # Increase the maximum amount of option memory buffers
+                net.core.optmem_max = 25165824
+
+                # Increase the maximum total buffer-space allocatable
+                # This is measured in units of pages (4096 bytes)
+                net.ipv4.tcp_mem = 65536 131072 262144
+                net.ipv4.udp_mem = 65536 131072 262144
+
+                # Increase the read-buffer space allocatable
+                net.ipv4.tcp_rmem = 8192 87380 16777216
+                net.ipv4.udp_rmem_min = 16384
+
+                # Increase the write-buffer-space allocatable
+                net.ipv4.tcp_wmem = 8192 65536 16777216
+                net.ipv4.udp_wmem_min = 16384
+
+                # Increase the tcp-time-wait buckets pool size to prevent simple DOS attacks
+                net.ipv4.tcp_max_tw_buckets = 1440000
+                net.ipv4.tcp_tw_recycle = 1
+                net.ipv4.tcp_tw_reuse = 1' > /etc/sysctl.conf
+
+                sysctl -p || true
+
                 #Copy Down flumeserver
-                if ! aws s3 cp s3://${S3ECBucketName}/${S3FlumeBinaryDirectory}/flumeserver /usr/bin/flumeserver
+                if ! aws s3 cp s3://${S3ECBucketName}/${S3FlumeBinaryDirectory}/flumeserver-$ARCH /usr/bin/flumeserver
                 then
                   if [ "${AggregatedNotifications}" != "" ]
                     then
@@ -1092,8 +1364,32 @@ Resources:
                 fi
                 chmod +x /usr/bin/flumeserver
 
+                aws s3 cp s3://${S3ECBucketName}/backupmanager/v0.1.2/backupmanager-linux-$ARCH /usr/bin/backupmanager
+                chmod +x /usr/bin/backupmanager
+
+                sysctl -w net.ipv4.tcp_mem='10000000 10000000 10000000'
+
+                # Set the receive buffer for each TCP connection with minumum, default and maximum thresholds
+                sysctl -w net.ipv4.tcp_rmem='1024 4096 16384'
+
+                # Set the TCP send buffer space with minumum, default and maximum thresholds
+                sysctl -w net.ipv4.tcp_wmem='1024 4096 16384'
+
+                # The maximum socket receive buffer sizemem_max=16384
+                sysctl -w net.core.rmem_max=16384
+
+                # The maximum socket send buffer size
+                sysctl -w net.core.wmem_max=16384
+
+                sysctl -w vm.swappiness=0
+
+                export AWS_REGION=${AWS::Region}
+
+                totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
+                concurrency=$((totalm / 1600 ))
+
                 #copy down the flume backup
-                if ! aws s3 cp s3://${S3FlumeBackup} - | lz4  -d - /var/lib/flume/item.sqlite
+                if ! backupmanager download --concurrency=$concurrency s3://${S3FlumeBackup} /var/lib/flume/item.sqlite
                 then
                   if [ "${AggregatedNotifications}" != "" ]
                     then
@@ -1106,10 +1402,32 @@ Resources:
                   poweroff
                 fi
 
-                sleep 60
+                if [ -f /tmp/pre-sync.sql ]
+                then
+                  if ! cat /tmp/pre-sync.sql | sqlite3 /var/lib/flume/item.sqlite
+                  then
+                    touch /tmp/interactive
+                  fi
+                fi
+                if [ -f /tmp/interactive ]
+                then
+                  if [ "${AlarmSNSTopic}" != "" ]
+                    then
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Flume Backup: Interactive Session Ready" --message="The flume snapshotter on stack '${AWS::StackName}' is waiting for operator input. The hostname is $(hostname)."
+                  fi
+                  if [ "${AggregatedNotifications}" != "" ]
+                    then
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Flume Backup: Interactive Session Ready" --message="The flume snapshotter on stack '${AWS::StackName}' is waiting for operator input. The hostname is $(hostname)."
+                  fi
+                fi
+
+                while [ -f /tmp/interactive ]
+                do
+                  sleep 30
+                done
 
                 #Deal with double escapes in url if exist
-                printf "/usr/bin/flumeserver -shutdown.sync /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"" > /tmp/flumesync.sh
+                printf "/usr/bin/flumeserver ${RollbackFlag} -shutdown.sync /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"" > /tmp/flumesync.sh
                 chmod +x /tmp/flumesync.sh
 
                 # sync and shutdown
@@ -1117,20 +1435,42 @@ Resources:
                 then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
-                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Snapshot Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. This is possibly unrecoverable."
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Snapshot Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. ]"
                   fi
                   if [ "${AlarmSNSTopic}" != "" ]
                   then
-                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} -  Snapshot Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. This is possibly unrecoverable."
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} -  Snapshot Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. ]"
                   fi
                   poweroff
                 fi
 
-                sleep 60
+                if [ -f /tmp/post-sync.sql ]
+                then
+                  if ! cat /tmp/post-sync.sql | sqlite3 /var/lib/flume/item.sqlite
+                  then
+                    touch /tmp/interactive
+                  fi
+                fi
+                if [ -f /tmp/interactive ]
+                then
+                  if [ "${AlarmSNSTopic}" != "" ]
+                    then
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Flume Backup: Interactive Session Ready" --message="The flume snapshotter on stack '${AWS::StackName}' is waiting for operator input. The hostname is $(hostname)."
+                  fi
+                  if [ "${AggregatedNotifications}" != "" ]
+                    then
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Flume Backup: Interactive Session Ready" --message="The flume snapshotter on stack '${AWS::StackName}' is waiting for operator input. The hostname is $(hostname)."
+                  fi
+                fi
+
+                while [ -f /tmp/interactive ]
+                do
+                  sleep 30
+                done
 
                 # upload Backup
-                export BACKUPNAME="${S3FlumeBackupBucket}/${NetworkId}/logs-$(date '+%Y%m%d-%H%M%S').sqlite.lz4"
-                if ! lz4 /var/lib/flume/item.sqlite | aws s3 cp - s3://$BACKUPNAME --expected-size=175000000000; then
+                export BACKUPNAME="${S3FlumeBackupBucket}/${NetworkId}/flume-$(date '+%Y%m%d-%H%M%S').sqlite"
+                if ! backupmanager upload --concurrency=$concurrency /var/lib/flume/item.sqlite s3://$BACKUPNAME; then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
                     aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Taking Backup Failed" --message="The snapshotting process for ${AWS::StackName} failed to upload the backup."
@@ -1151,6 +1491,7 @@ Resources:
                 poweroff
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                RollbackFlag: !If [ HasRollback, !Sub "--kafka-rollback=${FlumeKafkaRollback}", ""]
 
   FlumeSnapshotNodeRole:
     Type: "AWS::IAM::Role"
@@ -1181,7 +1522,9 @@ Resources:
               - s3:GetObjectTagging
               - s3:GetBucketLocation
               - s3:PutObject
-            Resource: !Sub arn:aws:s3:::${S3FlumeBackupBucket}/*
+            Resource:
+              - !Sub arn:aws:s3:::${S3FlumeBackupBucket}
+              - !Sub arn:aws:s3:::${S3FlumeBackupBucket}/*
             Effect: Allow
           - Action:
               - s3:GetObject
@@ -1189,7 +1532,9 @@ Resources:
               - s3:GetBucketPolicy
               - s3:GetObjectTagging
               - s3:GetBucketLocation
-            Resource: !Sub arn:aws:s3:::${S3ECBucketName}/*
+            Resource:
+              - !Sub arn:aws:s3:::${S3ECBucketName}
+              - !Sub arn:aws:s3:::${S3ECBucketName}/*
             Effect: Allow
           - Action:
               - s3:GetObject
@@ -1197,7 +1542,9 @@ Resources:
               - s3:GetBucketPolicy
               - s3:GetObjectTagging
               - s3:GetBucketLocation
-            Resource: !Sub arn:aws:s3:::${S3FlumeBackup}
+            Resource:
+              - !Sub arn:aws:s3:::${CurrentBackupBucket.Name}
+              - !Sub arn:aws:s3:::${S3FlumeBackup}/*
             Effect: Allow
           - Action:
               - cloudformation:UpdateStack
@@ -1211,9 +1558,12 @@ Resources:
             Effect: Allow
           - Action:
               - lambda:UpdateFunctionConfiguration
+              - lambda:InvokeFunction
+              - lambda:InvokeAsync
               - lambda:GetFunctionConfiguration
             Resource:
               - !Sub ${FlumeSnapshotLambdaFunction.Arn}
+              - !Sub ${GetBucketName.Arn}
             Effect: Allow
           - Action:
               - iam:PassRole
@@ -1320,19 +1670,29 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3ECBucketName
-        S3Key: lambdaPackage-17.zip
+        S3Key: lambdaPackage-21.zip
       Description: "Launch instances to snapshot chaindata"
       Environment:
         Variables:
           LAUNCH_TEMPLATE_ID: !Ref FlumeSnapshotLaunchTemplate
           LAUNCH_TEMPLATE_VERSION: !Sub "${FlumeSnapshotLaunchTemplate.LatestVersionNumber}"
           SUBNET_ID:
-            "Fn::ImportValue":
-                !Sub "${InfrastructureStack}-PublicA"
+            "Fn::Sub":
+              - "${PublicA},${PublicB},${PublicC}"
+              - PublicA:
+                  "Fn::ImportValue":
+                      !Sub "${InfrastructureStack}-PublicA"
+                PublicB:
+                  "Fn::ImportValue":
+                      !Sub "${InfrastructureStack}-PublicB"
+                PublicC:
+                  "Fn::ImportValue":
+                      !Sub "${InfrastructureStack}-PublicC"
           VOLUME_SIZE: !Ref FlumeDiskSize
       Handler: "getSnapshot.handler"
       Role: !Sub ${FlumeSnapshotLambdaRole.Arn}
       Runtime: python3.7
+      Timeout: 30
   SnapshotSchedulerRule:
     Type: AWS::Events::Rule
     Properties:
