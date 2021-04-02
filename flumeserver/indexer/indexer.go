@@ -78,7 +78,7 @@ func applyParameters(query string, params ...interface{}) string {
     case bytesable:
       preparedParams[i] = fmt.Sprintf("X'%x'", trimPrefix(value.Bytes()))
     case hexutil.Bytes:
-      preparedParams[i] = fmt.Sprintf("X'%x'", value[:])
+      preparedParams[i] = fmt.Sprintf("X'%x'", []byte(value[:]))
     case hexutil.Uint64:
       preparedParams[i] = fmt.Sprintf("%v", uint64(value))
     case types.BlockNonce:
