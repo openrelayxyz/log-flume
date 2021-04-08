@@ -1127,23 +1127,6 @@ Resources:
                 BaseInfrastructure:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
                 RollbackFlag: !If [ HasRollback, !Sub "--kafka-rollback=${FlumeKafkaRollback}", ""]
-  FlumeAutoScalingPolicy:
-    Type: AWS::AutoScaling::ScalingPolicy
-    Properties:
-      # AdjustmentType: String
-      AutoScalingGroupName: !Ref FlumeAutoScalingGroup
-      # Cooldown: 900
-      EstimatedInstanceWarmup: 900
-      # MetricAggregationType: String
-      # MinAdjustmentMagnitude: Integer
-      PolicyType: TargetTrackingScaling
-      # ScalingAdjustment: Integer
-      # StepAdjustments:
-      #   - StepAdjustment
-      TargetTrackingConfiguration:
-        PredefinedMetricSpecification:
-          PredefinedMetricType: ASGAverageCPUUtilization
-        TargetValue: !Ref FlumeCPUScalingTargetValue
   FlumeAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
