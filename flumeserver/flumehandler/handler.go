@@ -536,7 +536,7 @@ func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, chainid
       rlp.DecodeBytes(accessListRLP, accessList)
       chainID = uintToHexBig(chainid)
     case types.LegacyTxType:
-      chainID = deriveChainID(v)
+      chainID = nil
     }
     results = append(results, &rpcTransaction{
       BlockHash: &blockHash,        //*common.Hash
