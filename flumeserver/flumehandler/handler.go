@@ -67,6 +67,9 @@ func bytesToAddress(data []byte) (common.Address) {
   return result
 }
 func bytesToAddressPtr(data []byte) (*common.Address) {
+  if len(data) == 0 {
+    return nil
+  }
   result := bytesToAddress(data)
   return &result
 }
