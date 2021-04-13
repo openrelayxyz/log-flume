@@ -1183,12 +1183,12 @@ Resources:
         #   CpuCredits: standard
         InstanceInitiatedShutdownBehavior: terminate
         BlockDeviceMappings:
-        - DeviceName: "/dev/sdf"
-          Ebs:
-            VolumeSize: !Ref FlumeDiskSize
-            VolumeType: gp3
-            Iops: 4000
-            Throughput: 1000
+        # - DeviceName: "/dev/sdf"
+        #   Ebs:
+        #     VolumeSize: !Ref FlumeDiskSize
+        #     VolumeType: gp3
+        #     Iops: 4000
+        #     Throughput: 1000
         - DeviceName: "/dev/sds"
           Ebs:
             VolumeSize: 8
@@ -1217,6 +1217,26 @@ Resources:
 
                 unzip awscliv2.zip
                 ./aws/install
+
+                AVAILABILITY_ZONE=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
+                INSTANCE_ID=$(curl -s http://169.254.169.254/2012-01-12/meta-data/instance-id)
+
+                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=tag:SnapshotVolume,Values=${AWS::StackName}-${AWS::Region} Name=status,Values=available Name=availability-zone,Values=$AVAILABILITY_ZONE | | jq -r .Volumes[0].VolumeId)
+
+                if [ "$VOLUME_ID" == ""  ]
+                then
+                  $VOLUME_ID=$(aws ec2 create-volume --availability-zone $AVAILABILITY_ZONE --iops 3000  --throughput 125 --size ${FlumeDiskSize} --volume-type gp3 --tag-specifications '{"ResourceType": "volume", "Tags": [{"Key": "SnapshotVolume","Value": "${AWS::StackName}-${AWS::Region}"}]}' | jq -r .VolumeId)
+                  while [ "$(aws ec2 describe-volumes --volume-id $VOLUME_ID | jq -r .Volumes[0].State)" != "available" ]
+                  do
+                    sleep 3
+                  done
+                fi
+                aws ec2 attach-volume --device=/dev/sdf --instance-id=$INSTANCE_ID --volume-id=$VOLUME_ID
+
+                while [ "$(aws ec2 describe-volumes --volume-id $VOLUME_ID | jq -r .Volumes[0].State)" != "attached" ]
+                do
+                  sleep 3
+                done
 
                 mkdir -p /var/lib/flume
 
@@ -1371,18 +1391,21 @@ Resources:
                 totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
                 concurrency=$((totalm / 1600 ))
 
-                #copy down the flume backup
-                if ! backupmanager download --concurrency=$concurrency s3://${S3FlumeBackup} /var/lib/flume/item.sqlite
+                if [ ! -f /var/lib/flume/item.sqlite ]
                 then
-                  if [ "${AggregatedNotifications}" != "" ]
-                    then
-                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - CRITICAL Failure to pull backup" --message="Flume failed to pull down the database backup for cluster '${AWS::StackName}'. Correct permssions/upload as soon as possible."
+                  #copy down the flume backup
+                  if ! backupmanager download --concurrency=$concurrency s3://${S3FlumeBackup} /var/lib/flume/item.sqlite
+                  then
+                    if [ "${AggregatedNotifications}" != "" ]
+                      then
+                      aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - CRITICAL Failure to pull backup" --message="Flume failed to pull down the database backup for cluster '${AWS::StackName}'. Correct permssions/upload as soon as possible."
+                    fi
+                    if [ "${AlarmSNSTopic}" != "" ]
+                      then
+                      aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - CRITICAL Failure to pull backup" --message="Flume failed to pull down the database backup for cluster '${AWS::StackName}'. Correct permssions/upload as soon as possible."
+                    fi
+                    poweroff
                   fi
-                  if [ "${AlarmSNSTopic}" != "" ]
-                    then
-                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - CRITICAL Failure to pull backup" --message="Flume failed to pull down the database backup for cluster '${AWS::StackName}'. Correct permssions/upload as soon as possible."
-                  fi
-                  poweroff
                 fi
 
                 if [ -f /tmp/pre-sync.sql ]
@@ -1586,6 +1609,8 @@ Resources:
               - autoscaling:DescribeAutoScalingGroups
               - autoscaling:DescribeScalingActivities
               - ec2:DescribeVolumes
+              - ec2:AttachVolume
+              - ec2:CreateVolume
               - ec2:CreateSnapshot
               - ec2:DeleteSnapshot
               - events:DescribeRule
