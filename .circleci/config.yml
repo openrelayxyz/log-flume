@@ -25,6 +25,8 @@ jobs:
       - run:
           name: Prep env
           command: |
+            sudo apt update
+            sudo apt install gcc-aarch64-linux-gnu libc6-dev-arm64-cross
             mkdir -p /home/circleci/go/src
             cd flumeserver
             go get
@@ -36,7 +38,8 @@ jobs:
             cd flumeserver/tokens
             go generate
             cd ..
-            go build
+            go build -o flumeserver-amd64
+            CC=aarch64-linux-gnu-gcc  CGO_ENABLED=1 GOARCH=arm64 go build -o flumeserver-arm64
       # - run:
       #     name: build image
       #     command: |
@@ -48,7 +51,10 @@ jobs:
           aws-region: AWS_REGION
       - run:
           name: push to s3
-          command: aws s3 cp ./flumeserver/flumeserver s3://ethercattle-binaries/flume/$CIRCLE_TAG/flumeserver --acl=public-read
+          command: aws s3 cp ./flumeserver/flumeserver-amd64 s3://ethercattle-binaries/flume/$CIRCLE_TAG/flumeserver-amd64 --acl=public-read
+      - run:
+          name: push to s3 arm
+          command: aws s3 cp ./flumeserver/flumeserver-arm64 s3://ethercattle-binaries/flume/$CIRCLE_TAG/flumeserver-arm64 --acl=public-read
       - run:
           name: Message Slack
           command: |
