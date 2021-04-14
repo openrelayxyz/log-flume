@@ -5,11 +5,11 @@ go 1.13
 require (
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/Shopify/sarama v1.26.1
+	github.com/StackExchange/wmi v0.0.0-20210224194228-fe8f1750fd46 // indirect
 	github.com/ethereum/go-ethereum v1.9.25
-	github.com/gorilla/websocket v1.4.2
+	github.com/go-ole/go-ole v1.2.5 // indirect
 	github.com/klauspost/compress v1.10.7
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible
-	github.com/openrelayxyz/drumline v0.3.0 // indirect
 	github.com/pborman/uuid v1.2.1 // indirect
 	github.com/rs/cors v1.7.0
 )
