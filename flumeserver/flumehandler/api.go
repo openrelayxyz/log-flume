@@ -324,7 +324,7 @@ func accountBlocksMined(w http.ResponseWriter, r *http.Request, db *sql.DB) {
   rows, err := db.QueryContext(r.Context(),
     fmt.Sprintf(`SELECT
         blocks.number, blocks.time, issuance.value, GROUP_CONCAT(transactions.gasUsed), GROUP_CONCAT(transactions.gasPrice)
-      FROM blocks
+      FROM blocks INDEXED BY coinbase
       INNER JOIN issuance on blocks.number > issuance.startBlock AND blocks.number < issuance.endBlock
       INNER JOIN transactions on transactions.block = blocks.number
       WHERE coinbase = ? AND (blocks.number >= ? AND blocks.number <= ?) GROUP BY blocks.number ORDER BY blocks.number %v LIMIT ? OFFSET ?;`, sort),
