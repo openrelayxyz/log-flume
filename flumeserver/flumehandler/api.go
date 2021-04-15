@@ -134,7 +134,7 @@ func accountTxList(w http.ResponseWriter, r *http.Request, db *sql.DB) {
       UNION SELECT rowid FROM transactions WHERE recipient = ? AND (block >= ? AND block <= ?)
       ORDER BY rowid %v LIMIT ? OFFSET ?
     ) ORDER BY transactions.block %v, transactions.transactionIndex %v;`, sort, sort, sort),
-    trimPrefix(addr.Bytes()), startBlock, endBlock, trimPrefix(addr.Bytes()), startBlock, endBlock, trimPrefix(addr.Bytes()), startBlock, endBlock, offset, (page - 1) * offset)
+    trimPrefix(addr.Bytes()), startBlock, endBlock, trimPrefix(addr.Bytes()), startBlock, endBlock, offset, (page - 1) * offset)
   if handleApiError(err, w, "database error", "Error! Database error", "Error querying", 500) { return }
   result := []*txResponse{}
   for rows.Next() {
