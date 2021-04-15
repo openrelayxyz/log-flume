@@ -245,8 +245,8 @@ func accountTokenTransferList(w http.ResponseWriter, r *http.Request, db *sql.DB
     INNER JOIN transactions on event_logs.tx = transactions.id
     WHERE
       event_logs.rowid IN (
-        SELECT rowid FROM event_logs INDEXED BY topic1 WHERE event_logs.topic0 = X'ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef' AND event_logs.topic1 = ? AND event_logs.topic3 %v zeroblob(0) AND (block >= ? AND block <= ?)
-        UNION SELECT rowid FROM event_logs INDEXED BY topic2 WHERE event_logs.topic0 = X'ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef' AND event_logs.topic2 = ? AND event_logs.topic3 %v zeroblob(0) AND (block >= ? AND block <= ?)
+        SELECT rowid FROM event_logs INDEXED BY topic1_partial WHERE event_logs.topic0 = X'ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef' AND event_logs.topic1 = ? AND event_logs.topic3 %v zeroblob(0) AND (block >= ? AND block <= ?)
+        UNION SELECT rowid FROM event_logs INDEXED BY topic2_partial WHERE event_logs.topic0 = X'ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef' AND event_logs.topic2 = ? AND event_logs.topic3 %v zeroblob(0) AND (block >= ? AND block <= ?)
         ORDER BY rowid %v LIMIT ? OFFSET ?
       )
     ORDER BY blocks.number %v, event_logs.logIndex %v`, topic3Comparison, topic3Comparison, sort, sort, sort),
