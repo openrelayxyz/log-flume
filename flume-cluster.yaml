@@ -1425,6 +1425,7 @@ Resources:
                     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} -  Snapshot Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. ]"
                   fi
                   poweroff
+                  exit 1
                 fi
 
                 if [ -f /tmp/post-sync.sql ]
@@ -1463,6 +1464,7 @@ Resources:
                     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Taking Backup Failed" --message="The snapshotting process for ${AWS::StackName} failed to upload the backup."
                   fi
                   poweroff
+                  exit 1
                 fi
 
                 # CFN will set any parameters we don't provide back to their default values,
@@ -1472,6 +1474,7 @@ Resources:
                 aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS"
 
                 poweroff
+                exit 1
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 RollbackFlag: !If [ HasRollback, !Sub "--kafka-rollback=${FlumeKafkaRollback}", ""]
