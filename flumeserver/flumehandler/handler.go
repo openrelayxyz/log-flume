@@ -244,13 +244,13 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
     if len(topicClause) > 0 {
       topicsClause = append(topicsClause, fmt.Sprintf("(%v)", strings.Join(topicClause, " OR ")))
     } else {
-      topicsClause = append(topicsClause, fmt.Sprintf("topic%v != zeroblob(0)", i))
+      topicsClause = append(topicsClause, fmt.Sprintf("topic%v IS NOT NULL", i))
     }
   }
   if len(topicsClause) > 0 {
     whereClause = append(whereClause, fmt.Sprintf("(%v)", strings.Join(topicsClause, " AND ")))
   }
-  query := fmt.Sprintf("SELECT address, topic0, topic1, topic2, topic3, topic4, data, block, transactionHash, transactionIndex, blockHash, logIndex FROM event_logs %v WHERE %v;", indexClause, strings.Join(whereClause, " AND "))
+  query := fmt.Sprintf("SELECT address, topic0, topic1, topic2, topic3, data, block, transactionHash, transactionIndex, blockHash, logIndex FROM event_logs %v WHERE %v;", indexClause, strings.Join(whereClause, " AND "))
   rows, err := db.QueryContext(ctx, query, params...)
   if err != nil {
     log.Printf("Error selecting: %v - '%v'", err.Error(), query)
@@ -261,10 +261,10 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
   logs := []*types.Log{}
   blockNumbersInResponse := make(map[uint64]struct{})
   for rows.Next() {
-    var address, topic0, topic1, topic2, topic3, topic4, data, transactionHash, blockHash []byte
+    var address, topic0, topic1, topic2, topic3, data, transactionHash, blockHash []byte
     var blockNumber uint64
     var transactionIndex, logIndex uint
-    err := rows.Scan(&address, &topic0, &topic1, &topic2, &topic3, &topic4, &data, &blockNumber, &transactionHash, &transactionIndex, &blockHash, &logIndex)
+    err := rows.Scan(&address, &topic0, &topic1, &topic2, &topic3, &data, &blockNumber, &transactionHash, &transactionIndex, &blockHash, &logIndex)
     if err != nil {
       log.Printf("Error scanning: %v", err.Error())
       handleError(w, "database error", call.ID, 500)
@@ -276,7 +276,6 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
     if len(topic1) > 0 { topics = append(topics, bytesToHash(topic1)) }
     if len(topic2) > 0 { topics = append(topics, bytesToHash(topic2)) }
     if len(topic3) > 0 { topics = append(topics, bytesToHash(topic3)) }
-    if len(topic4) > 0 { topics = append(topics, bytesToHash(topic4)) }
     input, err := decompress(data)
     if err != nil {
       log.Printf("Error decompressing data: %v", err.Error())
@@ -340,7 +339,7 @@ func getERC20ByAccount(ctx context.Context, w http.ResponseWriter, call *rpcCall
 
   topic0 := common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
   // topic0 must match ERC20, topic3 must be empty (to exclude ERC721) and topic2 is the recipient address
-  rows, err := db.QueryContext(tctx, `SELECT distinct(address) FROM event_logs INDEXED BY topic2_partial WHERE topic0 = ? AND topic2 = ? AND topic3 = zeroblob(0) LIMIT 1000 OFFSET ?;`, trimPrefix(topic0.Bytes()), trimPrefix(addr.Bytes()), offset)
+  rows, err := db.QueryContext(tctx, `SELECT distinct(address) FROM event_logs INDEXED BY topic2_partial WHERE topic0 = ? AND topic2 = ? AND topic3 IS NULL LIMIT 1000 OFFSET ?;`, trimPrefix(topic0.Bytes()), trimPrefix(addr.Bytes()), offset)
   if err != nil {
     log.Printf("Error getting account addresses: %v", err.Error())
     handleError(w, "database error", call.ID, 500)
@@ -399,7 +398,7 @@ func getERC20Holders(ctx context.Context, w http.ResponseWriter, call *rpcCall, 
 
   topic0 := common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
   // topic0 must match ERC20, topic3 must be empty (to exclude ERC721) and topic2 is the recipient address
-  rows, err := db.QueryContext(tctx, `SELECT distinct(topic2) FROM event_logs INDEXED BY address WHERE topic0 = ? AND address = ? AND topic3 = zeroblob(0) LIMIT 1000 OFFSET ?;`, trimPrefix(topic0.Bytes()), trimPrefix(addr.Bytes()), offset)
+  rows, err := db.QueryContext(tctx, `SELECT distinct(topic2) FROM event_logs INDEXED BY address WHERE topic0 = ? AND address = ? AND topic3 IS NULL LIMIT 1000 OFFSET ?;`, trimPrefix(topic0.Bytes()), trimPrefix(addr.Bytes()), offset)
   if err != nil {
     log.Printf("Error getting account addresses: %v", err.Error())
     handleError(w, "database error", call.ID, 500)
@@ -611,15 +610,15 @@ func getTransactionReceipts(ctx context.Context, db *sql.DB, offset, limit int, 
       fields["contractAddress"] = address
     }
 
-    logRows, err := db.QueryContext(ctx, "SELECT address, topic0, topic1, topic2, topic3, topic4, data, logIndex FROM event_logs WHERE block = ? AND transactionHash = ?;", blockNumber, txHash)
+    logRows, err := db.QueryContext(ctx, "SELECT address, topic0, topic1, topic2, topic3, data, logIndex FROM event_logs WHERE block = ? AND transactionHash = ?;", blockNumber, txHash)
     if err != nil {
       log.Printf("Error selecting: %v - '%v'", err.Error(), query)
       return nil, err
     }
     for logRows.Next() {
-      var address, topic0, topic1, topic2, topic3, topic4, data []byte
+      var address, topic0, topic1, topic2, topic3, data []byte
       var logIndex uint
-      err := logRows.Scan(&address, &topic0, &topic1, &topic2, &topic3, &topic4, &data, &logIndex)
+      err := logRows.Scan(&address, &topic0, &topic1, &topic2, &topic3, &data, &logIndex)
       if err != nil {
         logRows.Close()
         return nil, err
@@ -629,7 +628,6 @@ func getTransactionReceipts(ctx context.Context, db *sql.DB, offset, limit int, 
       if len(topic1) > 0 { topics = append(topics, bytesToHash(topic1)) }
       if len(topic2) > 0 { topics = append(topics, bytesToHash(topic2)) }
       if len(topic3) > 0 { topics = append(topics, bytesToHash(topic3)) }
-      if len(topic4) > 0 { topics = append(topics, bytesToHash(topic4)) }
       input, err := decompress(data)
       if err != nil { return nil, err }
       fieldLogs = append(fieldLogs, &types.Log{

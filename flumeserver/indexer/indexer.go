@@ -67,6 +67,13 @@ func getFuncSig(data []byte) ([]byte) {
   return data[:len(data)]
 }
 
+func nullZeroAddress(addr common.Address) []byte {
+  if addr == (common.Address{}) {
+    return []byte{}
+  }
+  return addr.Bytes()
+}
+
 type bytesable interface {
   Bytes() []byte
 }
@@ -80,11 +87,24 @@ func applyParameters(query string, params ...interface{}) string {
   for i, param := range params {
     switch value := param.(type) {
     case []byte:
-      preparedParams[i] = fmt.Sprintf("X'%x'", value)
+      if len(value) == 0 {
+        preparedParams[i] = "NULL"
+      } else {
+        preparedParams[i] = fmt.Sprintf("X'%x'", value)
+      }
     case bytesable:
-      preparedParams[i] = fmt.Sprintf("X'%x'", trimPrefix(value.Bytes()))
+      b := trimPrefix(value.Bytes())
+      if len(b) == 0 {
+        preparedParams[i] = "NULL"
+      } else {
+        preparedParams[i] = fmt.Sprintf("X'%x'", )
+      }
     case hexutil.Bytes:
-      preparedParams[i] = fmt.Sprintf("X'%x'", value[:])
+      if len(value) == 0 {
+        preparedParams[i] = "NULL"
+      } else {
+        preparedParams[i] = fmt.Sprintf("X'%x'", value[:])
+      }
     case hexutil.Uint64:
       preparedParams[i] = fmt.Sprintf("%v", uint64(value))
     case types.BlockNonce:
@@ -215,7 +235,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
             s,
             sender,
             getFuncSig(txwr.Transaction.Data()),
-            txwr.Receipt.ContractAddress,
+            nullZeroAddress(txwr.Receipt.ContractAddress),
             txwr.Receipt.CumulativeGasUsed,
             txwr.Receipt.GasUsed,
             getCopy(compress(txwr.Receipt.Bloom.Bytes())),
@@ -225,13 +245,12 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
           ))
           for _, logRecord := range txwr.Receipt.Logs {
             statements = append(statements, applyParameters(
-              "INSERT OR IGNORE INTO event_logs(address, topic0, topic1, topic2, topic3, topic4, data, block, logIndex, transactionHash, transactionIndex, blockhash) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
+              "INSERT OR IGNORE INTO event_logs(address, topic0, topic1, topic2, topic3, data, block, logIndex, transactionHash, transactionIndex, blockhash) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
               logRecord.Address,
               getTopicIndex(logRecord.Topics, 0),
               getTopicIndex(logRecord.Topics, 1),
               getTopicIndex(logRecord.Topics, 2),
               getTopicIndex(logRecord.Topics, 3),
-              getTopicIndex(logRecord.Topics, 4),
               compress(logRecord.Data),
               chainEvent.Block.Number.ToInt().Int64(),
               logRecord.Index,

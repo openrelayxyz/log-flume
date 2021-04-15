@@ -283,9 +283,49 @@ func Migrate(db *sql.DB, chainid uint64) error {
     db.Exec(`DROP INDEX recipient;`)
     db.Exec(`CREATE INDEX func_partial ON transactions(func) WHERE func IS NOT NULL;`)
     db.Exec(`DROP INDEX func;`)
-    db.Exec(`CREATE INDEX contractAddress_partial ON transactions(contractAddress) WHERE contractAddress != X'00';`)
-    db.Exec(`DROP INDEX contractAddress;`)
     db.Exec(`UPDATE migrations SET version = 7;`)
+  }
+  if schemaVersion < 8 {
+    // topic4 doesn't exist - we can delete references to it
+    db.Exec(`DROP INDEX topic4_partial;`)
+    for {
+      result, err := db.Exec(`UPDATE transactions SET contractAddress = NULL WHERE contractAddress = X'00' or contractAddress = zeroblob(0) LIMIT 10000;`)
+      if err != nil { return err }
+      if count, _ := result.RowsAffected(); count == 0 { break }
+    }
+    for {
+      result, err := db.Exec(`UPDATE transactions SET recipient = NULL WHERE recipient = zeroblob(0) LIMIT 10000;`)
+      if err != nil { return err }
+      if count, _ := result.RowsAffected(); count == 0 { break }
+    }
+    for {
+      result, err := db.Exec(`UPDATE transactions SET func = NULL WHERE func = zeroblob(0) LIMIT 10000;`)
+      if err != nil { return err }
+      if count, _ := result.RowsAffected(); count == 0 { break }
+    }
+    for {
+      result, err := db.Exec(`UPDATE event_logs SET topic0 = NULL WHERE topic0 = zeroblob(0) LIMIT 10000;`)
+      if err != nil { return err }
+      if count, _ := result.RowsAffected(); count == 0 { break }
+    }
+    for {
+      result, err := db.Exec(`UPDATE event_logs SET topic1 = NULL WHERE topic1 = zeroblob(0) LIMIT 10000;`)
+      if err != nil { return err }
+      if count, _ := result.RowsAffected(); count == 0 { break }
+    }
+    for {
+      result, err := db.Exec(`UPDATE event_logs SET topic2 = NULL WHERE topic2 = zeroblob(0) LIMIT 10000;`)
+      if err != nil { return err }
+      if count, _ := result.RowsAffected(); count == 0 { break }
+    }
+    for {
+      result, err := db.Exec(`UPDATE event_logs SET topic3 = NULL WHERE topic3 = zeroblob(0) LIMIT 10000;`)
+      if err != nil { return err }
+      if count, _ := result.RowsAffected(); count == 0 { break }
+    }
+    db.Exec(`CREATE INDEX contractAddress_partial ON transactions(contractAddress) WHERE contractAddress IS NOT NULL;`)
+    db.Exec(`DROP INDEX contractAddress;`)
+    db.Exec(`UPDATE migrations SET version = 8;`)
   }
   // chainid
   return nil
