@@ -283,7 +283,7 @@ func Migrate(db *sql.DB, chainid uint64) error {
     db.Exec(`DROP INDEX recipient;`)
     db.Exec(`CREATE INDEX func_partial ON transactions(func) WHERE func IS NOT NULL;`)
     db.Exec(`DROP INDEX func;`)
-    db.Exec(`CREATE INDEX contractAddress_partial ON transactions(contractAddress) WHERE contractAddress != X"00";`)
+    db.Exec(`CREATE INDEX contractAddress_partial ON transactions(contractAddress) WHERE contractAddress != X'00';`)
     db.Exec(`DROP INDEX contractAddress;`)
     db.Exec(`UPDATE migrations SET version = 7;`)
   }
