@@ -1806,7 +1806,7 @@ Resources:
       Description: "A lambda function to process Flume logs into metrics"
       Environment:
         Variables:
-          SNS_TOPICS: !Join [",", [!If [ HasSNSTopic, !Sub "${AlarmSNSTopic.TopicName}",  !Ref 'AWS::NoValue'], !If [ HasWarningWebhook, !Sub ${WarningNotifications.TopicName}, !Ref 'AWS::NoValue' ]]]
+          SNS_TOPICS: !Join [",", [!If [ HasSNSTopic, !Sub "${AlarmSNSTopic.TopicName}",  !Ref 'AWS::NoValue'], !If [ HasWarningWebhook, !Sub "${WarningNotifications.TopicName}", !Ref 'AWS::NoValue' ]]]
           BACKUP_BUCKET: !Ref S3FlumeBackupBucket
           NETWORK_ID: !Ref NetworkId
           CURRENT_SNAPSHOT: !Ref S3FlumeBackup
