@@ -1764,6 +1764,39 @@ Resources:
       SourceAccount: !Ref 'AWS::AccountId'
       SourceArn: !Sub ${FlumeLG.Arn}
 
+
+  BackupGCRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+  BackupGCPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref BackupGCRole
+      PolicyName: !Sub "FlumeLogMetrics${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - sns:Publish
+            Resource:
+              - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+              - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
+          - Effect: Allow
+            Action:
+              - "s3:ListBucket"
+              - "s3:DeleteObject"
+            Resource: "*"
   FlumeBackupGCFunction:
     Type: "AWS::Lambda::Function"
     Properties:
@@ -1778,7 +1811,7 @@ Resources:
           NETWORK_ID: !Ref NetworkId
           CURRENT_SNAPSHOT: !Ref S3FlumeBackup
       Handler: "flumeBackupGC.gcHandler"
-      Role: !Sub ${LogMetricsRole.Arn}
+      Role: !Sub ${BackupGCRole.Arn}
       Runtime: python3.7
   GCSchedulerRule:
     Type: AWS::Events::Rule
