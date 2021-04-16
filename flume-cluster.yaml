@@ -1741,8 +1741,8 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3ECBucketName
-        S3Key: flumeLambdaPackage-3.zip
-      Description: "A lambda function to process Geth logs into metrics"
+        S3Key: flumeLambdaPackage-4.zip
+      Description: "A lambda function to process Flume logs into metrics"
       Environment:
         Variables:
           CLUSTER_ID: !Sub ${NetworkId}
@@ -1763,6 +1763,38 @@ Resources:
       Principal: !Sub logs.${AWS::Region}.amazonaws.com
       SourceAccount: !Ref 'AWS::AccountId'
       SourceArn: !Sub ${FlumeLG.Arn}
+
+  FlumeBackupGCFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3ECBucketName
+        S3Key: flumeLambdaPackage-4.zip
+      Description: "A lambda function to process Flume logs into metrics"
+      Environment:
+        Variables:
+          SNS_TOPICS: !Join [",", [!If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue'], !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]]]
+          BACKUP_BUCKET: !Ref S3FlumeBackupBucket
+          NETWORK_ID: !Ref NetworkId
+          CURRENT_SNAPSHOT: !Ref S3FlumeBackup
+      Handler: "flumeBackupGC.gcHandler"
+      Role: !Sub ${LogMetricsRole.Arn}
+      Runtime: python3.7
+  GCSchedulerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: !Sub "Do a daily backup cleanup for ${AWS::StackName}"
+      ScheduleExpression: rate(1 day)
+      Targets:
+        - Arn: !Sub ${FlumeBackupGCFunction.Arn}
+          Id: !Sub "gc-${AWS::StackName}"
+  GCInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${FlumeBackupGCFunction.Arn}
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn: !Sub ${GCSchedulerRule.Arn}
 
   # TODO
   # SnapshotGCLambdaRole:
