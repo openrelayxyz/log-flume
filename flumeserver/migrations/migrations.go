@@ -2,6 +2,7 @@ package migrations
 
 import (
   "database/sql"
+  "log"
 )
 
 const (
@@ -309,6 +310,9 @@ func Migrate(db *sql.DB, chainid uint64) error {
       db.Exec(`UPDATE event_logs SET topic1 = NULL WHERE topic1 = zeroblob(0) AND block >= ? AND block <= ?;`, i, i+1000)
       db.Exec(`UPDATE event_logs SET topic2 = NULL WHERE topic2 = zeroblob(0) AND block >= ? AND block <= ?;`, i, i+1000)
       db.Exec(`UPDATE event_logs SET topic3 = NULL WHERE topic3 = zeroblob(0) AND block >= ? AND block <= ?;`, i, i+1000)
+      if i % 100000 == 0 {
+        log.Printf("Migrating empty byte values to null. Block: %v / %v", i, maxBlock)
+      }
     }
     db.Exec(`CREATE INDEX contractAddress_partial ON transactions(contractAddress) WHERE contractAddress IS NOT NULL;`)
     db.Exec(`DROP INDEX contractAddress;`)
