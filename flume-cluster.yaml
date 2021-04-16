@@ -1749,6 +1749,7 @@ Resources:
       Handler: "logMonitor.flumeHandler"
       Role: !Sub ${LogMetricsRole.Arn}
       Runtime: python3.7
+      Timeout: 120
   FlumeLogMetricsSubscription:
     Type: AWS::Logs::SubscriptionFilter
     Properties:
