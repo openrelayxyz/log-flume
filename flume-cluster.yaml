@@ -1741,7 +1741,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3ECBucketName
-        S3Key: flumeLambdaPackage-6.zip
+        S3Key: flumeLambdaPackage-7.zip
       Description: "A lambda function to process Flume logs into metrics"
       Environment:
         Variables:
@@ -1803,7 +1803,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3ECBucketName
-        S3Key: flumeLambdaPackage-6.zip
+        S3Key: flumeLambdaPackage-7.zip
       Description: "A lambda function to process Flume logs into metrics"
       Environment:
         Variables:
