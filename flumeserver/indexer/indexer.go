@@ -97,13 +97,13 @@ func applyParameters(query string, params ...interface{}) string {
       if len(b) == 0 {
         preparedParams[i] = "NULL"
       } else {
-        preparedParams[i] = fmt.Sprintf("X'%x'", )
+        preparedParams[i] = fmt.Sprintf("X'%x'", b)
       }
     case hexutil.Bytes:
       if len(value) == 0 {
         preparedParams[i] = "NULL"
       } else {
-        preparedParams[i] = fmt.Sprintf("X'%x'", value[:])
+        preparedParams[i] = fmt.Sprintf("X'%x'", []byte(value[:]))
       }
     case hexutil.Uint64:
       preparedParams[i] = fmt.Sprintf("%v", uint64(value))
