@@ -304,8 +304,8 @@ func Migrate(db *sql.DB, chainid uint64) error {
     for i := 0; i < maxBlock; i += 1000 {
       // Handle ranges of blocks, as the go version of sqlite doesn't support update limits
       db.Exec(`UPDATE transactions SET contractAddress = NULL WHERE (contractAddress = X'00' OR contractAddress = zeroblob(0)) AND block >= ? AND block <= ?;`, i, i+1000)
-      db.Exec(`UPDATE transactions SET recipient = NULL WHERE recipient = zeroblob(0) AND block >= ? AND block <= ?;`, i, i+1000)
-      db.Exec(`UPDATE transactions SET func = NULL WHERE func = zeroblob(0) AND block >= ? AND block <= ?;`, i, i+1000)
+      db.Exec(`UPDATE transactions INDEXED BY txblock SET recipient = NULL WHERE recipient = zeroblob(0) AND block >= ? AND block <= ?;`, i, i+1000)
+      db.Exec(`UPDATE transactions INDEXED BY txblock SET func = NULL WHERE func = zeroblob(0) AND block >= ? AND block <= ?;`, i, i+1000)
       db.Exec(`UPDATE event_logs SET topic0 = NULL WHERE topic0 = zeroblob(0) AND block >= ? AND block <= ?;`, i, i+1000)
       db.Exec(`UPDATE event_logs SET topic1 = NULL WHERE topic1 = zeroblob(0) AND block >= ? AND block <= ?;`, i, i+1000)
       db.Exec(`UPDATE event_logs SET topic2 = NULL WHERE topic2 = zeroblob(0) AND block >= ? AND block <= ?;`, i, i+1000)
