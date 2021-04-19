@@ -120,10 +120,14 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
   log.Printf("Processing data feed")
   ch := make(chan *datafeed.ChainEvent, 10)
   sub := feed.Subscribe(ch)
+  processed := false
   defer sub.Unsubscribe()
   for {
     select {
     case <-quit:
+      if !processed {
+        panic("Shutting down without processing any blocks")
+      }
       log.Printf("Shutting down index process")
       return
     case chainEvent := <- ch:
@@ -279,6 +283,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
           continue BLOCKLOOP
         }
         wg.Done()
+        processed = true
         completionFeed.Send(chainEvent.Block.Hash)
         // log.Printf("Spent %v on commit", time.Since(cstart))
         log.Printf("Committed Block %v (%#x) in %v (age %v)", uint64(chainEvent.Block.Number.ToInt().Int64()), chainEvent.Block.Hash.Bytes(), time.Since(start), time.Since(time.Unix(int64(chainEvent.Block.Timestamp), 0)))
