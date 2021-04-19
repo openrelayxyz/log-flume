@@ -1504,6 +1504,40 @@ Resources:
                 # so get all of the parameters, update S3FlumeBackup, and update the stack with
                 # the new parameters.
                 PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "S3FlumeBackup" then .ParameterValue="'$BACKUPNAME'" else . end)' -c)
+
+
+
+
+                # Resize Disks
+                ORIGINAL_DISK_SIZE=`aws ec2 describe-volumes --volume-ids "$VOLUME_ID" | jq '.Volumes[] | .Size' -cr`
+                NEW_DISK_SIZE=$((ORIGINAL_DISK_SIZE*115/100))
+
+                ## manually grepping for sdf (mount direcotry above) because we don't really need to worry about the others.
+                df -H | grep -vE '^Filesystem|tmpfs|cdrom' | grep $(readlink -f /dev/sdf) | awk '{ print $5 " " $1 }' | while read output;
+                do
+                  echo $output
+                  usep=$(echo $output | awk '{ print $1}' | cut -d'%' -f1  )
+                  partition=$(echo $output | awk '{ print $2 }' )
+                  if [ $usep -ge 90 ]; then
+                    if [ "${AggregatedNotifications}" != "" ]
+                    then
+                      aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Upsizing Snapshot Size" --message="The snapshot for ${AWS::StackName} has reached $usep%. Resizing to $NEW_DISK_SIZE GB."
+                      if [ "${AlarmSNSTopic}" != "" ]
+                      then
+                        aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Upsizing Snapshot Size" --message="The snapshot for ${AWS::StackName} has reached $usep%. Resizing to $NEW_DISK_SIZE GB."
+                      fi
+                      PARAMETERS_RESIZE=$(echo "$PARAMETERS" | jq 'map(if .ParameterKey == "FlumeDiskSize" then .ParameterValue="'$NEW_DISK_SIZE'" else . end)' -c)
+                      aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS_RESIZE"
+                    fi
+                    else
+                      aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS"
+                  fi
+                done
+
+
+
+
+
                 aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS"
 
                 poweroff
