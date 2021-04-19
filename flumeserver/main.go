@@ -30,6 +30,7 @@ func main() {
 
   // shutdownSync := flag.Bool("shutdownSync", false, "Shutdown server once sync is completed")
   port := flag.Int("port", 8000, "Serving port")
+  pprofPort := flag.Int("pprof-port", 6969, "pprof port")
   minSafeBlock := flag.Int("min-safe-block", 1000000, "Do not start serving if the smallest block exceeds this value")
   shutdownSync := flag.Bool("shutdown.sync", false, "Sync after shutdown")
   mainnet := flag.Bool("mainnet", false, "Ethereum Mainnet")
@@ -107,6 +108,16 @@ func main() {
       log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
     }
   }()
+  if *pprofPort > 0 {
+    p := &http.Server{
+      Addr: fmt.Sprintf(":%v", *pprofPort),
+      Handler: http.DefaultServeMux,
+      ReadHeaderTimeout: 5 * time.Second,
+      MaxHeaderBytes: 1 << 20,
+    }
+    go p.ListenAndServe()
+  }
+
   if err := migrations.Migrate(logsdb, chainid); err != nil {
     log.Fatalf(err.Error())
   }
@@ -129,13 +140,6 @@ func main() {
     ReadHeaderTimeout: 5 * time.Second,
     MaxHeaderBytes: 1 << 20,
   }
-  p := &http.Server{
-    Addr: ":6969",
-    Handler: http.DefaultServeMux,
-    ReadHeaderTimeout: 5 * time.Second,
-    MaxHeaderBytes: 1 << 20,
-  }
-  go p.ListenAndServe()
   <-feed.Ready()
   if *completionTopic != "" {
     notify.SendKafkaNotifications(completionFeed, *completionTopic)
