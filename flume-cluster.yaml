@@ -1051,6 +1051,10 @@ Resources:
 
                 sysctl -p || true
 
+                crontab -l >  newcrontab || true
+                echo "5,20,35,50 * * * * /usr/bin/sh -c 'for x in \$(ls /dev/sd*) ; do echo resizing \$(readlink -f \$x) if needed; /usr/sbin/resize2fs \$(readlink -f \$x) ; done'" >> newcrontab
+                crontab newcrontab
+
                 #Copy Down flumeserver
                 if ! aws s3 cp s3://${S3ECBucketName}/${S3FlumeBinaryDirectory}/flumeserver-$ARCH /usr/bin/flumeserver
                 then
@@ -1230,7 +1234,7 @@ Resources:
 
                 if [ "$VOLUME_ID" == "null"  ]
                 then
-                  VOLUME_ID=$(aws ec2 create-volume --availability-zone $AVAILABILITY_ZONE --iops 3000  --throughput 125 --size ${FlumeDiskSize} --volume-type gp3 --tag-specifications '{"ResourceType": "volume", "Tags": [{"Key": "SnapshotVolume","Value": "${AWS::StackName}-${AWS::Region}"}]}' | jq -r .VolumeId)
+                  VOLUME_ID=$(aws ec2 create-volume --availability-zone $AVAILABILITY_ZONE --iops 3000  --throughput 125 --size ${FlumeDiskSize} --volume-type gp3 --tag-specifications '{"ResourceType": "volume", "Tags": [{"Key": "SnapshotVolume","Value": "${AWS::StackName}-${AWS::Region}"}, {"Key": "Name": "${AWS::StackName}-SnapshotVolume"}]}' | jq -r .VolumeId)
                   while [ "$(aws ec2 describe-volumes --volume-id $VOLUME_ID | jq -r .Volumes[0].State)" != "available" ]
                   do
                     sleep 3
@@ -1581,6 +1585,8 @@ Resources:
               - !Sub ${FlumeSnapshotLambdaFunction.Arn}
               - !Sub ${GetBucketName.Arn}
               - !Sub ${FlumeBackupGCFunction.Arn}
+              - !Sub ${DiskSizeLambdaFunction.Arn}
+              - !Sub ${SnapDiskSizeLambdaFunction.Arn}
             Effect: Allow
           - Action:
               - iam:PassRole
@@ -1591,6 +1597,7 @@ Resources:
               - !Sub "${FlumeSnapshotLambdaRole.Arn}"
               - !Sub "${FlumeSnapshotNodeRole.Arn}"
               - !Sub "${BackupGCRole.Arn}"
+              - !Sub ${DiskSizeLambdaRole.Arn}
             Effect: Allow
           - Action:
               - sns:Publish
@@ -1865,6 +1872,87 @@ Resources:
       Action: 'lambda:InvokeFunction'
       Principal: events.amazonaws.com
       SourceArn: !Sub ${GCSchedulerRule.Arn}
+
+  DiskSizeLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+  DiskSizeLambdaPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref DiskSizeLambdaRole
+      PolicyName: !Sub "DiskSizeLambdaPolicy${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:DescribeVolumes
+              - ec2:ModifyVolume
+            Resource: "*"
+  DiskSizeLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3ECBucketName
+        S3Key: lambdaPackage-29.zip
+      Description: "Align master volume sizes with CloudFormation parameters"
+      Environment:
+        Variables:
+          VOLUME_SIZE: !Ref FlumeDiskSize
+          VOLUME_NAME: !Sub "${AWS::StackName}-Flume"
+          ATTACHMENT_DEVICE: "/dev/sdf"
+      Handler: "masterVolumeManager.sizeHandler"
+      Role: !Sub ${DiskSizeLambdaRole.Arn}
+      Runtime: python3.7
+  DiskManagerSchedulerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Disk Size manager
+      ScheduleExpression: "rate(15 minutes)"
+      Targets:
+        - Arn: !Sub ${DiskSizeLambdaFunction.Arn}
+          Id: !Sub "disk-size-${NetworkId}-${FlumeClusterVersion}"
+  SnapDiskSizeLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3ECBucketName
+        S3Key: lambdaPackage-29.zip
+      Description: "Align master volume sizes with CloudFormation parameters"
+      Environment:
+        Variables:
+          VOLUME_SIZE: !Ref FlumeDiskSize
+          VOLUME_NAME: !Sub "${AWS::StackName}-SnapshotVolume"
+          ATTACHMENT_DEVICE: "/dev/sdf"
+      Handler: "masterVolumeManager.sizeHandler"
+      Role: !Sub ${DiskSizeLambdaRole.Arn}
+      Runtime: python3.7
+  SnapDiskManagerSchedulerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Disk Size manager
+      ScheduleExpression: "rate(15 minutes)"
+      Targets:
+        - Arn: !Sub ${SnapDiskSizeLambdaFunction.Arn}
+          Id: !Sub "disk-size-${NetworkId}-${FlumeClusterVersion}"
+
+  DiskManagerInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${DiskSizeLambdaFunction.Arn}
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn: !Sub ${DiskManagerSchedulerRule.Arn}
 
   # TODO
   # SnapshotGCLambdaRole:
