@@ -1223,9 +1223,9 @@ Resources:
 
                 VOLUME_ID=$(aws ec2 describe-volumes --filters Name=tag:SnapshotVolume,Values=${AWS::StackName}-${AWS::Region} Name=status,Values=available Name=availability-zone,Values=$AVAILABILITY_ZONE | jq -r .Volumes[0].VolumeId)
 
-                if [ "$VOLUME_ID" == ""  ]
+                if [ "$VOLUME_ID" == "null"  ]
                 then
-                  $VOLUME_ID=$(aws ec2 create-volume --availability-zone $AVAILABILITY_ZONE --iops 3000  --throughput 125 --size ${FlumeDiskSize} --volume-type gp3 --tag-specifications '{"ResourceType": "volume", "Tags": [{"Key": "SnapshotVolume","Value": "${AWS::StackName}-${AWS::Region}"}]}' | jq -r .VolumeId)
+                  VOLUME_ID=$(aws ec2 create-volume --availability-zone $AVAILABILITY_ZONE --iops 3000  --throughput 125 --size ${FlumeDiskSize} --volume-type gp3 --tag-specifications '{"ResourceType": "volume", "Tags": [{"Key": "SnapshotVolume","Value": "${AWS::StackName}-${AWS::Region}"}]}' | jq -r .VolumeId)
                   while [ "$(aws ec2 describe-volumes --volume-id $VOLUME_ID | jq -r .Volumes[0].State)" != "available" ]
                   do
                     sleep 3
@@ -1233,7 +1233,7 @@ Resources:
                 fi
                 aws ec2 attach-volume --device=/dev/sdf --instance-id=$INSTANCE_ID --volume-id=$VOLUME_ID
 
-                while [ "$(aws ec2 describe-volumes --volume-id $VOLUME_ID | jq -r .Volumes[0].State)" != "attached" ]
+                while [ "$(aws ec2 describe-volumes --volume-id $VOLUME_ID | jq -r .Volumes[0].State)" != "in-use" ]
                 do
                   sleep 3
                 done
@@ -1582,6 +1582,7 @@ Resources:
               - !Sub "${FlumeNodeRole.Arn}"
               - !Sub "${FlumeSnapshotLambdaRole.Arn}"
               - !Sub "${FlumeSnapshotNodeRole.Arn}"
+              - !Sub "${BackupGCRole.Arn}"
             Effect: Allow
           - Action:
               - sns:Publish
@@ -1820,12 +1821,6 @@ Resources:
             Resource:
               - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
               - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
-          - Action:
-              - iam:PassRole
-              - iam:GetRole
-            Resource:
-              - !Sub "${BackupGCRole.Arn}"
-            Effect: Allow
           - Effect: Allow
             Action:
               - "s3:ListBucket"
