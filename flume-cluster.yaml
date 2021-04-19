@@ -1218,6 +1218,11 @@ Resources:
                 unzip awscliv2.zip
                 ./aws/install
 
+                if [ -e /dev/sdf ]
+                then
+                  mkfs.ext4 /dev/sdf
+                fi
+
                 AVAILABILITY_ZONE=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
                 INSTANCE_ID=$(curl -s http://169.254.169.254/2012-01-12/meta-data/instance-id)
 
@@ -1259,10 +1264,11 @@ Resources:
 
                 if [ -e /dev/sdf ]
                 then
-                  mkfs.ext4 /dev/sdf
                   mount -o barrier=0,data=writeback /dev/sdf /var/lib/flume
                   echo "/dev/sdf  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
                 fi
+
+                resize2fs /dev/sdf
 
                 export AWS_DEFAULT_REGION=${AWS::Region}
 
@@ -1564,6 +1570,7 @@ Resources:
             Resource:
               - !Sub ${FlumeNodeInstanceProfile.Arn}
               - !Sub ${FlumeSnapshotNodeInstanceProfile.Arn}
+              - !Sub ${BackupGCRole.Arn}
             Effect: Allow
           - Action:
               - lambda:UpdateFunctionConfiguration
@@ -1573,6 +1580,7 @@ Resources:
             Resource:
               - !Sub ${FlumeSnapshotLambdaFunction.Arn}
               - !Sub ${GetBucketName.Arn}
+              - !Sub ${FlumeBackupGCFunction.Arn}
             Effect: Allow
           - Action:
               - iam:PassRole
