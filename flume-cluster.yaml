@@ -1793,6 +1793,12 @@ Resources:
             Resource:
               - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
               - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
+          - Action:
+              - iam:PassRole
+              - iam:GetRole
+            Resource:
+              - !Sub "${BackupGCRole.Arn}"
+            Effect: Allow
           - Effect: Allow
             Action:
               - "s3:ListBucket"
