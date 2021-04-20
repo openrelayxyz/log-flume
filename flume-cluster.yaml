@@ -132,6 +132,10 @@ Parameters:
     Description: The number of Kafka messages to roll back upon resumption
     Type: Number
     Default: 5000
+  FlumeReorgThreshold:
+    Description: The minimum number of blocks to have in memory for re-orging
+    Type: Number
+    Default: 128
   UrgentAlarmWebhook:
     Description: URL for webhooks pertaining to urgent alarms
     Type: String
@@ -1101,7 +1105,7 @@ Resources:
                 Environment=HOME=/var/lib/flume
                 Type=simple
                 LimitNOFILE=655360
-                ExecStart=/usr/bin/flumeserver ${RollbackFlag} ${FlumeNetworkFlag} /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"
+                ExecStart=/usr/bin/flumeserver ${RollbackFlag} ${FlumeNetworkFlag} --reorg-threshold ${FlumeReorgThreshold} /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"
                 CPUSchedulingPolicy=fifo
                 CPUSchedulingPriority=20
                 KillMode=process
@@ -1443,7 +1447,7 @@ Resources:
                 done
 
                 #Deal with double escapes in url if exist
-                printf "/usr/bin/flumeserver ${RollbackFlag} -shutdown.sync /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"" > /tmp/flumesync.sh
+                printf "/usr/bin/flumeserver ${RollbackFlag} --reorg-threshold ${FlumeReorgThreshold} -shutdown.sync /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"" > /tmp/flumesync.sh
                 chmod +x /tmp/flumesync.sh
 
                 # sync and shutdown
