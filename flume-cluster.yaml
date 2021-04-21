@@ -1241,16 +1241,12 @@ Resources:
                   done
                 fi
                 aws ec2 attach-volume --device=/dev/sdf --instance-id=$INSTANCE_ID --volume-id=$VOLUME_ID
+                sleep 10 # Give the volume a moment to register with the kernel
 
                 while [ "$(aws ec2 describe-volumes --volume-id $VOLUME_ID | jq -r .Volumes[0].State)" != "in-use" ]
                 do
                   sleep 3
                 done
-
-                if [ "$VOLUME_CREATED" == "yes" ]
-                then
-                  mkfs.ext4 /dev/sdf
-                fi
 
                 mkdir -p /var/lib/flume
 
@@ -1267,6 +1263,11 @@ Resources:
                   subprocess.Popen(["ln","-s","/dev/"+z[vol.replace("-","").encode("utf8")].decode("utf8"),dest], stdout=subprocess.PIPE)
                 ' > /tmp/setvolumes.py
                 python3 /tmp/setvolumes.py
+
+                if [ "$VOLUME_CREATED" == "yes" ]
+                then
+                  mkfs.ext4 /dev/sdf
+                fi
 
                 mkswap /dev/sds
                 swapon /dev/sds
@@ -1716,6 +1717,16 @@ Resources:
                 - PublicA:
                     "Fn::ImportValue":
                       !Sub "${InfrastructureStack}-PublicA"
+              - Fn::Sub:
+                - "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PublicB}"
+                - PublicB:
+                    "Fn::ImportValue":
+                      !Sub "${InfrastructureStack}-PublicB"
+              - Fn::Sub:
+                - "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PublicC}"
+                - PublicC:
+                    "Fn::ImportValue":
+                      !Sub "${InfrastructureStack}-PublicC"
               - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:key-pair/${KeyName}"
               - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
 
@@ -1735,20 +1746,9 @@ Resources:
         Variables:
           LAUNCH_TEMPLATE_ID: !Ref FlumeSnapshotLaunchTemplate
           LAUNCH_TEMPLATE_VERSION: !Sub "${FlumeSnapshotLaunchTemplate.LatestVersionNumber}"
-          INSTANCE_TYPES: "r6.large,r6d.large,m6.xlarge,m6d.xlarge,t4g.xlarge,c6g.xlarge,c6gd.xlarge"
+          INSTANCE_TYPES: "r6g.large,r6gd.large,m6g.xlarge,m6gd.xlarge,t4g.xlarge,c6g.xlarge,c6gd.xlarge"
           SUBNET_ID:
-            "Fn::Sub":
-              - "${PublicA},${PublicB},${PublicC}"
-              - PublicB:
-                  "Fn::ImportValue":
-                      !Sub "${InfrastructureStack}-PublicB"
-                PublicC:
-                  "Fn::ImportValue":
-                      !Sub "${InfrastructureStack}-PublicC"
-                PublicA:
-                    "Fn::ImportValue":
-                      !Sub "${InfrastructureStack}-PublicA"
-
+            "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicB"
           VOLUME_SIZE: !Ref FlumeDiskSize
       Handler: "getSnapshot.handler"
       Role: !Sub ${FlumeSnapshotLambdaRole.Arn}
