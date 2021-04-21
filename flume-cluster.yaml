@@ -1226,11 +1226,6 @@ Resources:
                 unzip awscliv2.zip
                 ./aws/install
 
-                if [ -e /dev/sdf ]
-                then
-                  mkfs.ext4 /dev/sdf
-                fi
-
                 AVAILABILITY_ZONE=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
                 INSTANCE_ID=$(curl -s http://169.254.169.254/2012-01-12/meta-data/instance-id)
 
@@ -1238,6 +1233,7 @@ Resources:
 
                 if [ "$VOLUME_ID" == "null"  ]
                 then
+                  VOLUME_CREATED="yes"
                   VOLUME_ID=$(aws ec2 create-volume --availability-zone $AVAILABILITY_ZONE --iops 3000  --throughput 125 --size ${FlumeDiskSize} --volume-type gp3 --tag-specifications '{"ResourceType": "volume", "Tags": [{"Key": "SnapshotVolume","Value": "${AWS::StackName}-${AWS::Region}"}, {"Key": "Name", "Value": "${AWS::StackName}-SnapshotVolume"}]}' | jq -r .VolumeId)
                   while [ "$(aws ec2 describe-volumes --volume-id $VOLUME_ID | jq -r .Volumes[0].State)" != "available" ]
                   do
@@ -1250,6 +1246,11 @@ Resources:
                 do
                   sleep 3
                 done
+
+                if [ "$VOLUME_CREATED" == "yes" ]
+                then
+                  mkfs.ext4 /dev/sdf
+                fi
 
                 mkdir -p /var/lib/flume
 
