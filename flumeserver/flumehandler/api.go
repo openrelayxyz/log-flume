@@ -134,7 +134,7 @@ func accountTxList(w http.ResponseWriter, r *http.Request, db *sql.DB) {
       UNION SELECT rowid FROM transactions WHERE recipient = ? AND (block >= ? AND block <= ?)
       ORDER BY rowid %v LIMIT ? OFFSET ?
     ) ORDER BY transactions.block %v, transactions.transactionIndex %v;`, sort, sort, sort),
-    trimPrefix(addr.Bytes()), startBlock, endBlock, trimPrefix(addr.Bytes()), startBlock, endBlock, offset, (page - 1) * offset)
+    trimPrefix(addr.Bytes()), startBlock, endBlock, trimPrefix(addr.Bytes()), startBlock, endBlock, trimPrefix(addr.Bytes()), startBlock, endBlock, offset, (page - 1) * offset)
   if handleApiError(err, w, "database error", "Error! Database error", "Error querying", 500) { return }
   result := []*txResponse{}
   for rows.Next() {
@@ -234,8 +234,8 @@ func accountTokenTransferList(w http.ResponseWriter, r *http.Request, db *sql.DB
   var headBlockNumber uint64
   err := db.QueryRowContext(r.Context(), "SELECT max(number) FROM blocks;").Scan(&headBlockNumber)
   if headBlockNumber > uint64(endBlock) { endBlock = int(headBlockNumber) }
-  topic3Comparison := "="
-  if nft { topic3Comparison = "!="}
+  topic3Comparison := "IS"
+  if nft { topic3Comparison = "IS NOT"}
   rows, err := db.QueryContext(
     r.Context(),
     fmt.Sprintf(`SELECT
@@ -245,8 +245,8 @@ func accountTokenTransferList(w http.ResponseWriter, r *http.Request, db *sql.DB
     INNER JOIN transactions on event_logs.tx = transactions.id
     WHERE
       event_logs.rowid IN (
-        SELECT rowid FROM event_logs INDEXED BY topic1_partial WHERE event_logs.topic0 = X'ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef' AND event_logs.topic1 = ? AND event_logs.topic3 %v zeroblob(0) AND (block >= ? AND block <= ?)
-        UNION SELECT rowid FROM event_logs INDEXED BY topic2_partial WHERE event_logs.topic0 = X'ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef' AND event_logs.topic2 = ? AND event_logs.topic3 %v zeroblob(0) AND (block >= ? AND block <= ?)
+        SELECT rowid FROM event_logs INDEXED BY topic1_partial WHERE event_logs.topic0 = X'ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef' AND event_logs.topic1 = ? AND event_logs.topic3 %v NULL AND (block >= ? AND block <= ?)
+        UNION SELECT rowid FROM event_logs INDEXED BY topic2_partial WHERE event_logs.topic0 = X'ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef' AND event_logs.topic2 = ? AND event_logs.topic3 %v NULL AND (block >= ? AND block <= ?)
         ORDER BY rowid %v LIMIT ? OFFSET ?
       )
     ORDER BY blocks.number %v, event_logs.logIndex %v`, topic3Comparison, topic3Comparison, sort, sort, sort),

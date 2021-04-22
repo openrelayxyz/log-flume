@@ -11,7 +11,7 @@ import (
   "log"
 )
 
-func ResolveFeed(url string, db *sql.DB, kafkaRollback int64) (DataFeed, error) {
+func ResolveFeed(url string, db *sql.DB, kafkaRollback int64, finishedLimit int) (DataFeed, error) {
   if strings.HasPrefix(url, "ws://") || strings.HasPrefix(url, "wss://") {
     return NewETHWSFeed(url, db)
   } else if strings.HasPrefix(url, "file://") {
@@ -34,7 +34,7 @@ func ResolveFeed(url string, db *sql.DB, kafkaRollback int64) (DataFeed, error) 
 
 
   } else if strings.HasPrefix(url, "kafka://") {
-    return NewKafkaDataFeed(url, db, kafkaRollback)
+    return NewKafkaDataFeed(url, db, kafkaRollback, finishedLimit)
   } else if url == "null://" {
     return &NullDataFeed{}, nil
   }

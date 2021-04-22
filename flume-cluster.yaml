@@ -132,6 +132,10 @@ Parameters:
     Description: The number of Kafka messages to roll back upon resumption
     Type: Number
     Default: 5000
+  FlumeReorgThreshold:
+    Description: The minimum number of blocks to have in memory for re-orging
+    Type: Number
+    Default: 128
   UrgentAlarmWebhook:
     Description: URL for webhooks pertaining to urgent alarms
     Type: String
@@ -1051,6 +1055,10 @@ Resources:
 
                 sysctl -p || true
 
+                crontab -l >  newcrontab || true
+                echo "5,20,35,50 * * * * /usr/bin/sh -c 'for x in \$(ls /dev/sd*) ; do echo resizing \$(readlink -f \$x) if needed; /usr/sbin/resize2fs \$(readlink -f \$x) ; done'" >> newcrontab
+                crontab newcrontab
+
                 #Copy Down flumeserver
                 if ! aws s3 cp s3://${S3ECBucketName}/${S3FlumeBinaryDirectory}/flumeserver-$ARCH /usr/bin/flumeserver
                 then
@@ -1097,7 +1105,7 @@ Resources:
                 Environment=HOME=/var/lib/flume
                 Type=simple
                 LimitNOFILE=655360
-                ExecStart=/usr/bin/flumeserver ${RollbackFlag} ${FlumeNetworkFlag} /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"
+                ExecStart=/usr/bin/flumeserver ${RollbackFlag} ${FlumeNetworkFlag} --reorg-threshold ${FlumeReorgThreshold} /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"
                 CPUSchedulingPolicy=fifo
                 CPUSchedulingPriority=20
                 KillMode=process
@@ -1163,8 +1171,8 @@ Resources:
     Type: AWS::EC2::LaunchTemplate
     Properties:
       LaunchTemplateData:
-        ImageId: !If [HasFlumeImageAMI, !Ref FlumeImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", "amd64" ]]
-        InstanceType: r5a.large
+        ImageId: !If [HasFlumeImageAMI, !Ref FlumeImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", "arm64" ]]
+        InstanceType: r6g.large
         TagSpecifications:
           - ResourceType: instance
             Tags:
@@ -1183,12 +1191,12 @@ Resources:
         #   CpuCredits: standard
         InstanceInitiatedShutdownBehavior: terminate
         BlockDeviceMappings:
-        - DeviceName: "/dev/sdf"
-          Ebs:
-            VolumeSize: !Ref FlumeDiskSize
-            VolumeType: gp3
-            Iops: 4000
-            Throughput: 1000
+        # - DeviceName: "/dev/sdf"
+        #   Ebs:
+        #     VolumeSize: !Ref FlumeDiskSize
+        #     VolumeType: gp3
+        #     Iops: 4000
+        #     Throughput: 1000
         - DeviceName: "/dev/sds"
           Ebs:
             VolumeSize: 8
@@ -1218,6 +1226,28 @@ Resources:
                 unzip awscliv2.zip
                 ./aws/install
 
+                AVAILABILITY_ZONE=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
+                INSTANCE_ID=$(curl -s http://169.254.169.254/2012-01-12/meta-data/instance-id)
+
+                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=tag:SnapshotVolume,Values=${AWS::StackName}-${AWS::Region} Name=status,Values=available Name=availability-zone,Values=$AVAILABILITY_ZONE | jq -r .Volumes[0].VolumeId)
+
+                if [ "$VOLUME_ID" == "null"  ]
+                then
+                  VOLUME_CREATED="yes"
+                  VOLUME_ID=$(aws ec2 create-volume --availability-zone $AVAILABILITY_ZONE --iops 3000  --throughput 125 --size ${FlumeDiskSize} --volume-type gp3 --tag-specifications '{"ResourceType": "volume", "Tags": [{"Key": "SnapshotVolume","Value": "${AWS::StackName}-${AWS::Region}"}, {"Key": "Name", "Value": "${AWS::StackName}-SnapshotVolume"}]}' | jq -r .VolumeId)
+                  while [ "$(aws ec2 describe-volumes --volume-id $VOLUME_ID | jq -r .Volumes[0].State)" != "available" ]
+                  do
+                    sleep 3
+                  done
+                fi
+                aws ec2 attach-volume --device=/dev/sdf --instance-id=$INSTANCE_ID --volume-id=$VOLUME_ID
+                sleep 10 # Give the volume a moment to register with the kernel
+
+                while [ "$(aws ec2 describe-volumes --volume-id $VOLUME_ID | jq -r .Volumes[0].State)" != "in-use" ]
+                do
+                  sleep 3
+                done
+
                 mkdir -p /var/lib/flume
 
                 printf 'import subprocess
@@ -1234,15 +1264,21 @@ Resources:
                 ' > /tmp/setvolumes.py
                 python3 /tmp/setvolumes.py
 
+                if [ "$VOLUME_CREATED" == "yes" ]
+                then
+                  mkfs.ext4 /dev/sdf
+                fi
+
                 mkswap /dev/sds
                 swapon /dev/sds
 
                 if [ -e /dev/sdf ]
                 then
-                  mkfs.ext4 /dev/sdf
                   mount -o barrier=0,data=writeback /dev/sdf /var/lib/flume
                   echo "/dev/sdf  /var/lib/flume    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
                 fi
+
+                resize2fs /dev/sdf
 
                 export AWS_DEFAULT_REGION=${AWS::Region}
 
@@ -1371,18 +1407,21 @@ Resources:
                 totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
                 concurrency=$((totalm / 1600 ))
 
-                #copy down the flume backup
-                if ! backupmanager download --concurrency=$concurrency s3://${S3FlumeBackup} /var/lib/flume/item.sqlite
+                if [ ! -f /var/lib/flume/item.sqlite ]
                 then
-                  if [ "${AggregatedNotifications}" != "" ]
-                    then
-                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - CRITICAL Failure to pull backup" --message="Flume failed to pull down the database backup for cluster '${AWS::StackName}'. Correct permssions/upload as soon as possible."
+                  #copy down the flume backup
+                  if ! backupmanager download --concurrency=$concurrency s3://${S3FlumeBackup} /var/lib/flume/item.sqlite
+                  then
+                    if [ "${AggregatedNotifications}" != "" ]
+                      then
+                      aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - CRITICAL Failure to pull backup" --message="Flume failed to pull down the database backup for cluster '${AWS::StackName}'. Correct permssions/upload as soon as possible."
+                    fi
+                    if [ "${AlarmSNSTopic}" != "" ]
+                      then
+                      aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - CRITICAL Failure to pull backup" --message="Flume failed to pull down the database backup for cluster '${AWS::StackName}'. Correct permssions/upload as soon as possible."
+                    fi
+                    poweroff
                   fi
-                  if [ "${AlarmSNSTopic}" != "" ]
-                    then
-                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - CRITICAL Failure to pull backup" --message="Flume failed to pull down the database backup for cluster '${AWS::StackName}'. Correct permssions/upload as soon as possible."
-                  fi
-                  poweroff
                 fi
 
                 if [ -f /tmp/pre-sync.sql ]
@@ -1410,7 +1449,7 @@ Resources:
                 done
 
                 #Deal with double escapes in url if exist
-                printf "/usr/bin/flumeserver ${RollbackFlag} -shutdown.sync /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"" > /tmp/flumesync.sh
+                printf "/usr/bin/flumeserver ${RollbackFlag} --reorg-threshold ${FlumeReorgThreshold} -shutdown.sync /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"" > /tmp/flumesync.sh
                 chmod +x /tmp/flumesync.sh
 
                 # sync and shutdown
@@ -1425,6 +1464,7 @@ Resources:
                     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} -  Snapshot Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. ]"
                   fi
                   poweroff
+                  exit 1
                 fi
 
                 if [ -f /tmp/post-sync.sql ]
@@ -1463,15 +1503,44 @@ Resources:
                     aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Taking Backup Failed" --message="The snapshotting process for ${AWS::StackName} failed to upload the backup."
                   fi
                   poweroff
+                  exit 1
                 fi
 
                 # CFN will set any parameters we don't provide back to their default values,
                 # so get all of the parameters, update S3FlumeBackup, and update the stack with
                 # the new parameters.
                 PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "S3FlumeBackup" then .ParameterValue="'$BACKUPNAME'" else . end)' -c)
-                aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS"
 
+
+
+
+                # Resize Disks
+                ORIGINAL_DISK_SIZE=`aws ec2 describe-volumes --volume-ids "$VOLUME_ID" | jq '.Volumes[] | .Size' -cr`
+                NEW_DISK_SIZE=$((ORIGINAL_DISK_SIZE*115/100))
+
+                ## manually grepping for sdf (mount direcotry above) because we don't really need to worry about the others.
+                df -H | grep -vE '^Filesystem|tmpfs|cdrom' | grep $(readlink -f /dev/sdf) | awk '{ print $5 " " $1 }' | while read output;
+                do
+                  echo $output
+                  usep=$(echo $output | awk '{ print $1}' | cut -d'%' -f1  )
+                  partition=$(echo $output | awk '{ print $2 }' )
+                  if [ $usep -ge 90 ]; then
+                    if [ "${AggregatedNotifications}" != "" ]
+                    then
+                      aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Upsizing Snapshot Size" --message="The snapshot for ${AWS::StackName} has reached $usep%. Resizing to $NEW_DISK_SIZE GB."
+                      if [ "${AlarmSNSTopic}" != "" ]
+                      then
+                        aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Upsizing Snapshot Size" --message="The snapshot for ${AWS::StackName} has reached $usep%. Resizing to $NEW_DISK_SIZE GB."
+                      fi
+                      PARAMETERS_RESIZE=$(echo "$PARAMETERS" | jq 'map(if .ParameterKey == "FlumeDiskSize" then .ParameterValue="'$NEW_DISK_SIZE'" else . end)' -c)
+                      aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS_RESIZE"
+                    fi
+                    else
+                      aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS"
+                  fi
+                done
                 poweroff
+                exit 1
               - ClusterId:
                   "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
                 RollbackFlag: !If [ HasRollback, !Sub "--kafka-rollback=${FlumeKafkaRollback}", ""]
@@ -1538,6 +1607,7 @@ Resources:
             Resource:
               - !Sub ${FlumeNodeInstanceProfile.Arn}
               - !Sub ${FlumeSnapshotNodeInstanceProfile.Arn}
+              - !Sub ${BackupGCRole.Arn}
             Effect: Allow
           - Action:
               - lambda:UpdateFunctionConfiguration
@@ -1547,6 +1617,9 @@ Resources:
             Resource:
               - !Sub ${FlumeSnapshotLambdaFunction.Arn}
               - !Sub ${GetBucketName.Arn}
+              - !Sub ${FlumeBackupGCFunction.Arn}
+              - !Sub ${DiskSizeLambdaFunction.Arn}
+              - !Sub ${SnapDiskSizeLambdaFunction.Arn}
             Effect: Allow
           - Action:
               - iam:PassRole
@@ -1556,6 +1629,8 @@ Resources:
               - !Sub "${FlumeNodeRole.Arn}"
               - !Sub "${FlumeSnapshotLambdaRole.Arn}"
               - !Sub "${FlumeSnapshotNodeRole.Arn}"
+              - !Sub "${BackupGCRole.Arn}"
+              - !Sub ${DiskSizeLambdaRole.Arn}
             Effect: Allow
           - Action:
               - sns:Publish
@@ -1586,6 +1661,8 @@ Resources:
               - autoscaling:DescribeAutoScalingGroups
               - autoscaling:DescribeScalingActivities
               - ec2:DescribeVolumes
+              - ec2:AttachVolume
+              - ec2:CreateVolume
               - ec2:CreateSnapshot
               - ec2:DeleteSnapshot
               - events:DescribeRule
@@ -1640,6 +1717,16 @@ Resources:
                 - PublicA:
                     "Fn::ImportValue":
                       !Sub "${InfrastructureStack}-PublicA"
+              - Fn::Sub:
+                - "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PublicB}"
+                - PublicB:
+                    "Fn::ImportValue":
+                      !Sub "${InfrastructureStack}-PublicB"
+              - Fn::Sub:
+                - "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PublicC}"
+                - PublicC:
+                    "Fn::ImportValue":
+                      !Sub "${InfrastructureStack}-PublicC"
               - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:key-pair/${KeyName}"
               - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
 
@@ -1653,24 +1740,15 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3ECBucketName
-        S3Key: lambdaPackage-21.zip
+        S3Key: lambdaPackage-28.zip
       Description: "Launch instances to snapshot chaindata"
       Environment:
         Variables:
           LAUNCH_TEMPLATE_ID: !Ref FlumeSnapshotLaunchTemplate
           LAUNCH_TEMPLATE_VERSION: !Sub "${FlumeSnapshotLaunchTemplate.LatestVersionNumber}"
+          INSTANCE_TYPES: "r6g.large,r6gd.large,m6g.xlarge,m6gd.xlarge,t4g.xlarge,c6g.xlarge,c6gd.xlarge"
           SUBNET_ID:
-            "Fn::Sub":
-              - "${PublicA},${PublicB},${PublicC}"
-              - PublicA:
-                  "Fn::ImportValue":
-                      !Sub "${InfrastructureStack}-PublicA"
-                PublicB:
-                  "Fn::ImportValue":
-                      !Sub "${InfrastructureStack}-PublicB"
-                PublicC:
-                  "Fn::ImportValue":
-                      !Sub "${InfrastructureStack}-PublicC"
+            "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicB"
           VOLUME_SIZE: !Ref FlumeDiskSize
       Handler: "getSnapshot.handler"
       Role: !Sub ${FlumeSnapshotLambdaRole.Arn}
@@ -1738,14 +1816,15 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref S3ECBucketName
-        S3Key: flumeLambdaPackage-1.zip
-      Description: "A lambda function to process Geth logs into metrics"
+        S3Key: flumeLambdaPackage-7.zip
+      Description: "A lambda function to process Flume logs into metrics"
       Environment:
         Variables:
           CLUSTER_ID: !Sub ${NetworkId}
       Handler: "logMonitor.flumeHandler"
       Role: !Sub ${LogMetricsRole.Arn}
       Runtime: python3.7
+      Timeout: 120
   FlumeLogMetricsSubscription:
     Type: AWS::Logs::SubscriptionFilter
     Properties:
@@ -1760,6 +1839,152 @@ Resources:
       Principal: !Sub logs.${AWS::Region}.amazonaws.com
       SourceAccount: !Ref 'AWS::AccountId'
       SourceArn: !Sub ${FlumeLG.Arn}
+
+
+  BackupGCRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+  BackupGCPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref BackupGCRole
+      PolicyName: !Sub "FlumeLogMetrics${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - sns:Publish
+            Resource:
+              - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+              - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
+          - Effect: Allow
+            Action:
+              - "s3:ListBucket"
+              - "s3:DeleteObject"
+            Resource: "*"
+  FlumeBackupGCFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3ECBucketName
+        S3Key: flumeLambdaPackage-8.zip
+      Description: "A lambda function to process Flume logs into metrics"
+      Environment:
+        Variables:
+          SNS_TOPICS: !Join [",", [!If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue'], !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]]]
+          BACKUP_BUCKET: !Ref S3FlumeBackupBucket
+          NETWORK_ID: !Ref NetworkId
+          CURRENT_SNAPSHOT: !Ref S3FlumeBackup
+      Handler: "flumeBackupGC.gcHandler"
+      Role: !Sub ${BackupGCRole.Arn}
+      Runtime: python3.7
+  GCSchedulerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: !Sub "Do a daily backup cleanup for ${AWS::StackName}"
+      ScheduleExpression: rate(1 day)
+      Targets:
+        - Arn: !Sub ${FlumeBackupGCFunction.Arn}
+          Id: !Sub "gc-${AWS::StackName}"
+  GCInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${FlumeBackupGCFunction.Arn}
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn: !Sub ${GCSchedulerRule.Arn}
+
+  DiskSizeLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+  DiskSizeLambdaPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref DiskSizeLambdaRole
+      PolicyName: !Sub "DiskSizeLambdaPolicy${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:DescribeVolumes
+              - ec2:ModifyVolume
+            Resource: "*"
+  DiskSizeLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3ECBucketName
+        S3Key: lambdaPackage-30.zip
+      Description: "Align master volume sizes with CloudFormation parameters"
+      Environment:
+        Variables:
+          VOLUME_SIZE: !Ref FlumeDiskSize
+          VOLUME_NAME: !Sub "${AWS::StackName}-Flume"
+          ATTACHMENT_DEVICE: "/dev/sdf"
+      Handler: "masterVolumeManager.sizeHandler"
+      Role: !Sub ${DiskSizeLambdaRole.Arn}
+      Runtime: python3.7
+  DiskManagerSchedulerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Disk Size manager
+      ScheduleExpression: "rate(15 minutes)"
+      Targets:
+        - Arn: !Sub ${DiskSizeLambdaFunction.Arn}
+          Id: !Sub "disk-size-${NetworkId}-${FlumeClusterVersion}"
+  SnapDiskSizeLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3ECBucketName
+        S3Key: lambdaPackage-30.zip
+      Description: "Align master volume sizes with CloudFormation parameters"
+      Environment:
+        Variables:
+          VOLUME_SIZE: !Ref FlumeDiskSize
+          VOLUME_NAME: !Sub "${AWS::StackName}-SnapshotVolume"
+          ATTACHMENT_DEVICE: "/dev/sdf"
+      Handler: "masterVolumeManager.sizeHandler"
+      Role: !Sub ${DiskSizeLambdaRole.Arn}
+      Runtime: python3.7
+  SnapDiskManagerSchedulerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Disk Size manager
+      ScheduleExpression: "rate(15 minutes)"
+      Targets:
+        - Arn: !Sub ${SnapDiskSizeLambdaFunction.Arn}
+          Id: !Sub "disk-size-${NetworkId}-${FlumeClusterVersion}"
+
+  DiskManagerInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${DiskSizeLambdaFunction.Arn}
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn: !Sub ${DiskManagerSchedulerRule.Arn}
 
   # TODO
   # SnapshotGCLambdaRole:

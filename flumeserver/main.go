@@ -30,6 +30,7 @@ func main() {
 
   // shutdownSync := flag.Bool("shutdownSync", false, "Shutdown server once sync is completed")
   port := flag.Int("port", 8000, "Serving port")
+  pprofPort := flag.Int("pprof-port", 6969, "pprof port")
   minSafeBlock := flag.Int("min-safe-block", 1000000, "Do not start serving if the smallest block exceeds this value")
   shutdownSync := flag.Bool("shutdown.sync", false, "Sync after shutdown")
   mainnet := flag.Bool("mainnet", false, "Ethereum Mainnet")
@@ -45,6 +46,7 @@ func main() {
   memstore := flag.Bool("memstore", false, "Store temporary tables in memory")
   completionTopic := flag.String("completion-topic", "", "A kafka topic to broadcast newly indexed blocks")
   kafkaRollback := flag.Int64("kafka-rollback", 5000, "A number of Kafka offsets to roll back before resumption")
+  reorgThreshold := flag.Int("reorg-threshold", 128, "Minimum number of blocks to keep in memory to handle reorgs.")
 
   flag.CommandLine.Parse(os.Args[1:])
 
@@ -107,11 +109,21 @@ func main() {
       log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
     }
   }()
+  if *pprofPort > 0 {
+    p := &http.Server{
+      Addr: fmt.Sprintf(":%v", *pprofPort),
+      Handler: http.DefaultServeMux,
+      ReadHeaderTimeout: 5 * time.Second,
+      MaxHeaderBytes: 1 << 20,
+    }
+    go p.ListenAndServe()
+  }
+
   if err := migrations.Migrate(logsdb, chainid); err != nil {
     log.Fatalf(err.Error())
   }
   var completionFeed event.Feed
-  feed, err := datafeed.ResolveFeed(feedURL, logsdb, *kafkaRollback)
+  feed, err := datafeed.ResolveFeed(feedURL, logsdb, *kafkaRollback, *reorgThreshold)
   if err != nil { log.Fatalf(err.Error()) }
 
   quit := make(chan struct{})
@@ -129,13 +141,6 @@ func main() {
     ReadHeaderTimeout: 5 * time.Second,
     MaxHeaderBytes: 1 << 20,
   }
-  p := &http.Server{
-    Addr: ":6969",
-    Handler: http.DefaultServeMux,
-    ReadHeaderTimeout: 5 * time.Second,
-    MaxHeaderBytes: 1 << 20,
-  }
-  go p.ListenAndServe()
   <-feed.Ready()
   if *completionTopic != "" {
     notify.SendKafkaNotifications(completionFeed, *completionTopic)

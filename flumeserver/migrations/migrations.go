@@ -2,6 +2,7 @@ package migrations
 
 import (
   "database/sql"
+  "log"
 )
 
 const (
@@ -283,9 +284,39 @@ func Migrate(db *sql.DB, chainid uint64) error {
     db.Exec(`DROP INDEX recipient;`)
     db.Exec(`CREATE INDEX func_partial ON transactions(func) WHERE func IS NOT NULL;`)
     db.Exec(`DROP INDEX func;`)
-    db.Exec(`CREATE INDEX contractAddress_partial ON transactions(contractAddress) WHERE contractAddress != X'00';`)
-    db.Exec(`DROP INDEX contractAddress;`)
     db.Exec(`UPDATE migrations SET version = 7;`)
+  }
+  if schemaVersion < 8 {
+    // topic4 doesn't exist - we can delete references to it
+    db.Exec(`DROP INDEX topic4_partial;`)
+    var maxBlock int
+    db.QueryRow(`SELECT max(number) FROM blocks;`).Scan(&maxBlock)
+    if maxBlock == 0 {
+      // Probably won't do anything, but if something's amiss this will pick anything up
+      db.Exec(`UPDATE transactions SET contractAddress = NULL WHERE contractAddress = X'00' OR contractAddress = zeroblob(0);`)
+      db.Exec(`UPDATE transactions SET recipient = NULL WHERE recipient = zeroblob(0);`)
+      db.Exec(`UPDATE transactions SET func = NULL WHERE func = zeroblob(0);`)
+      db.Exec(`UPDATE event_logs SET topic0 = NULL WHERE topic0 = zeroblob(0);`)
+      db.Exec(`UPDATE event_logs SET topic1 = NULL WHERE topic1 = zeroblob(0);`)
+      db.Exec(`UPDATE event_logs SET topic2 = NULL WHERE topic2 = zeroblob(0);`)
+      db.Exec(`UPDATE event_logs SET topic3 = NULL WHERE topic3 = zeroblob(0);`)
+    }
+    for i := 0; i < maxBlock; i += 1000 {
+      // Handle ranges of blocks, as the go version of sqlite doesn't support update limits
+      db.Exec(`UPDATE transactions SET contractAddress = NULL WHERE (contractAddress = X'00' OR contractAddress = zeroblob(0)) AND block >= ? AND block <= ?;`, i, i+1000)
+      db.Exec(`UPDATE transactions INDEXED BY txblock SET recipient = NULL WHERE recipient = zeroblob(0) AND block >= ? AND block <= ?;`, i, i+1000)
+      db.Exec(`UPDATE transactions INDEXED BY txblock SET func = NULL WHERE func = zeroblob(0) AND block >= ? AND block <= ?;`, i, i+1000)
+      db.Exec(`UPDATE event_logs SET topic0 = NULL WHERE topic0 = zeroblob(0) AND block >= ? AND block <= ?;`, i, i+1000)
+      db.Exec(`UPDATE event_logs SET topic1 = NULL WHERE topic1 = zeroblob(0) AND block >= ? AND block <= ?;`, i, i+1000)
+      db.Exec(`UPDATE event_logs SET topic2 = NULL WHERE topic2 = zeroblob(0) AND block >= ? AND block <= ?;`, i, i+1000)
+      db.Exec(`UPDATE event_logs SET topic3 = NULL WHERE topic3 = zeroblob(0) AND block >= ? AND block <= ?;`, i, i+1000)
+      if i % 100000 == 0 {
+        log.Printf("Migrating empty byte values to null. Block: %v / %v", i, maxBlock)
+      }
+    }
+    db.Exec(`CREATE INDEX contractAddress_partial ON transactions(contractAddress) WHERE contractAddress IS NOT NULL;`)
+    db.Exec(`DROP INDEX contractAddress;`)
+    db.Exec(`UPDATE migrations SET version = 8;`)
   }
   // chainid
   return nil
