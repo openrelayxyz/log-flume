@@ -1234,7 +1234,7 @@ Resources:
                 if [ "$VOLUME_ID" == "null"  ]
                 then
                   VOLUME_CREATED="yes"
-                  VOLUME_ID=$(aws ec2 create-volume --availability-zone $AVAILABILITY_ZONE --iops 3000  --throughput 125 --size ${FlumeDiskSize} --volume-type gp3 --tag-specifications '{"ResourceType": "volume", "Tags": [{"Key": "SnapshotVolume","Value": "${AWS::StackName}-${AWS::Region}"}, {"Key": "Name", "Value": "${AWS::StackName}-SnapshotVolume"}]}' | jq -r .VolumeId)
+                  VOLUME_ID=$(aws ec2 create-volume --availability-zone $AVAILABILITY_ZONE --iops 4000  --throughput 1000 --size ${FlumeDiskSize} --volume-type gp3 --tag-specifications '{"ResourceType": "volume", "Tags": [{"Key": "SnapshotVolume","Value": "${AWS::StackName}-${AWS::Region}"}, {"Key": "Name", "Value": "${AWS::StackName}-SnapshotVolume"}]}' | jq -r .VolumeId)
                   while [ "$(aws ec2 describe-volumes --volume-id $VOLUME_ID | jq -r .Volumes[0].State)" != "available" ]
                   do
                     sleep 3
@@ -1538,7 +1538,12 @@ Resources:
                     else
                       aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS"
                   fi
+
                 done
+                if [ "$VOLUME_CREATED" == "yes" ]
+                then
+                  aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp3 --iops 3000 --throughput 125 &
+                fi
                 poweroff
                 exit 1
               - ClusterId:
@@ -1663,6 +1668,7 @@ Resources:
               - ec2:DescribeVolumes
               - ec2:AttachVolume
               - ec2:CreateVolume
+              - ec2:ModifyVolume
               - ec2:CreateSnapshot
               - ec2:DeleteSnapshot
               - events:DescribeRule
