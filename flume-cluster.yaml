@@ -1457,11 +1457,11 @@ Resources:
                 then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
-                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Snapshot Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. ]"
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - ${AWS::Region} - Snapshot Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. ]"
                   fi
                   if [ "${AlarmSNSTopic}" != "" ]
                   then
-                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} -  Snapshot Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. ]"
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - ${AWS::Region} -  Snapshot Failed to Sync" --message="Flume sync failed while taking snapshot for cluster '${AWS::StackName}'. No snapshot will be taken. ]"
                   fi
                   poweroff
                   exit 1

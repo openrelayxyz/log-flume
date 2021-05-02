@@ -399,7 +399,7 @@ func getERC20Holders(ctx context.Context, w http.ResponseWriter, call *rpcCall, 
 
   topic0 := common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
   // topic0 must match ERC20, topic3 must be empty (to exclude ERC721) and topic2 is the recipient address
-  rows, err := db.QueryContext(tctx, `SELECT distinct(topic2) FROM event_logs INDEXED BY address WHERE topic0 = ? AND address = ? AND topic3 IS NULL LIMIT 1000 OFFSET ?;`, trimPrefix(topic0.Bytes()), trimPrefix(addr.Bytes()), offset)
+  rows, err := db.QueryContext(tctx, `SELECT distinct(topic2) FROM event_logs INDEXED BY address_compound WHERE topic0 = ? AND address = ? AND topic3 IS NULL LIMIT 1000 OFFSET ?;`, trimPrefix(topic0.Bytes()), trimPrefix(addr.Bytes()), offset)
   if err != nil {
     log.Printf("Error getting account addresses: %v", err.Error())
     handleError(w, "database error", call.ID, 500)
