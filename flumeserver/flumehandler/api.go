@@ -132,6 +132,7 @@ func accountTxList(w http.ResponseWriter, r *http.Request, db *sql.DB) {
     WHERE transactions.rowid in (
       SELECT rowid FROM transactions WHERE sender = ? AND (block >= ? AND block <= ?)
       UNION SELECT rowid FROM transactions WHERE recipient = ? AND (block >= ? AND block <= ?)
+      UNION SELECT rowid FROM transactions WHERE contractAddress = ? AND (block >= ? AND block <= ?)
       ORDER BY rowid %v LIMIT ? OFFSET ?
     ) ORDER BY transactions.block %v, transactions.transactionIndex %v;`, sort, sort, sort),
     trimPrefix(addr.Bytes()), startBlock, endBlock, trimPrefix(addr.Bytes()), startBlock, endBlock, trimPrefix(addr.Bytes()), startBlock, endBlock, offset, (page - 1) * offset)
