@@ -1074,7 +1074,7 @@ Resources:
                 fi
                 chmod +x /usr/bin/flumeserver
 
-                aws s3 cp s3://${S3ECBucketName}/backupmanager/v0.1.2/backupmanager-linux-$ARCH /usr/bin/backupmanager
+                aws s3 cp s3://${S3ECBucketName}/backupmanager/v0.1.3/backupmanager-linux-$ARCH /usr/bin/backupmanager
                 chmod +x /usr/bin/backupmanager
 
                 totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
@@ -1383,7 +1383,7 @@ Resources:
                 fi
                 chmod +x /usr/bin/flumeserver
 
-                aws s3 cp s3://${S3ECBucketName}/backupmanager/v0.1.2/backupmanager-linux-$ARCH /usr/bin/backupmanager
+                aws s3 cp s3://${S3ECBucketName}/backupmanager/v0.1.3/backupmanager-linux-$ARCH /usr/bin/backupmanager
                 chmod +x /usr/bin/backupmanager
 
                 sysctl -w net.ipv4.tcp_mem='10000000 10000000 10000000'
