@@ -1449,7 +1449,21 @@ Resources:
                 done
 
                 #Deal with double escapes in url if exist
-                printf "/usr/bin/flumeserver ${RollbackFlag} --reorg-threshold ${FlumeReorgThreshold} -shutdown.sync /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"" > /tmp/flumesync.sh
+                printf '
+                for i in {1..5}
+                do
+                  if [ "${FlumeKafkaRollback}" != "" ]
+                  then
+                    ROLLBACK_FLAG="--kafka-rollback=$(expr ${FlumeKafkaRollback} \* i)"
+                  else
+                    ROLLBACK_FLAG=""
+                  fi
+                  if /usr/bin/flumeserver $ROLLBACK_FLAG --reorg-threshold ${FlumeReorgThreshold} -shutdown.sync /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"
+                  then
+                    exit 0
+                  fi
+                done
+                exit 1' > /tmp/flumesync.sh
                 chmod +x /tmp/flumesync.sh
 
                 # sync and shutdown
