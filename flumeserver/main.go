@@ -106,7 +106,9 @@ func main() {
     defer ticker.Stop()
     for range ticker.C {
       stats := logsdb.Stats()
-      log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
+      var block uint
+      logsdb.QueryRow("SELECT max(number) FROM blocks;").Scan(&block)
+      log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v Head Block: %v", stats.OpenConnections, stats.InUse, stats.Idle, block)
     }
   }()
   if *pprofPort > 0 {
