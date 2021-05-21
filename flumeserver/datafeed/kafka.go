@@ -153,14 +153,14 @@ func (kdf *kafkaDataFeed) subscribe() {
   go func() {
     defer eventSub.Unsubscribe()
     for chainEvents := range eventCh {
-      n := make([]string, len(chainEvents.New))
-      r := make([]string, len(chainEvents.Reverted))
-      for i, ce := range chainEvents.New {
-        n[i] = ce.Block.Hash().Hex()
-      }
-      for i, ce := range chainEvents.Reverted {
-        r[i] = ce.Block.Hash().Hex()
-      }
+      // n := make([]string, len(chainEvents.New))
+      // r := make([]string, len(chainEvents.Reverted))
+      // for i, ce := range chainEvents.New {
+      //   n[i] = ce.Block.Hash().Hex()
+      // }
+      // for i, ce := range chainEvents.Reverted {
+      //   r[i] = ce.Block.Hash().Hex()
+      // }
       // log.Printf("Event: New(%v) Reverted(%v)", n, r)
       for i, chainEvent := range chainEvents.New {
         ce := ChainEventFromKafka(chainEvent)
