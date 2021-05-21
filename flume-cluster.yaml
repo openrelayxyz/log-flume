@@ -1619,6 +1619,7 @@ Resources:
               - lambda:InvokeFunction
               - lambda:InvokeAsync
               - lambda:GetFunctionConfiguration
+              - lambda:GetFunction
             Resource:
               - !Sub ${FlumeSnapshotLambdaFunction.Arn}
               - !Sub ${GetBucketName.Arn}
