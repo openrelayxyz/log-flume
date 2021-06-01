@@ -142,6 +142,10 @@ Parameters:
   WarningAlarmWebhook:
     Description: URL for webhooks pertaining to warning alarms
     Type: String
+  SnapshotTimestamp:
+    Description: The time the last timestamp was taken (this is managed by the stack and can be ignored)
+    Default: 0
+    Type: Number
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -501,6 +505,34 @@ Resources:
       Statistic: Maximum
       Threshold: 80
       TreatMissingData: missing
+  SnapshotAgeWarning:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
+      AlarmDescription: "Alarms when the latest snapshot exceeds a certain age"
+      ComparisonOperator: "GreaterThanThreshold"
+      EvaluationPeriods: 2
+      Metrics:
+        - Id: current
+          MetricStat:
+            Metric:
+              MetricName: "UnixTimestamp"
+              Namespace: Consul
+            Period: 60
+            Stat: Maximum
+          Label: Unix Timestamp
+          ReturnData: false
+        - Id: delta
+          Expression: !Sub "(current - ${SnapshotTimestamp})"
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue']
+        - !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]
+      Threshold: 90000 # 25 hours in seconds
+      TreatMissingData: breaching
   MetricsConfigParameter:
     Type: "AWS::SSM::Parameter"
     Properties:
