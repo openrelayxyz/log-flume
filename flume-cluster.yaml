@@ -1541,9 +1541,7 @@ Resources:
                 # CFN will set any parameters we don't provide back to their default values,
                 # so get all of the parameters, update S3FlumeBackup, and update the stack with
                 # the new parameters.
-                PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "S3FlumeBackup" then .ParameterValue="'$BACKUPNAME'" else . end)' -c)
-
-
+                PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "S3FlumeBackup" then .ParameterValue="'$BACKUPNAME'" else . end) | map(if .ParameterKey == "SnapshotTimestamp" then .ParameterValue="'$(date +%s)'" else . end)' -c)
 
 
                 # Resize Disks
