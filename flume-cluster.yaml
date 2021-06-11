@@ -131,6 +131,10 @@ Parameters:
   ConsulAccountName:
       Type: String
       Description: Datacenter prefix for consul
+  ConsulCIDRBlock:
+    Description: The CIDR Block of Consul clients that may connect to these services.
+    Default: 10.255.255.255/32
+    Type: String
   FlumeKafkaRollback:
     Description: The number of Kafka messages to roll back upon resumption
     Type: Number
@@ -569,7 +573,12 @@ Resources:
       - IpProtocol: tcp
         FromPort: '21000'
         ToPort: '21001'
-        CidrIp: !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/14"]]
+        CidrIp: !Ref ConsulCIDRBlock
+      - IpProtocol: udp
+        # Consul agent gossip
+        FromPort: '8301'
+        ToPort: '8301'
+        CidrIp: !Ref ConsulCIDRBlock
   FlumeNodeRole:
     Type: "AWS::IAM::Role"
     Properties:
