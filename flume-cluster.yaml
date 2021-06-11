@@ -128,6 +128,9 @@ Parameters:
   ConsulPrimaryRegion:
       Description: The AWS region of the primary Consul cluster. If not set, defaults to this region.
       Type: String
+  ConsulAccountName:
+      Type: String
+      Description: Datacenter prefix for consul
   FlumeKafkaRollback:
     Description: The number of Kafka messages to roll back upon resumption
     Type: Number
@@ -751,7 +754,7 @@ Resources:
                         "advertise_addr": "PrivateIpAddress",
                         "bind_addr": "PrivateIpAddress",
                         "node_name": "InstanceId",
-                        "datacenter": "${AWS::Region}",
+                        "datacenter": "${ConsulAccountName}--${AWS::Region}",
                         "server": false,
                         "ui" : false,
                         "leave_on_terminate" : true,
