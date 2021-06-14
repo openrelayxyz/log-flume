@@ -318,6 +318,12 @@ func Migrate(db *sql.DB, chainid uint64) error {
     db.Exec(`DROP INDEX contractAddress;`)
     db.Exec(`UPDATE migrations SET version = 8;`)
   }
+  if schemaVersion < 9 {
+    db.Exec(`ALTER TABLE blocks ADD baseFee varchar(32);`)
+    db.Exec(`ALTER TABLE transactions ADD gasFeeCap varchar(32);`)
+    db.Exec(`ALTER TABLE transactions ADD gasTipCap varchar(32);`)
+    db.Exec(`UPDATE migrations SET version = 9;`)
+  }
   // chainid
   return nil
 }

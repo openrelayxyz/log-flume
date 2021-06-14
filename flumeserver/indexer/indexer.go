@@ -105,6 +105,12 @@ func applyParameters(query string, params ...interface{}) string {
       } else {
         preparedParams[i] = fmt.Sprintf("X'%x'", []byte(value[:]))
       }
+    case *hexutil.Big:
+      if value == nil {
+        preparedParams[i] = "NULL"
+      } else {
+        preparedParams[i] = trimPrefix(value.ToInt().Bytes())
+      }
     case hexutil.Uint64:
       preparedParams[i] = fmt.Sprintf("%v", uint64(value))
     case types.BlockNonce:
@@ -159,7 +165,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
         uncles, _ := rlp.EncodeToBytes(chainEvent.Block.Uncles)
         statements := []string{}
         statements = append(statements, applyParameters(
-          "INSERT INTO blocks(number, hash, parentHash, uncleHash, coinbase, root, txRoot, receiptRoot, bloom, difficulty, gasLimit, gasUsed, `time`, extra, mixDigest, nonce, uncles, size, td) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
+          "INSERT INTO blocks(number, hash, parentHash, uncleHash, coinbase, root, txRoot, receiptRoot, bloom, difficulty, gasLimit, gasUsed, `time`, extra, mixDigest, nonce, uncles, size, td, baseFee) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
           chainEvent.Block.Number.ToInt().Int64(),
           chainEvent.Block.Hash,
           chainEvent.Block.ParentHash,
@@ -179,6 +185,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
           uncles, // rlp
           chainEvent.Block.Size,
           chainEvent.Block.TotalDifficulty.ToInt().Bytes(),
+          chainEvent.Block.BaseFee,
         ))
         var signer types.Signer
         senderMap := make(map[common.Hash]<-chan common.Address)
@@ -189,6 +196,8 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
             switch {
             case tx.Type() == types.AccessListTxType:
               signer = types.NewEIP2930Signer(tx.ChainId())
+            case tx.Type() == types.DynamicFeeTxType:
+              signer = types.NewLondonSigner(tx.ChainId())
             case uint64(chainEvent.Block.Number.ToInt().Int64()) > eip155Block:
               signer = types.NewEIP155Signer(tx.ChainId())
             case uint64(chainEvent.Block.Number.ToInt().Int64()) > homesteadBlock:
@@ -224,7 +233,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
           }
           // log.Printf("Inserting transaction %#x", txwr.Transaction.Hash())
           statements = append(statements, applyParameters(
-            "INSERT INTO transactions(block, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, `value`, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, `status`, `type`, access_list) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
+            "INSERT INTO transactions(block, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, `value`, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, `status`, `type`, access_list, gasFeeCap, gasTipCap) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
             chainEvent.Block.Number.ToInt().Int64(),
             txwr.Transaction.Gas(),
             txwr.Transaction.GasPrice().Uint64(),
@@ -246,6 +255,8 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
             txwr.Receipt.Status,
             txwr.Transaction.Type(),
             compress(accessListRLP),
+            trimPrefix(txwr.Transaction.GasFeeCap().Bytes()),
+            trimPrefix(txwr.Transaction.GasTipCap().Bytes()),
           ))
           for _, logRecord := range txwr.Receipt.Logs {
             statements = append(statements, applyParameters(

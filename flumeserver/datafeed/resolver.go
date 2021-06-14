@@ -21,7 +21,7 @@ func ResolveFeed(url string, db *sql.DB, kafkaRollback int64, finishedLimit int)
     if len(parts) >= 2 {
       ancients = parts[1]
     }
-    ldb, err := rawdb.NewLevelDBDatabaseWithFreezer(dbpath, 16, 16, ancients, "dbfeed")
+    ldb, err := rawdb.NewLevelDBDatabaseWithFreezer(dbpath, 16, 16, ancients, "dbfeed", true)
     if err != nil { return nil, err }
     var resumeBlock int64
     db.QueryRowContext(context.Background(), "SELECT max(number) FROM blocks;").Scan(&resumeBlock)
