@@ -834,11 +834,9 @@ Resources:
                     - |
                       Group=consul
                     - !Sub |
-                      ExecStart=/usr/bin/consul connect envoy -sidecar-for ${NetworkId}-flume
+                      ExecStart=/bin/sh -c '/usr/bin/consul connect envoy -sidecar-for ${NetworkId}-flume 2>&1 | grep -v -i deprecated'
                     - |
                       ExecReload=/usr/bin/consul reload
-                    - |
-                      KillMode=process
                     - |
                       Restart=on-failure
                     - |
