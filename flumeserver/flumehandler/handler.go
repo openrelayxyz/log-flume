@@ -14,7 +14,6 @@ import (
   "net/http"
   "database/sql"
   "github.com/ethereum/go-ethereum/common"
-  "github.com/ethereum/go-ethereum/common/math"
   "github.com/ethereum/go-ethereum/common/hexutil"
   "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/eth/filters"
@@ -535,7 +534,7 @@ func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, chainid
     accessListRLP, err := decompress(cAccessListRLP)
     if err != nil { return nil, err }
     var accessList *types.AccessList
-    var chainID, baseFee, gasFeeCap, gasTipCap *hexutil.Big
+    var chainID, gasFeeCap, gasTipCap *hexutil.Big
     switch txType {
     case types.AccessListTxType:
       accessList = &types.AccessList{}
@@ -545,10 +544,8 @@ func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, chainid
       accessList = &types.AccessList{}
       rlp.DecodeBytes(accessListRLP, accessList)
       chainID = uintToHexBig(chainid)
-      baseFee = bytesToHexBig(baseFeeBytes)
       gasFeeCap = bytesToHexBig(gasFeeCapBytes)
       gasTipCap = bytesToHexBig(gasTipCapBytes)
-      gasPrice = math.BigMin(new(big.Int).Add(gasTipCap.ToInt(), baseFee.ToInt()), gasFeeCap.ToInt()).Uint64()
     case types.LegacyTxType:
       chainID = nil
     }
@@ -1049,7 +1046,7 @@ func getTransactionReceiptsByBlockNumber(ctx context.Context, w http.ResponseWri
 }
 
 func getBlocks(ctx context.Context, db *sql.DB, includeTxs bool, chainid uint64, whereClause string, params ...interface{}) ([]map[string]interface{}, error) {
-  query := fmt.Sprintf("SELECT hash, parentHash, uncleHash, coinbase, root, txRoot, receiptRoot, bloom, difficulty, extra, mixDigest, uncles, td, number, gasLimit, gasUsed, time, nonce, size, baseFee FROM blocks WHERE %v;", whereClause)
+  query := fmt.Sprintf("SELECT hash, parentHash, uncleHash, coinbase, root, txRoot, receiptRoot, bloom, difficulty, extra, mixDigest, uncles, td, number, gasLimit, gasUsed, time, nonce, size FROM blocks WHERE %v;", whereClause)
   rows, err := db.QueryContext(ctx, query, params...)
   if err != nil { return nil, err }
   defer rows.Close()

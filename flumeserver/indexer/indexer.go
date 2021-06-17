@@ -5,12 +5,14 @@ import (
   "strings"
   "bytes"
   "context"
+  "math/big"
   // "github.com/openrelayxyz/flume/flumeserver/logfeed"
   "github.com/openrelayxyz/flume/flumeserver/datafeed"
   "database/sql"
   "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/common"
   "github.com/ethereum/go-ethereum/common/hexutil"
+  "github.com/ethereum/go-ethereum/common/math"
   "github.com/ethereum/go-ethereum/rlp"
   "github.com/ethereum/go-ethereum/event"
   "log"
@@ -228,15 +230,20 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, db *sql.
             to = trimPrefix(txwr.Transaction.To().Bytes())
           }
           var accessListRLP []byte
-          if txwr.Transaction.AccessList() != nil {
+          gasPrice := txwr.Transaction.GasPrice().Uint64()
+          switch txwr.Transaction.Type() {
+          case types.AccessListTxType:
             accessListRLP, _ = rlp.EncodeToBytes(txwr.Transaction.AccessList())
+          case types.DynamicFeeTxType:
+            accessListRLP, _ = rlp.EncodeToBytes(txwr.Transaction.AccessList())
+            gasPrice = math.BigMin(new(big.Int).Add(txwr.Transaction.GasTipCap(), chainEvent.Block.BaseFee.ToInt()), txwr.Transaction.GasFeeCap()).Uint64()
           }
           // log.Printf("Inserting transaction %#x", txwr.Transaction.Hash())
           statements = append(statements, applyParameters(
             "INSERT INTO transactions(block, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, `value`, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, `status`, `type`, access_list, gasFeeCap, gasTipCap) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
             chainEvent.Block.Number.ToInt().Int64(),
             txwr.Transaction.Gas(),
-            txwr.Transaction.GasPrice().Uint64(),
+            gasPrice,
             txHash,
             getCopy(compress(txwr.Transaction.Data())),
             txwr.Transaction.Nonce(),
