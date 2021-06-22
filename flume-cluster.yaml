@@ -1721,6 +1721,7 @@ Resources:
               - ec2:DeleteSnapshot
               - events:DescribeRule
               - ec2:DescribeKeyPairs
+              - cloudwatch:DescribeAlarms
             Resource: "*"
             Effect: Allow
   FlumeSnapshotNodeInstanceProfile:
