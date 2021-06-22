@@ -1697,6 +1697,11 @@ Resources:
                 "autoscaling:ResourceTag/aws:cloudformation:stack-id": !Sub "${AWS::StackId}"
             Effect: Allow
           - Action:
+              - cloudwatch:PutMetricAlarm
+            Resource:
+              - !Sub "${SnapshotAgeWarning.Arn}"
+            Effect: Allow
+          - Action:
               - cloudformation:DescribeStacks
               - ec2:DescribeLaunchTemplates
               - ec2:DescribeSnapshotAttribute
