@@ -111,7 +111,7 @@ func applyParameters(query string, params ...interface{}) string {
       if value == nil {
         preparedParams[i] = "NULL"
       } else {
-        preparedParams[i] = trimPrefix(value.ToInt().Bytes())
+        preparedParams[i] = fmt.Sprintf("X'%x'", trimPrefix(value.ToInt().Bytes()))
       }
     case hexutil.Uint64:
       preparedParams[i] = fmt.Sprintf("%v", uint64(value))
