@@ -1101,7 +1101,7 @@ func getBlocks(ctx context.Context, db *sql.DB, includeTxs bool, chainid uint64,
       fields["transactions"] = txs
     }
     if len(baseFee) > 0 {
-      fields["baseFee"] = bytesToHexBig(baseFee)
+      fields["baseFeePerGas"] = bytesToHexBig(baseFee)
     }
     results = append(results, fields)
   }
