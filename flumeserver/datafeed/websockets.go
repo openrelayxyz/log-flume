@@ -102,8 +102,8 @@ func (feed *ethWSFeed) getFromHeader(header *types.Header) (*ChainEvent, error) 
     go func(wg *sync.WaitGroup) {
       for hash := range txhash {
         receipt, err := feed.conn.TransactionReceipt(context.Background(), hash)
-        log.Printf("Receipt: %v, Error: %v", receipt, err)
         if err != nil {
+          log.Printf("Receipt: %v, Error: %v", receipt, err)
           errch <- err
           break
         }

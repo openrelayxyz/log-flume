@@ -38,6 +38,11 @@ func bytesToHash(data []byte) (common.Hash) {
 }
 
 func ChainEventFromKafka(kce *replica.ChainEvent) *ChainEvent {
+  var baseFee *hexutil.Big
+  if bf := kce.Block.BaseFee(); bf != nil {
+    tmp := hexutil.Big(*bf)
+    baseFee = &tmp
+  }
   ce := &ChainEvent{
     Block: &miniBlock{
       Difficulty: hexutil.Big(*kce.Block.Difficulty()),
@@ -60,6 +65,7 @@ func ChainEventFromKafka(kce *replica.ChainEvent) *ChainEvent {
       Transactions: kce.Block.Transactions(),
       TransactionsRoot: kce.Block.TxHash(),
       Uncles: make([]common.Hash, len(kce.Block.Uncles())),
+      BaseFee: baseFee,
     },
     logs: kce.Logs,
     receiptMeta: make(map[common.Hash]*receiptMeta),
