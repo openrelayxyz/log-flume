@@ -1894,11 +1894,12 @@ Resources:
       Handler: "flumeBackupGC.gcHandler"
       Role: !Sub ${BackupGCRole.Arn}
       Runtime: python3.7
+      Timeout: 300
   GCSchedulerRule:
     Type: AWS::Events::Rule
     Properties:
       Description: !Sub "Do a daily backup cleanup for ${AWS::StackName}"
-      ScheduleExpression: rate(1 day)
+      ScheduleExpression: rate(1 hour)
       Targets:
         - Arn: !Sub ${FlumeBackupGCFunction.Arn}
           Id: !Sub "gc-${AWS::StackName}"
