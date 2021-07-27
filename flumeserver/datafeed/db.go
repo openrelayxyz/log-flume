@@ -68,6 +68,11 @@ func (feed *dbDataFeed) subscribe() {
         logs[receipt.TxHash] = receipt.Logs
       }
     }
+    var baseFee *hexutil.Big
+    if bf := block.BaseFee(); bf != nil {
+      tmp := hexutil.Big(*bf)
+      baseFee = &tmp
+    }
     ce := &ChainEvent{
       Block: &miniBlock{
         Difficulty: hexutil.Big(*block.Difficulty()),
@@ -90,6 +95,7 @@ func (feed *dbDataFeed) subscribe() {
         Transactions: block.Transactions(),
         TransactionsRoot: block.TxHash(),
         Uncles: make([]common.Hash, len(block.Uncles())),
+        BaseFee: baseFee,
       },
       logs: logs,
       receiptMeta: make(map[common.Hash]*receiptMeta),

@@ -40,6 +40,7 @@ type miniBlock struct {
   Transactions []*types.Transaction `json:"transactions"`
   TransactionsRoot common.Hash `json:"transactionsRoot"`
   Uncles []common.Hash  `json:"uncles"`
+  BaseFee *hexutil.Big `json:"baseFeePerGas"`
 }
 
 // TODO: Save the fields off the block that we actually need.

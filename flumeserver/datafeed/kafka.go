@@ -38,6 +38,11 @@ func bytesToHash(data []byte) (common.Hash) {
 }
 
 func ChainEventFromKafka(kce *replica.ChainEvent) *ChainEvent {
+  var baseFee *hexutil.Big
+  if bf := kce.Block.BaseFee(); bf != nil {
+    tmp := hexutil.Big(*bf)
+    baseFee = &tmp
+  }
   ce := &ChainEvent{
     Block: &miniBlock{
       Difficulty: hexutil.Big(*kce.Block.Difficulty()),
@@ -60,6 +65,7 @@ func ChainEventFromKafka(kce *replica.ChainEvent) *ChainEvent {
       Transactions: kce.Block.Transactions(),
       TransactionsRoot: kce.Block.TxHash(),
       Uncles: make([]common.Hash, len(kce.Block.Uncles())),
+      BaseFee: baseFee,
     },
     logs: kce.Logs,
     receiptMeta: make(map[common.Hash]*receiptMeta),
@@ -153,14 +159,14 @@ func (kdf *kafkaDataFeed) subscribe() {
   go func() {
     defer eventSub.Unsubscribe()
     for chainEvents := range eventCh {
-      n := make([]string, len(chainEvents.New))
-      r := make([]string, len(chainEvents.Reverted))
-      for i, ce := range chainEvents.New {
-        n[i] = ce.Block.Hash().Hex()
-      }
-      for i, ce := range chainEvents.Reverted {
-        r[i] = ce.Block.Hash().Hex()
-      }
+      // n := make([]string, len(chainEvents.New))
+      // r := make([]string, len(chainEvents.Reverted))
+      // for i, ce := range chainEvents.New {
+      //   n[i] = ce.Block.Hash().Hex()
+      // }
+      // for i, ce := range chainEvents.Reverted {
+      //   r[i] = ce.Block.Hash().Hex()
+      // }
       // log.Printf("Event: New(%v) Reverted(%v)", n, r)
       for i, chainEvent := range chainEvents.New {
         ce := ChainEventFromKafka(chainEvent)

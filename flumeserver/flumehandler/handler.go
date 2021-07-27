@@ -442,6 +442,8 @@ type rpcTransaction struct {
   From             common.Address    `json:"from"`
   Gas              hexutil.Uint64    `json:"gas"`
   GasPrice         *hexutil.Big      `json:"gasPrice"`
+  GasFeeCap        *hexutil.Big      `json:"maxFeePerGas,omitempty"`
+	GasTipCap        *hexutil.Big      `json:"maxPriorityFeePerGas,omitempty"`
   Hash             common.Hash       `json:"hash"`
   Input            hexutil.Bytes     `json:"input"`
   Nonce            hexutil.Uint64    `json:"nonce"`
@@ -493,13 +495,13 @@ func deriveChainID(x uint64) *hexutil.Big {
 
 
 func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, chainid uint64, whereClause string, params ...interface{}) ([]*rpcTransaction, error) {
-  query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gas, transactions.gasPrice, transactions.hash, transactions.input, transactions.nonce, transactions.recipient, transactions.transactionIndex, transactions.value, transactions.v, transactions.r, transactions.s, transactions.sender, transactions.type, transactions.access_list FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE transactions.rowid IN (SELECT transactions.rowid FROM transactions INNER JOIN blocks ON transactions.block = blocks.number WHERE %v) LIMIT ? OFFSET ?;", whereClause)
+  query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gas, transactions.gasPrice, transactions.hash, transactions.input, transactions.nonce, transactions.recipient, transactions.transactionIndex, transactions.value, transactions.v, transactions.r, transactions.s, transactions.sender, transactions.type, transactions.access_list, blocks.baseFee, transactions.gasFeeCap, transactions.gasTipCap FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE transactions.rowid IN (SELECT transactions.rowid FROM transactions INNER JOIN blocks ON transactions.block = blocks.number WHERE %v) LIMIT ? OFFSET ?;", whereClause)
   rows, err := db.QueryContext(ctx, query, append(params, limit, offset)...)
   if err != nil { return nil, err }
   defer rows.Close()
   results := []*rpcTransaction{}
   for rows.Next() {
-    var amount, to, from, data, blockHashBytes, txHash, r, s, cAccessListRLP []byte
+    var amount, to, from, data, blockHashBytes, txHash, r, s, cAccessListRLP, baseFeeBytes, gasFeeCapBytes, gasTipCapBytes []byte
     var nonce, gasLimit, blockNumber, gasPrice, txIndex, v uint64
     var txTypeRaw sql.NullInt32
     err := rows.Scan(
@@ -519,6 +521,9 @@ func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, chainid
       &from,
       &txTypeRaw,
       &cAccessListRLP,
+      &baseFeeBytes,
+      &gasFeeCapBytes,
+      &gasTipCapBytes,
     )
     if err != nil { return nil, err }
     txType := uint8(txTypeRaw.Int32)
@@ -529,30 +534,38 @@ func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, chainid
     accessListRLP, err := decompress(cAccessListRLP)
     if err != nil { return nil, err }
     var accessList *types.AccessList
-    var chainID *hexutil.Big
+    var chainID, gasFeeCap, gasTipCap *hexutil.Big
     switch txType {
     case types.AccessListTxType:
       accessList = &types.AccessList{}
       rlp.DecodeBytes(accessListRLP, accessList)
       chainID = uintToHexBig(chainid)
+    case types.DynamicFeeTxType:
+      accessList = &types.AccessList{}
+      rlp.DecodeBytes(accessListRLP, accessList)
+      chainID = uintToHexBig(chainid)
+      gasFeeCap = bytesToHexBig(gasFeeCapBytes)
+      gasTipCap = bytesToHexBig(gasTipCapBytes)
     case types.LegacyTxType:
       chainID = nil
     }
     results = append(results, &rpcTransaction{
-      BlockHash: &blockHash,        //*common.Hash
-      BlockNumber: uintToHexBig(blockNumber),       //*hexutil.Big
+      BlockHash: &blockHash,                  //*common.Hash
+      BlockNumber: uintToHexBig(blockNumber), //*hexutil.Big
       From: bytesToAddress(from),             //common.Address
-      Gas: hexutil.Uint64(gasLimit),               //hexutil.Uint64
-      GasPrice:  uintToHexBig(gasPrice),          //*hexutil.Big
-      Hash: bytesToHash(txHash),             //common.Hash
-      Input: hexutil.Bytes(inputBytes),            //hexutil.Bytes
-      Nonce: hexutil.Uint64(nonce),             //hexutil.Uint64
-      To: bytesToAddressPtr(to),                //*common.Address
-      TransactionIndex: &txIndexHex,  //*hexutil.Uint64
+      Gas: hexutil.Uint64(gasLimit),          //hexutil.Uint64
+      GasPrice:  uintToHexBig(gasPrice),      //*hexutil.Big
+      GasFeeCap: gasFeeCap,                   //*hexutil.Big
+      GasTipCap: gasTipCap,                   //*hexutil.Big
+      Hash: bytesToHash(txHash),              //common.Hash
+      Input: hexutil.Bytes(inputBytes),       //hexutil.Bytes
+      Nonce: hexutil.Uint64(nonce),           //hexutil.Uint64
+      To: bytesToAddressPtr(to),              //*common.Address
+      TransactionIndex: &txIndexHex,          //*hexutil.Uint64
       Value: bytesToHexBig(amount),           //*hexutil.Big
-      V: uintToHexBig(v),                 //*hexutil.Big
-      R: bytesToHexBig(r),                //*hexutil.Big
-      S: bytesToHexBig(s),                //*hexutil.Big
+      V: uintToHexBig(v),                     //*hexutil.Big
+      R: bytesToHexBig(r),                    //*hexutil.Big
+      S: bytesToHexBig(s),                    //*hexutil.Big
       Type: hexutil.Uint64(txType),
       ChainID: chainID,
       Accesses: accessList,
@@ -1033,16 +1046,16 @@ func getTransactionReceiptsByBlockNumber(ctx context.Context, w http.ResponseWri
 }
 
 func getBlocks(ctx context.Context, db *sql.DB, includeTxs bool, chainid uint64, whereClause string, params ...interface{}) ([]map[string]interface{}, error) {
-  query := fmt.Sprintf("SELECT hash, parentHash, uncleHash, coinbase, root, txRoot, receiptRoot, bloom, difficulty, extra, mixDigest, uncles, td, number, gasLimit, gasUsed, time, nonce, size FROM blocks WHERE %v;", whereClause)
+  query := fmt.Sprintf("SELECT hash, parentHash, uncleHash, coinbase, root, txRoot, receiptRoot, bloom, difficulty, extra, mixDigest, uncles, td, number, gasLimit, gasUsed, time, nonce, size, baseFee FROM blocks WHERE %v;", whereClause)
   rows, err := db.QueryContext(ctx, query, params...)
   if err != nil { return nil, err }
   defer rows.Close()
   results := []map[string]interface{}{}
   for rows.Next() {
-    var hash, parentHash, uncleHash, coinbase, root, txRoot, receiptRoot, bloomBytes, extra, mixDigest, uncles, td []byte
+    var hash, parentHash, uncleHash, coinbase, root, txRoot, receiptRoot, bloomBytes, extra, mixDigest, uncles, td, baseFee []byte
     var number, gasLimit, gasUsed, time, size, difficulty uint64
     var nonce int64
-    err := rows.Scan(&hash, &parentHash, &uncleHash, &coinbase, &root, &txRoot, &receiptRoot, &bloomBytes, &difficulty, &extra, &mixDigest, &uncles, &td, &number, &gasLimit, &gasUsed, &time, &nonce, &size)
+    err := rows.Scan(&hash, &parentHash, &uncleHash, &coinbase, &root, &txRoot, &receiptRoot, &bloomBytes, &difficulty, &extra, &mixDigest, &uncles, &td, &number, &gasLimit, &gasUsed, &time, &nonce, &size, &baseFee)
     if err != nil { return nil, err }
     logsBloom, err := decompress(bloomBytes)
     if err != nil {
@@ -1086,6 +1099,9 @@ func getBlocks(ctx context.Context, db *sql.DB, includeTxs bool, chainid uint64,
       }
       if err := txRows.Err(); err != nil { return nil, err }
       fields["transactions"] = txs
+    }
+    if len(baseFee) > 0 {
+      fields["baseFeePerGas"] = bytesToHexBig(baseFee)
     }
     results = append(results, fields)
   }
