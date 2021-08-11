@@ -682,6 +682,35 @@ Resources:
               - install_consul
               - install_consul_template
               - consul_bootstrap
+            config_files:
+              - termination_detection
+          termination_detection:
+            files:
+              /root/termination-detection.sh:
+                content:
+                  "Fn::Sub":
+                    - |
+                      #!/bin/bash
+                      TOKEN=`curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"`
+                      while sleep 5; do
+                          HTTP_CODE=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s -w %{http_code} -o /dev/null http://169.254.169.254/latest/meta-data/spot/instance-action)
+                          if [[ "$HTTP_CODE" -eq 401 ]] ; then
+                              # echo "Refreshing Authentication Token"
+                              TOKEN=`curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 30"`
+                          elif [[ "$HTTP_CODE" -eq 200 ]] ; then
+                              echo "Detected termination signal. Shutting down"
+                              systemctl stop proxy
+                              sleep 10
+                              poweroff
+                          # else
+                              # echo "Not Interrupted"
+                          fi
+                      done
+                    - ClusterId:
+                        "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                mode: "000700"
+                owner: root
+                group: root
           install_and_enable_cfn_hup:
             files:
               /etc/cfn/cfn-hup.conf:
@@ -1160,7 +1189,23 @@ Resources:
                 WantedBy=multi-user.target
                 " > /etc/systemd/system/flume.service
 
+                printf "[Unit]
+                Description=Detect and shut down from termination signal
+                After=syslog.target
+
+                [Service]
+                User=root
+                Group=root
+                Type=simple
+                ExecStart=/root/termination-detection.sh
+                KillMode=process
+                TimeoutStopSec=90
+                Restart=on-failure
+                RestartSec=10s
+                " > /etc/systemd/system/termination-detection.service
+
                 aws-cfn-bootstrap-2.0/bin/cfn-init -v --stack ${AWS::StackName} --resource FlumeLaunchTemplate --configsets cs_install --region ${AWS::Region}
+                aws-cfn-bootstrap-2.0/bin/cfn-init -v --stack ${AWS::StackName} --resource FlumeLaunchTemplate --configsets config_files --region ${AWS::Region}
                 systemctl daemon-reload
                 systemctl enable flume.service
                 systemctl enable amazon-cloudwatch-agent.service
@@ -1168,6 +1213,8 @@ Resources:
                 systemctl enable journald-cloudwatch-logs
                 systemctl start journald-cloudwatch-logs
                 systemctl start flume.service
+                systemctl enable termination-detection
+                systemctl start termination-detection
 
                 sleep 300
                 VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
@@ -1201,6 +1248,7 @@ Resources:
       MaxSize: !Ref FlumeMaxCapacity
       HealthCheckType: EC2
       TargetGroupARNs: !If [HasATG, !Split [",", !Ref FlumeAlternateTargetGroup ], !Ref "AWS::NoValue" ]
+      CapacityRebalance: true
       MetricsCollection:
       - Granularity: 1Minute
         Metrics:
