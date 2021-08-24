@@ -1248,7 +1248,6 @@ Resources:
       MaxSize: !Ref FlumeMaxCapacity
       HealthCheckType: EC2
       TargetGroupARNs: !If [HasATG, !Split [",", !Ref FlumeAlternateTargetGroup ], !Ref "AWS::NoValue" ]
-      CapacityRebalance: true
       MetricsCollection:
       - Granularity: 1Minute
         Metrics:
