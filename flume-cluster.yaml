@@ -1319,6 +1319,8 @@ Resources:
                 AVAILABILITY_ZONE=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
                 INSTANCE_ID=$(curl -s http://169.254.169.254/2012-01-12/meta-data/instance-id)
 
+                sleep 60 # Need to wait for a minute t make sure aws has time to associate the IAM Role
+
                 VOLUME_ID=$(aws ec2 describe-volumes --filters Name=tag:SnapshotVolume,Values=${AWS::StackName}-${AWS::Region} Name=status,Values=available Name=availability-zone,Values=$AVAILABILITY_ZONE | jq -r .Volumes[0].VolumeId)
 
                 if [ "$VOLUME_ID" == "null"  ]
