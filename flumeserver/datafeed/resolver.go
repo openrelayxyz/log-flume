@@ -11,7 +11,7 @@ import (
   "log"
 )
 
-func ResolveFeed(url string, db *sql.DB, kafkaRollback int64, finishedLimit int) (DataFeed, error) {
+func ResolveFeed(url string, db *sql.DB, kafkaRollback, finishedLimit int64, chainid uint64) (DataFeed, error) {
   if strings.HasPrefix(url, "ws://") || strings.HasPrefix(url, "wss://") {
     return NewETHWSFeed(url, db)
   } else if strings.HasPrefix(url, "file://") {
@@ -34,7 +34,10 @@ func ResolveFeed(url string, db *sql.DB, kafkaRollback int64, finishedLimit int)
 
 
   } else if strings.HasPrefix(url, "kafka://") {
-    return NewKafkaDataFeed(url, db, kafkaRollback, finishedLimit)
+    return NewKafkaDataFeed(url, db, kafkaRollback, int(finishedLimit))
+  } else if strings.HasPrefix(url, "cardinal://") {
+		// TODO: Add whitelist support
+    return NewCardinalDataFeed(strings.TrimPrefix(url, "cardinal://"), kafkaRollback, finishedLimit, int64(chainid), db, nil)
   } else if url == "null://" {
     return &NullDataFeed{}, nil
   }

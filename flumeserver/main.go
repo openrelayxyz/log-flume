@@ -46,7 +46,7 @@ func main() {
   memstore := flag.Bool("memstore", false, "Store temporary tables in memory")
   completionTopic := flag.String("completion-topic", "", "A kafka topic to broadcast newly indexed blocks")
   kafkaRollback := flag.Int64("kafka-rollback", 5000, "A number of Kafka offsets to roll back before resumption")
-  reorgThreshold := flag.Int("reorg-threshold", 128, "Minimum number of blocks to keep in memory to handle reorgs.")
+  reorgThreshold := flag.Int64("reorg-threshold", 128, "Minimum number of blocks to keep in memory to handle reorgs.")
 
   flag.CommandLine.Parse(os.Args[1:])
 
@@ -125,7 +125,7 @@ func main() {
     log.Fatalf(err.Error())
   }
   var completionFeed event.Feed
-  feed, err := datafeed.ResolveFeed(feedURL, logsdb, *kafkaRollback, *reorgThreshold)
+  feed, err := datafeed.ResolveFeed(feedURL, logsdb, *kafkaRollback, *reorgThreshold, chainid)
   if err != nil { log.Fatalf(err.Error()) }
 
   quit := make(chan struct{})
