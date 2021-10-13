@@ -5,6 +5,7 @@ import (
   "github.com/NYTimes/gziphandler"
   "os"
   "github.com/openrelayxyz/flume/flumeserver/flumehandler"
+  "github.com/openrelayxyz/flume/flumeserver/txfeed"
   "github.com/openrelayxyz/flume/flumeserver/datafeed"
   "github.com/openrelayxyz/flume/flumeserver/indexer"
   "github.com/openrelayxyz/flume/flumeserver/migrations"
@@ -45,8 +46,11 @@ func main() {
   cacheSize := flag.Int("cache-size", 2000, "Set cache size (in 4 kb pages")
   memstore := flag.Bool("memstore", false, "Store temporary tables in memory")
   completionTopic := flag.String("completion-topic", "", "A kafka topic to broadcast newly indexed blocks")
+  txTopic := flag.String("mempool-topic", "", "A kafka topic for receiving pending transactions")
   kafkaRollback := flag.Int64("kafka-rollback", 5000, "A number of Kafka offsets to roll back before resumption")
   reorgThreshold := flag.Int64("reorg-threshold", 128, "Minimum number of blocks to keep in memory to handle reorgs.")
+  mempoolDb := flag.String("mempool-db", ":memory:", "A location for the mempool database (default: memory)")
+  mempoolSlots := flag.Int("mempool-size", 4096, "Number of mempool entries before low priced entries get dropped")
 
   flag.CommandLine.Parse(os.Args[1:])
 
@@ -96,6 +100,7 @@ func main() {
   logsdb.Exec(fmt.Sprintf("pragma mmap_size=%v", *mmap))
   logsdb.Exec(fmt.Sprintf("pragma cache_size=%v", *cacheSize))
   logsdb.Exec(fmt.Sprintf("pragma temp_store_directory = '%v'", filepath.Dir(sqlitePath)))
+  logsdb.Exec("ATTACH DATABASE ? AS mempool", *mempoolDb)
   if *memstore {
     logsdb.Exec("pragma temp_store = memory")
   }
@@ -128,10 +133,13 @@ func main() {
   feed, err := datafeed.ResolveFeed(feedURL, logsdb, *kafkaRollback, *reorgThreshold, chainid)
   if err != nil { log.Fatalf(err.Error()) }
 
+  txFeed, err := txfeed.ResolveTransactionFeed(feedURL, *txTopic)
+  if err != nil { log.Fatalf(err.Error()) }
+
   quit := make(chan struct{})
   // go indexer.ProcessFeed(feed, logsdb, quit)
   wg := &sync.WaitGroup{}
-  go indexer.ProcessDataFeed(feed, completionFeed, logsdb, quit, eip155Block, homesteadBlock, wg)
+  go indexer.ProcessDataFeed(feed, completionFeed, txFeed, logsdb, quit, eip155Block, homesteadBlock, wg, *mempoolSlots)
 
 
   mux := http.NewServeMux()

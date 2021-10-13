@@ -324,6 +324,40 @@ func Migrate(db *sql.DB, chainid uint64) error {
     db.Exec(`ALTER TABLE transactions ADD gasTipCap varchar(32);`)
     db.Exec(`UPDATE migrations SET version = 9;`)
   }
+	if schemaVersion < 10 {
+		db.Exec(`CREATE INDEX senderNonce ON transactions(sender, nonce)`)
+		db.Exec(`UPDATE migrations SET version = 10;`)
+	}
+
+	db.QueryRow("SELECT name FROM mempool.sqlite_master WHERE type='table' and name='migrations';").Scan(&tableName)
+	if tableName != "migrations" {
+		db.Exec("CREATE TABLE mempool.migrations (version integer PRIMARY KEY);")
+		db.Exec("INSERT INTO mempool.migrations(version) VALUES (0);")
+	}
+	db.QueryRow("SELECT version FROM migrations;").Scan(&schemaVersion)
+	if schemaVersion < 1 {
+		db.Exec(`CREATE TABLE mempool.transactions (
+			gas BIGINT,
+			gasPrice BIGINT,
+			gasFeeCap varchar(32),
+			gasTipCap varchar(32),
+			hash varchar(32) UNIQUE,
+			input blob,
+			nonce BIGINT,
+			recipient varchar(20),
+			value varchar(32),
+			v SMALLINT,
+			r varchar(32),
+			s varchar(32),
+			sender varchar(20),
+			type TINYINT,
+			access_list blob,
+		);`)
+		db.Exec(`CREATE INDEX sender ON mempool.transactions(sender, nonce);`)
+		db.Exec(`CREATE INDEX recipient ON mempool.transactions(recipient);`)
+		db.Exec(`CREATE INDEX gasPrice ON mempool.transactions(gasPrice);`)
+		db.Exec(`UPDATE mempool.migrations SET version = 1;`)
+	}
   // chainid
   return nil
 }
