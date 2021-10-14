@@ -147,7 +147,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *
     case <- pruneTicker.C:
       db.QueryRow("SELECT count(*) FROM mempool.transactions;").Scan(&txCount)
       if txCount > mempoolSlots {
-        db.Exec("DELETE FROM mempool.transactions WHERE gasPrice > (SELECT gasPrice FROM mempool.transactions ORDER BY gasPrice LIMIT 1 OFFSET ?)", mempoolSlots)
+        db.Exec("DELETE FROM mempool.transactions WHERE gasPrice > (SELECT gasPrice FROM mempool.transactions ORDER BY gasPrice DESC LIMIT 1 OFFSET ?)", mempoolSlots)
         log.Printf("Pruned %v transactions from mempool", (txCount - mempoolSlots))
       }
     case tx := <-txCh:

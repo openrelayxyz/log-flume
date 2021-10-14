@@ -574,6 +574,77 @@ func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, chainid
   if err := rows.Err(); err != nil { return nil, err }
   return results, nil
 }
+func getPendingTransactions(ctx context.Context, db *sql.DB, offset, limit int, chainid uint64, whereClause string, params ...interface{}) ([]*rpcTransaction, error) {
+  query := fmt.Sprintf("SELECT transactions.gas, transactions.gasPrice, transactions.hash, transactions.input, transactions.nonce, transactions.recipient, transactions.value, transactions.v, transactions.r, transactions.s, transactions.sender, transactions.type, transactions.access_list, transactions.gasFeeCap, transactions.gasTipCap FROM mempool.transactions WHERE %v LIMIT ? OFFSET ?;", whereClause)
+  rows, err := db.QueryContext(ctx, query, append(params, limit, offset)...)
+  if err != nil { return nil, err }
+  defer rows.Close()
+  results := []*rpcTransaction{}
+  for rows.Next() {
+    var amount, to, from, data, txHash, r, s, cAccessListRLP, gasFeeCapBytes, gasTipCapBytes []byte
+    var nonce, gasLimit, gasPrice, v uint64
+    var txTypeRaw sql.NullInt32
+    err := rows.Scan(
+      &gasLimit,
+      &gasPrice,
+      &txHash,
+      &data,
+      &nonce,
+      &to,
+      &amount,
+      &v,
+      &r,
+      &s,
+      &from,
+      &txTypeRaw,
+      &cAccessListRLP,
+      &gasFeeCapBytes,
+      &gasTipCapBytes,
+    )
+    if err != nil { return nil, err }
+    txType := uint8(txTypeRaw.Int32)
+    inputBytes, err := decompress(data)
+    if err != nil { return nil, err }
+    accessListRLP, err := decompress(cAccessListRLP)
+    if err != nil { return nil, err }
+    var accessList *types.AccessList
+    var chainID, gasFeeCap, gasTipCap *hexutil.Big
+    switch txType {
+    case types.AccessListTxType:
+      accessList = &types.AccessList{}
+      rlp.DecodeBytes(accessListRLP, accessList)
+      chainID = uintToHexBig(chainid)
+    case types.DynamicFeeTxType:
+      accessList = &types.AccessList{}
+      rlp.DecodeBytes(accessListRLP, accessList)
+      chainID = uintToHexBig(chainid)
+      gasFeeCap = bytesToHexBig(gasFeeCapBytes)
+      gasTipCap = bytesToHexBig(gasTipCapBytes)
+    case types.LegacyTxType:
+      chainID = nil
+    }
+    results = append(results, &rpcTransaction{
+      From: bytesToAddress(from),             //common.Address
+      Gas: hexutil.Uint64(gasLimit),          //hexutil.Uint64
+      GasPrice:  uintToHexBig(gasPrice),      //*hexutil.Big
+      GasFeeCap: gasFeeCap,                   //*hexutil.Big
+      GasTipCap: gasTipCap,                   //*hexutil.Big
+      Hash: bytesToHash(txHash),              //common.Hash
+      Input: hexutil.Bytes(inputBytes),       //hexutil.Bytes
+      Nonce: hexutil.Uint64(nonce),           //hexutil.Uint64
+      To: bytesToAddressPtr(to),              //*common.Address
+      Value: bytesToHexBig(amount),           //*hexutil.Big
+      V: uintToHexBig(v),                     //*hexutil.Big
+      R: bytesToHexBig(r),                    //*hexutil.Big
+      S: bytesToHexBig(s),                    //*hexutil.Big
+      Type: hexutil.Uint64(txType),
+      ChainID: chainID,
+      Accesses: accessList,
+    })
+  }
+  if err := rows.Err(); err != nil { return nil, err }
+  return results, nil
+}
 func getTransactionReceipts(ctx context.Context, db *sql.DB, offset, limit int, chainid uint64, whereClause string, params ...interface{}) ([]map[string]interface{}, error) {
   query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gasUsed, transactions.cumulativeGasUsed, transactions.hash, transactions.recipient, transactions.transactionIndex, transactions.sender, transactions.contractAddress, transactions.logsBloom, transactions.status, transactions.type FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE transactions.rowid IN (SELECT transactions.rowid FROM transactions INNER JOIN blocks ON transactions.block = blocks.number WHERE %v) LIMIT ? OFFSET ?;", whereClause)
   rows, err := db.QueryContext(ctx, query, append(params, limit, offset)...)
@@ -713,6 +784,14 @@ func getTransactionByHash(ctx context.Context ,w http.ResponseWriter, call *rpcC
     handleError(w, "error reading database", call.ID, 400)
     return
   }
+	if len(txs) == 0 {
+		txs, err = getPendingTransactions(ctx, db, 0, 1, chainid, "transactions.hash = ?", trimPrefix(txHash.Bytes()))
+	}
+	if err != nil {
+    log.Printf("Error getting mempool transactions: %v", err.Error())
+    handleError(w, "error reading database", call.ID, 400)
+    return
+  }
   returnSingleTransaction(txs, w, call)
 }
 
@@ -798,14 +877,21 @@ func getTransactionsBySender(ctx context.Context, w http.ResponseWriter, call *r
       return
     }
   }
-  txs, err := getTransactions(ctx, db, offset, 1000, chainid, "sender = ?", trimPrefix(address.Bytes()))
+  txs, err := getPendingTransactions(ctx, db, offset, 1000, chainid, "sender = ?", trimPrefix(address.Bytes()))
+  if err != nil {
+    log.Printf("Error getting pending txs: %v", err.Error())
+    handleError(w, "error reading database", call.ID, 400)
+    return
+  }
+  ctxs, err := getTransactions(ctx, db, offset, 1000, chainid, "sender = ?", trimPrefix(address.Bytes()))
   if err != nil {
     log.Printf("Error getting txs: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
     return
   }
+  txs = append(txs, ctxs...)
   result := paginator{Items: txs}
-  if len(txs) == 1000 {
+  if len(txs) >= 1000 {
     result.Token = offset + len(txs)
   }
   responseBytes, err := json.Marshal(formatResponse(result, call))
@@ -869,14 +955,21 @@ func getTransactionsByRecipient(ctx context.Context, w http.ResponseWriter, call
       return
     }
   }
-  txs, err := getTransactions(ctx, db, offset, 1000, chainid, "recipient = ?", trimPrefix(address.Bytes()))
+  txs, err := getPendingTransactions(ctx, db, offset, 1000, chainid, "recipient = ?", trimPrefix(address.Bytes()))
+  if err != nil {
+    log.Printf("Error getting pending txs: %v", err.Error())
+    handleError(w, "error reading database", call.ID, 400)
+    return
+  }
+  ctxs, err := getTransactions(ctx, db, offset, 1000, chainid, "recipient = ?", trimPrefix(address.Bytes()))
   if err != nil {
     log.Printf("Error getting txs: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
     return
   }
+  txs = append(txs, ctxs...)
   result := paginator{Items: txs}
-  if len(txs) == 1000 {
+  if len(txs) >= 1000 {
     result.Token = offset + len(txs)
   }
   responseBytes, err := json.Marshal(formatResponse(result, call))
@@ -940,14 +1033,21 @@ func getTransactionsByParticipant(ctx context.Context, w http.ResponseWriter, ca
       return
     }
   }
-  txs, err := getTransactions(ctx, db, offset, 1000, chainid, "sender = ? OR recipient = ?", trimPrefix(address.Bytes()), trimPrefix(address.Bytes()))
+  txs, err := getPendingTransactions(ctx, db, offset, 1000, chainid, "sender = ? OR recipient = ?", trimPrefix(address.Bytes()), trimPrefix(address.Bytes()))
+  if err != nil {
+    log.Printf("Error getting pending txs: %v", err.Error())
+    handleError(w, "error reading database", call.ID, 400)
+    return
+  }
+  ctxs, err := getTransactions(ctx, db, offset, 1000, chainid, "sender = ? OR recipient = ?", trimPrefix(address.Bytes()), trimPrefix(address.Bytes()))
   if err != nil {
     log.Printf("Error getting txs: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
     return
   }
+  txs = append(txs, ctxs...)
   result := paginator{Items: txs}
-  if len(txs) == 1000 {
+  if len(txs) >= 1000 {
     result.Token = offset + len(txs)
   }
   responseBytes, err := json.Marshal(formatResponse(result, call))

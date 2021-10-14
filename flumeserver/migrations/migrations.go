@@ -329,14 +329,18 @@ func Migrate(db *sql.DB, chainid uint64) error {
 		db.Exec(`UPDATE migrations SET version = 10;`)
 	}
 
+	tableName = ""
 	db.QueryRow("SELECT name FROM mempool.sqlite_master WHERE type='table' and name='migrations';").Scan(&tableName)
 	if tableName != "migrations" {
 		db.Exec("CREATE TABLE mempool.migrations (version integer PRIMARY KEY);")
 		db.Exec("INSERT INTO mempool.migrations(version) VALUES (0);")
 	}
-	db.QueryRow("SELECT version FROM migrations;").Scan(&schemaVersion)
+	if err := db.QueryRow("SELECT version FROM mempool.migrations;").Scan(&schemaVersion); err != nil {
+		return err
+	}
 	if schemaVersion < 1 {
-		db.Exec(`CREATE TABLE mempool.transactions (
+		log.Printf("Applying mempool migration")
+		if _, err := db.Exec(`CREATE TABLE mempool.transactions (
 			gas BIGINT,
 			gasPrice BIGINT,
 			gasFeeCap varchar(32),
@@ -351,8 +355,8 @@ func Migrate(db *sql.DB, chainid uint64) error {
 			s varchar(32),
 			sender varchar(20),
 			type TINYINT,
-			access_list blob,
-		);`)
+			access_list blob
+		);`); err != nil { return err }
 		db.Exec(`CREATE INDEX sender ON mempool.transactions(sender, nonce);`)
 		db.Exec(`CREATE INDEX recipient ON mempool.transactions(recipient);`)
 		db.Exec(`CREATE INDEX gasPrice ON mempool.transactions(gasPrice);`)

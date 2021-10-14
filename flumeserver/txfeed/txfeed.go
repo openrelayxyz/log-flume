@@ -28,7 +28,10 @@ func (f *TxFeed) start(ch chan *types.Transaction) {
 
 func ResolveTransactionFeed(feedURL, topic string) (*TxFeed, error) {
 	feedURL = strings.TrimPrefix(feedURL, "cardinal://")
-	if strings.HasPrefix(feedURL, "ws://") || strings.HasPrefix(feedURL, "wss://") {
+	feedURL = strings.Split(feedURL, ";")[0]
+	if topic == "" {
+		return &TxFeed{}, nil
+	} else if strings.HasPrefix(feedURL, "ws://") || strings.HasPrefix(feedURL, "wss://") {
 		return nil, fmt.Errorf("transactions are not currently supported with websockets")
   } else if strings.HasPrefix(feedURL, "kafka://") {
     return KafkaTxFeed(feedURL, topic)
@@ -40,9 +43,10 @@ func ResolveTransactionFeed(feedURL, topic string) (*TxFeed, error) {
 
 func KafkaTxFeed(brokerURL, topic string) (*TxFeed, error) {
 	ch := make(chan *types.Transaction, 200)
-	tc, err := utils.NewTopicConsumer(brokerURL, topic, 200)
+	tc, err := utils.NewTopicConsumer(strings.TrimPrefix(brokerURL, "kafka://"), topic, 200)
 	if err != nil { return nil, err }
 	go func() {
+		log.Printf("Starting kafka feed %v - %v", brokerURL, topic)
 		for msg := range tc.Messages() {
 			transaction := &types.Transaction{}
 			if err := rlp.DecodeBytes(msg.Value, transaction); err != nil {
