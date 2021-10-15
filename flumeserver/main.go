@@ -18,7 +18,7 @@ import (
   "fmt"
   "time"
   "log"
-  _ "github.com/mattn/go-sqlite3"
+  "github.com/mattn/go-sqlite3"
   _ "net/http/pprof"
   "database/sql"
   "os/signal"
@@ -49,7 +49,7 @@ func main() {
   txTopic := flag.String("mempool-topic", "", "A kafka topic for receiving pending transactions")
   kafkaRollback := flag.Int64("kafka-rollback", 5000, "A number of Kafka offsets to roll back before resumption")
   reorgThreshold := flag.Int64("reorg-threshold", 128, "Minimum number of blocks to keep in memory to handle reorgs.")
-  // mempoolDb := flag.String("mempool-db", ":memory:?cache=shared", "A location for the mempool database (default: memory)")
+  mempoolDb := flag.String("mempool-db", "", "A location for the mempool database (default: same dir as main db)")
   mempoolSlots := flag.Int("mempool-size", 4096, "Number of mempool entries before low priced entries get dropped")
 
   flag.CommandLine.Parse(os.Args[1:])
@@ -95,12 +95,21 @@ func main() {
   sqlitePath := flag.CommandLine.Args()[0]
   feedURL := flag.CommandLine.Args()[1]
 
-  logsdb, err := sql.Open("sqlite3", fmt.Sprintf("file:%v?_sync=0&_journal_mode=WAL&_foreign_keys=on", sqlitePath))
+  *mempoolDb = filepath.Join(filepath.Dir(sqlitePath), "mempool.sqlite")
+
+  sql.Register("sqlite3_hooked",
+    &sqlite3.SQLiteDriver{
+      ConnectHook: func(conn *sqlite3.SQLiteConn) error {
+        conn.Exec(fmt.Sprintf("ATTACH DATABASE '%v' AS 'mempool'; PRAGMA mempool.journal_mode = WAL ; PRAGMA mempool.synchronous = OFF ;", *mempoolDb), nil)
+        return nil
+      },
+  })
+
+  logsdb, err := sql.Open("sqlite3_hooked", fmt.Sprintf("file:%v?_sync=0&_journal_mode=WAL&_foreign_keys=on", sqlitePath))
   if err != nil { log.Fatalf(err.Error()) }
   logsdb.Exec(fmt.Sprintf("pragma mmap_size=%v", *mmap))
   logsdb.Exec(fmt.Sprintf("pragma cache_size=%v", *cacheSize))
   logsdb.Exec(fmt.Sprintf("pragma temp_store_directory = '%v'", filepath.Dir(sqlitePath)))
-  logsdb.Exec(`ATTACH DATABASE "" AS mempool`)
   if *memstore {
     logsdb.Exec("pragma temp_store = memory")
   }

@@ -358,9 +358,9 @@ func Migrate(db *sql.DB, chainid uint64) error {
 			type TINYINT,
 			access_list blob
 		);`); err != nil { return err }
-		db.Exec(`CREATE INDEX sender ON mempool.transactions(sender, nonce);`)
-		db.Exec(`CREATE INDEX recipient ON mempool.transactions(recipient);`)
-		db.Exec(`CREATE INDEX gasPrice ON mempool.transactions(gasPrice);`)
+		if _, err := db.Exec(`CREATE INDEX mempool.sender ON transactions(sender, nonce);`); err != nil { return err }
+		if _, err := db.Exec(`CREATE INDEX mempool.recipient ON transactions(recipient);`); err != nil { return err }
+		if _, err := db.Exec(`CREATE INDEX mempool.gasPrice ON transactions(gasPrice);`); err != nil { return err }
 		db.Exec(`UPDATE mempool.migrations SET version = 1;`)
 	}
   // chainid

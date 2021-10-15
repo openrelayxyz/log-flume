@@ -134,8 +134,10 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *
   processed := false
   pruneTicker := time.NewTicker(5 * time.Second)
   txCount := 0
+  txDedup := make(map[common.Hash]struct{})
   defer sub.Unsubscribe()
   defer txSub.Unsubscribe()
+  db.Exec("DELETE FROM mempool.transactions WHERE (sender, nonce) IN (SELECT sender, nonce FROM transactions)")
   for {
     select {
     case <-quit:
@@ -145,12 +147,17 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *
       log.Printf("Shutting down index process")
       return
     case <- pruneTicker.C:
+      txDedup = make(map[common.Hash]struct{})
       db.QueryRow("SELECT count(*) FROM mempool.transactions;").Scan(&txCount)
       if txCount > mempoolSlots {
-        db.Exec("DELETE FROM mempool.transactions WHERE gasPrice > (SELECT gasPrice FROM mempool.transactions ORDER BY gasPrice DESC LIMIT 1 OFFSET ?)", mempoolSlots)
+        db.Exec("DELETE FROM mempool.transactions WHERE gasPrice < (SELECT gasPrice FROM mempool.transactions ORDER BY gasPrice DESC LIMIT 1 OFFSET ?)", mempoolSlots)
         log.Printf("Pruned %v transactions from mempool", (txCount - mempoolSlots))
       }
     case tx := <-txCh:
+      txHash := tx.Hash()
+      if _, ok := txDedup[txHash]; ok {
+        continue
+      }
       var signer types.Signer
       var accessListRLP []byte
       gasPrice := tx.GasPrice().Uint64()
@@ -175,15 +182,15 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *
       // If this is a replacement transaction, delete any it might be replacing
       statements = append(statements, applyParameters(
         "DELETE FROM mempool.transactions WHERE sender = %v AND nonce = %v",
-        tx.Hash(),
+        sender,
         tx.Nonce(),
       ))
-
+      // Insert the transaction
       statements = append(statements, applyParameters(
         "INSERT INTO mempool.transactions(gas, gasPrice, hash, input, nonce, recipient, `value`, v, r, s, sender, `type`, access_list, gasFeeCap, gasTipCap) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
         tx.Gas(),
         gasPrice,
-        tx.Hash(),
+        txHash,
         getCopy(compress(tx.Data())),
         tx.Nonce(),
         to,
@@ -197,14 +204,17 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *
         trimPrefix(tx.GasFeeCap().Bytes()),
         trimPrefix(tx.GasTipCap().Bytes()),
       ))
+      // Delete the transaction we just inserted if the confirmed transactions
+      // pool has a conflicting entry
       statements = append(statements, applyParameters(
-        "DELETE FROM mempool.transactions WHERE sender = %v AND nonce = %v AND (sender, nonce) IN (SELECT sender, nonce FROM transactions);",
-        tx.Hash(),
+        "DELETE FROM mempool.transactions WHERE sender = %v AND nonce = %v AND (sender, nonce) IN (SELECT sender, nonce FROM transactions)",
+        sender,
         tx.Nonce(),
       ))
       db.Exec(strings.Join(statements, " ; "))
       txCount++
       if txCount > (11 * mempoolSlots / 10) {
+        // More than 10% above mempool limit, prune some.
         db.QueryRow("DELETE FROM mempool.transactions WHERE gasPrice > (SELECT gasPrice FROM mempool.transactions ORDER BY gasPrice LIMIT 1 OFFSET %v)", mempoolSlots)
       }
     case chainEvent := <- ch:
@@ -309,7 +319,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *
           }
           // log.Printf("Inserting transaction %#x", txwr.Transaction.Hash())
           statements = append(statements, applyParameters(
-            "DELETE FROM mempool.transactions WHERE hash = %v", txHash,
+            "DELETE FROM mempool.transactions WHERE sender = %v AND nonce = %v", sender, txwr.Transaction.Nonce(),
           ))
           statements = append(statements, applyParameters(
             "INSERT INTO transactions(block, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, `value`, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, `status`, `type`, access_list, gasFeeCap, gasTipCap) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
@@ -361,6 +371,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *
           stats := db.Stats()
           log.Printf("WARN: Failed to insert logs: %v", err.Error())
           log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
+          wg.Done()
           continue BLOCKLOOP
         }
         // log.Printf("Spent %v on %v inserts", time.Since(istart), len(statements))
