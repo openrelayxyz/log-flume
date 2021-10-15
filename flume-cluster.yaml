@@ -1176,7 +1176,7 @@ Resources:
                 Environment=HOME=/var/lib/flume
                 Type=simple
                 LimitNOFILE=655360
-                ExecStart=/usr/bin/flumeserver ${RollbackFlag} ${FlumeNetworkFlag} --reorg-threshold ${FlumeReorgThreshold} /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"
+                ExecStart=/usr/bin/flumeserver ${RollbackFlag} ${FlumeNetworkFlag} --mempool-topic=$NetworkId-txpool --reorg-threshold ${FlumeReorgThreshold} /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"
                 CPUSchedulingPolicy=fifo
                 CPUSchedulingPriority=20
                 KillMode=process

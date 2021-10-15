@@ -326,6 +326,7 @@ func Migrate(db *sql.DB, chainid uint64) error {
   }
 	if schemaVersion < 10 {
 		db.Exec(`CREATE INDEX senderNonce ON transactions(sender, nonce)`)
+		db.Exec(`DROP INDEX sender`)
 		db.Exec(`UPDATE migrations SET version = 10;`)
 	}
 
