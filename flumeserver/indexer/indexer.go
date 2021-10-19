@@ -150,8 +150,9 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *
       txDedup = make(map[common.Hash]struct{})
       db.QueryRow("SELECT count(*) FROM mempool.transactions;").Scan(&txCount)
       if txCount > mempoolSlots {
-        db.Exec("DELETE FROM mempool.transactions WHERE gasPrice < (SELECT gasPrice FROM mempool.transactions ORDER BY gasPrice DESC LIMIT 1 OFFSET ?)", mempoolSlots)
-        log.Printf("Pruned %v transactions from mempool", (txCount - mempoolSlots))
+        pstart := time.Now()
+        db.Exec("DELETE FROM mempool.transactions WHERE gasPrice < (SELECT gasPrice FROM mempool.transactions ORDER BY gasPrice LIMIT 1 OFFSET ?)", mempoolSlots)
+        log.Printf("Pruned %v transactions from mempool in %v", (txCount - mempoolSlots), time.Since(pstart))
       }
     case tx := <-txCh:
       txHash := tx.Hash()
@@ -215,7 +216,9 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *
       txCount++
       if txCount > (11 * mempoolSlots / 10) {
         // More than 10% above mempool limit, prune some.
-        db.QueryRow("DELETE FROM mempool.transactions WHERE gasPrice > (SELECT gasPrice FROM mempool.transactions ORDER BY gasPrice LIMIT 1 OFFSET %v)", mempoolSlots)
+        pstart := time.Now()
+        db.QueryRow("DELETE FROM mempool.transactions WHERE gasPrice < (SELECT gasPrice FROM mempool.transactions ORDER BY gasPrice LIMIT 1 OFFSET %v)", mempoolSlots)
+        log.Printf("Pruned %v transactions from Mempool in %v", (txCount - mempoolSlots), time.Since(pstart))
       }
     case chainEvent := <- ch:
       start := time.Now()
