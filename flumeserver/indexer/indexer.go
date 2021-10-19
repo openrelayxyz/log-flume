@@ -217,7 +217,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *
       if txCount > (11 * mempoolSlots / 10) {
         // More than 10% above mempool limit, prune some.
         pstart := time.Now()
-        db.QueryRow("DELETE FROM mempool.transactions WHERE gasPrice < (SELECT gasPrice FROM mempool.transactions ORDER BY gasPrice LIMIT 1 OFFSET %v)", mempoolSlots)
+        db.QueryRow("DELETE FROM mempool.transactions WHERE gasPrice < (SELECT gasPrice FROM mempool.transactions ORDER BY gasPrice LIMIT 1 OFFSET ?)", mempoolSlots)
         log.Printf("Pruned %v transactions from Mempool in %v", (txCount - mempoolSlots), time.Since(pstart))
         txCount = mempoolSlots
       }
