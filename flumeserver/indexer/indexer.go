@@ -137,7 +137,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *
   txDedup := make(map[common.Hash]struct{})
   defer sub.Unsubscribe()
   defer txSub.Unsubscribe()
-  db.Exec("DELETE FROM mempool.transactions WHERE (sender, nonce) IN (SELECT sender, nonce FROM transactions)")
+  db.Exec("DELETE FROM mempool.transactions WHERE 1;")
   for {
     select {
     case <-quit:
