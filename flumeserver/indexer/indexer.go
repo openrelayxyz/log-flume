@@ -151,7 +151,9 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *
       db.QueryRow("SELECT count(*) FROM mempool.transactions;").Scan(&txCount)
       if txCount > mempoolSlots {
         // pstart := time.Now()
-        db.Exec("DELETE FROM mempool.transactions WHERE gasPrice < (SELECT gasPrice FROM mempool.transactions ORDER BY gasPrice LIMIT 1 OFFSET ?)", mempoolSlots)
+        if _, err := db.Exec("DELETE FROM mempool.transactions WHERE gasPrice < (SELECT gasPrice FROM mempool.transactions ORDER BY gasPrice LIMIT 1 OFFSET ?);", mempoolSlots); err != nil {
+          log.Printf("Error pruning: %v", err.Error())
+        }
         // log.Printf("Pruned %v transactions from mempool in %v", (txCount - mempoolSlots), time.Since(pstart))
       }
     case tx := <-txCh:
@@ -212,15 +214,18 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *
         sender,
         tx.Nonce(),
       ))
-      db.Exec(strings.Join(statements, " ; "))
-      txCount++
       if txCount > (11 * mempoolSlots / 10) {
         // More than 10% above mempool limit, prune some.
-        // pstart := time.Now()
-        db.QueryRow("DELETE FROM mempool.transactions WHERE gasPrice < (SELECT gasPrice FROM mempool.transactions ORDER BY gasPrice LIMIT 1 OFFSET ?)", mempoolSlots)
-        // log.Printf("Pruned %v transactions from Mempool in %v", (txCount - mempoolSlots), time.Since(pstart))
+        statements = append(statements, applyParameters(
+          "DELETE FROM mempool.transactions WHERE gasPrice < (SELECT gasPrice FROM mempool.transactions ORDER BY gasPrice LIMIT 1 OFFSET %v)",
+          mempoolSlots,
+        ))
         txCount = mempoolSlots
       }
+      if _, err := db.Exec(strings.Join(statements, " ; ") + ";"); err != nil {
+        log.Printf("Error on insert: %v - '%v'", err.Error(), strings.Join(statements, " ; ") )
+      }
+      txCount++
     case chainEvent := <- ch:
       start := time.Now()
       BLOCKLOOP:
