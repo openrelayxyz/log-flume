@@ -11,7 +11,7 @@ require (
 	github.com/klauspost/compress v1.12.3
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible
 	github.com/openrelayxyz/cardinal-evm v0.0.0-20211007195410-cf1ee1556687
-	github.com/openrelayxyz/cardinal-streams v0.0.6
+	github.com/openrelayxyz/cardinal-streams v0.0.10
 	github.com/openrelayxyz/cardinal-types v0.0.2
 	github.com/rs/cors v1.7.0
 )
