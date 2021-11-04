@@ -192,7 +192,9 @@ func (d *cardinalDataFeed) chainEventFromCardinalBatch(pb *delivery.PendingBatch
 	tdBytes := pb.Values[fmt.Sprintf("c/%x/b/%x/d", d.chainid, pb.Hash.Bytes())]
 	td := new(big.Int).SetBytes(tdBytes)
 	header := &gtypes.Header{}
-	rlp.DecodeBytes(headerBytes, &header) // TODO: Handle error?
+	if err := rlp.DecodeBytes(headerBytes, &header); err != nil {
+		panic(err.Error())
+	}
 	uncles := make(map[int]*gtypes.Header)
 	ce := &ChainEvent{
 		Block: &miniBlock{

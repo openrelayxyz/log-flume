@@ -1539,7 +1539,7 @@ Resources:
                 done
 
                 #Deal with double escapes in url if exist
-                printf "/usr/bin/flumeserver ${RollbackFlag} --reorg-threshold ${FlumeReorgThreshold} -shutdown.sync /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"" > /tmp/flumesync.sh
+                printf "/usr/bin/flumeserver ${FlumeNetworkFlag} ${RollbackFlag} --reorg-threshold ${FlumeReorgThreshold} -shutdown.sync /var/lib/flume/item.sqlite \"${FlumeSyncEndpoint}\"" > /tmp/flumesync.sh
                 chmod +x /tmp/flumesync.sh
 
                 # sync and shutdown
