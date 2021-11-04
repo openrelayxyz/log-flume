@@ -142,7 +142,9 @@ func (d *cardinalDataFeed) subscribe() {
 			}
 		}
 	}()
-	d.consumer.Start()
+	if err := d.consumer.Start(); err != nil {
+		panic(err.Error())
+	}
 }
 
 
