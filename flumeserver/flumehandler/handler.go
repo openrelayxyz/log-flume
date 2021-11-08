@@ -133,6 +133,8 @@ func GetHandler(db *sql.DB, chainid uint64, wg *sync.WaitGroup) func(http.Respon
       getUncleCountByBlockHash(r.Context(), w, call, db, chainid)
     case "eth_gasPrice":
       gasPrice(r.Context(), w, call, db, chainid)
+    case "eth_feeHistory":
+      feeHistory(r.Context(), w, call, db, chainid)
     case "eth_maxPriorityFeePerGas":
       maxPriorityFeePerGas(r.Context(), w, call, db, chainid)
     case "flume_erc20ByAccount":
