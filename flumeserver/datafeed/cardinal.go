@@ -74,6 +74,7 @@ func NewCardinalDataFeed(brokerURL string, rollback, reorgThreshold, chainid int
 	}
 	var consumer transports.Consumer
 	var err error
+	log.Printf("Resuming to block number %v", lastNumber)
 	if strings.HasPrefix(parts[0], "kafka://") {
 		consumer, err = transports.NewKafkaConsumer(parts[0], topics[0], topics, []byte(resumption), rollback, lastNumber, ctypes.BytesToHash(lastHash), new(big.Int).SetBytes(lastWeight), reorgThreshold, trackedPrefixes, whitelist)
 	} else if strings.HasPrefix(parts[0], "null://") {
