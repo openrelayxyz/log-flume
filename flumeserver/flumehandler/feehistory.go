@@ -81,12 +81,15 @@ func feeHistory(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *s
 	}
 	result := &feeHistoryResult{
 		OldestBlock:  (*hexutil.Big)(new(big.Int).SetInt64(int64(lastBlock) - int64(blockCount) + 1)),
-		BaseFee:      make([]*hexutil.Big, int(blockCount)),
+		BaseFee:      make([]*hexutil.Big, int(blockCount) + 1),
 		GasUsedRatio: make([]float64, int(blockCount)),
 	}
 	if len(rewardPercentiles) > 0 {
 		result.Reward = make([][]*hexutil.Big, int(blockCount))
 	}
+	// TODO: Add next base fee to baseFeeList
+	var lastBaseFee *big.Int
+	var lastGasUsed, lastGasLimit int64
 	for i := 0; rows.Next(); i++ {
 		var baseFeeBytes []byte
 		var number uint64
@@ -96,8 +99,11 @@ func feeHistory(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *s
 			return
 		}
 		baseFee := new(big.Int).SetBytes(baseFeeBytes)
+		lastBaseFee = baseFee
 		result.BaseFee[i] = (*hexutil.Big)(baseFee)
 		result.GasUsedRatio[i] = float64(gasUsed.Int64) / float64(gasLimit.Int64)
+		lastGasUsed = gasUsed.Int64
+		lastGasLimit = gasLimit.Int64
 		if len(rewardPercentiles) > 0 {
 			tips := sortGasAndReward{}
 			txRows, err := db.QueryContext(ctx, "SELECT gasPrice, gasUsed FROM transactions WHERE block = ?;", number)
@@ -141,6 +147,22 @@ func feeHistory(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *s
 			handleError(w, err.Error(), call.ID, 500)
 			return
 		}
+	}
+
+	gasTarget := lastGasLimit / 2
+	if lastGasUsed == gasTarget {
+		result.BaseFee[len(result.BaseFee) - 1] = (*hexutil.Big)(lastBaseFee)
+	} else if lastGasUsed > gasTarget {
+		delta := lastGasUsed - gasTarget
+		baseFeeDelta := new(big.Int).Div(new(big.Int).Div(new(big.Int).Mul(lastBaseFee, new(big.Int).SetInt64(delta)), new(big.Int).SetInt64(gasTarget)), big.NewInt(8))
+		if baseFeeDelta.Cmp(new(big.Int)) == 0 {
+			baseFeeDelta = big.NewInt(1)
+		}
+		result.BaseFee[len(result.BaseFee) - 1] = (*hexutil.Big)(new(big.Int).Add(lastBaseFee, baseFeeDelta))
+	} else {
+		delta := gasTarget - lastGasUsed
+		baseFeeDelta := new(big.Int).Div(new(big.Int).Div(new(big.Int).Mul(lastBaseFee, new(big.Int).SetInt64(delta)), new(big.Int).SetInt64(gasTarget)), big.NewInt(8))
+		result.BaseFee[len(result.BaseFee) - 1] = (*hexutil.Big)(new(big.Int).Sub(lastBaseFee, baseFeeDelta))
 	}
 	responseBytes, err := json.Marshal(formatResponse(result, call))
 	if err != nil {
