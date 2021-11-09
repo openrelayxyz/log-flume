@@ -118,10 +118,16 @@ func feeHistory(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *s
 				handleError(w, err.Error(), call.ID, 500)
 				return
 			}
+			result.Reward[i] = make([]*hexutil.Big, len(rewardPercentiles))
+			if len(tips) == 0 {
+				for j := range rewardPercentiles {
+					result.Reward[i][j] = new(hexutil.Big)
+				}
+				continue
+			}
 			sort.Sort(tips)
 			var txIndex int
 			sumGasUsed := tips[0].gasUsed
-			result.Reward[i] = make([]*hexutil.Big, len(rewardPercentiles))
 			for j, p := range rewardPercentiles {
 				thresholdGasUsed := uint64(float64(gasUsed.Int64) * p / 100)
 				for sumGasUsed < thresholdGasUsed && txIndex < len(tips) - 1 {
