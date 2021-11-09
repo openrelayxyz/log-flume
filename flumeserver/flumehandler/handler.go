@@ -5,6 +5,7 @@
 package flumehandler
 
 import (
+  "sort"
   "bytes"
   "github.com/klauspost/compress/zlib"
   "strings"
@@ -132,6 +133,10 @@ func GetHandler(db *sql.DB, chainid uint64, wg *sync.WaitGroup) func(http.Respon
       getUncleCountByBlockHash(r.Context(), w, call, db, chainid)
     case "eth_gasPrice":
       gasPrice(r.Context(), w, call, db, chainid)
+    case "eth_feeHistory":
+      feeHistory(r.Context(), w, call, db, chainid)
+    case "eth_maxPriorityFeePerGas":
+      maxPriorityFeePerGas(r.Context(), w, call, db, chainid)
     case "flume_erc20ByAccount":
       getERC20ByAccount(r.Context(), w, call, db, chainid)
     case "flume_erc20Holders":
@@ -1393,18 +1398,102 @@ func getUncleCountByBlockHash(ctx context.Context, w http.ResponseWriter, call *
   w.Write(responseBytes)
 }
 
+type bigList []*big.Int
+
+func (ms bigList) Len() int {
+	return len(ms)
+}
+
+func (ms bigList) Less(i, j int) bool {
+	return ms[i].Cmp(ms[j]) < 0
+}
+
+func (ms bigList) Swap(i, j int) {
+	ms[i], ms[j] = ms[j], ms[i]
+}
+
+func gasTip(ctx context.Context, db *sql.DB) (*big.Int, error) {
+	latestBlock, err := getLatestBlock(ctx, db)
+  if err != nil {
+    return nil, err
+  }
+  rows, err := db.QueryContext(ctx, "SELECT gasPrice, baseFee from transactions INNER JOIN blocks ON transactions.block = blocks.number WHERE blocks.number > ?;", latestBlock - 20)
+  if err != nil {
+    return nil, err
+  }
+  defer rows.Close()
+	tips := bigList{}
+  for rows.Next() {
+		var gasPrice int64
+		var baseFeeBytes []byte
+		if err := rows.Scan(&gasPrice, &baseFeeBytes); err != nil {
+			return nil, err
+		}
+		tip := new(big.Int).Sub(big.NewInt(gasPrice), new(big.Int).SetBytes(baseFeeBytes))
+		if tip.Cmp(new(big.Int)) > 0 {
+			// Leave out transactions without tips, as these tend to be MEV
+			// transactions
+			tips = append(tips, tip)
+		}
+  }
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sort.Sort(tips)
+	return tips[(len(tips) * 6) / 10], nil
+}
+
+func nextBaseFee(ctx context.Context, db *sql.DB) (*big.Int, error) {
+	var baseFeeBytes []byte
+	var gasLimit, gasUsed int64
+	err := db.QueryRowContext(ctx, "SELECT baseFee, gasUsed, gasLimit FROM blocks ORDER BY number DESC LIMIT 1;").Scan(&baseFeeBytes, &gasUsed, &gasLimit)
+	if err != nil {
+		return nil, err
+	}
+	baseFee := new(big.Int).SetBytes(baseFeeBytes)
+	gasTarget := gasLimit / 2
+	if gasUsed == gasTarget {
+		return baseFee, nil
+	} else if gasUsed > gasTarget {
+		delta := gasUsed - gasTarget
+		baseFeeDelta := new(big.Int).Div(new(big.Int).Div(new(big.Int).Mul(baseFee, new(big.Int).SetInt64(delta)), new(big.Int).SetInt64(gasTarget)), big.NewInt(8))
+		if baseFeeDelta.Cmp(new(big.Int)) == 0 {
+			baseFeeDelta = big.NewInt(1)
+		}
+		return new(big.Int).Add(baseFee, baseFeeDelta), nil
+	}
+	delta := gasTarget - gasUsed
+	baseFeeDelta := new(big.Int).Div(new(big.Int).Div(new(big.Int).Mul(baseFee, new(big.Int).SetInt64(delta)), new(big.Int).SetInt64(gasTarget)), big.NewInt(8))
+	return new(big.Int).Sub(baseFee, baseFeeDelta), nil
+}
+
 func gasPrice(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
-  latestBlock, err := getLatestBlock(ctx, db)
+	tip, err := gasTip(ctx, db)
+	if err != nil {
+		handleError(w, err.Error(), call.ID, 500)
+		return
+	}
+	baseFee, err := nextBaseFee(ctx, db)
+	if err != nil {
+		handleError(w, err.Error(), call.ID, 500)
+		return
+	}
+
+  responseBytes, err := json.Marshal(formatResponse((*hexutil.Big)(new(big.Int).Add(tip, baseFee)), call))
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
     return
   }
-  var price uint64
-  if err := db.QueryRowContext(ctx, "SELECT gasPrice FROM transactions WHERE block > ? ORDER BY gasPrice LIMIT 1 OFFSET (SELECT count(*) FROM transactions WHERE block > ?) * 6/10 - 1;", latestBlock - 20, latestBlock - 20).Scan(&price); err != nil {
-    handleError(w, err.Error(), call.ID, 500)
-    return
-  }
-  responseBytes, err := json.Marshal(formatResponse(hexutil.Uint64(price), call))
+  w.WriteHeader(200)
+  w.Write(responseBytes)
+}
+func maxPriorityFeePerGas(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
+	tip, err := gasTip(ctx, db)
+	if err != nil {
+		handleError(w, err.Error(), call.ID, 500)
+		return
+	}
+	responseBytes, err := json.Marshal(formatResponse((*hexutil.Big)(tip), call))
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
     return
