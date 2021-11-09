@@ -58,14 +58,12 @@ func feeHistory(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *s
 		handleError(w, fmt.Sprintf("error parsing argument 1: %v", err.Error()), call.ID, 400)
 		return
 	}
-	log.Printf("lastblock: %v", lastBlock.Int64())
 	if int64(lastBlock) < 0 {
 		latestBlock, err := getLatestBlock(ctx, db)
 		if err != nil {
 			handleError(w, err.Error(), call.ID, 500)
 			return
 		}
-		log.Printf("Setting lastBlock to latest")
 		lastBlock = rpc.BlockNumber(latestBlock)
 	}
 	if len(call.Params) >= 3 {
