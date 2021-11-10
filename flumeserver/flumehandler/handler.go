@@ -696,7 +696,7 @@ func getTransactionReceipts(ctx context.Context, db *sql.DB, offset, limit int, 
       "status":            hexutil.Uint(status),
     }
     if txType > 0 {
-      fields["type"] = txType
+      fields["type"] = hexutil.Uint(txType)
     }
     fieldLogs := []*types.Log{}
     // If the ContractAddress is 20 0x0 bytes, assume it is not a contract creation
