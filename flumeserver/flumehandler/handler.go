@@ -653,14 +653,14 @@ func getPendingTransactions(ctx context.Context, db *sql.DB, offset, limit int, 
   return results, nil
 }
 func getTransactionReceipts(ctx context.Context, db *sql.DB, offset, limit int, chainid uint64, whereClause string, params ...interface{}) ([]map[string]interface{}, error) {
-  query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gasUsed, transactions.cumulativeGasUsed, transactions.hash, transactions.recipient, transactions.transactionIndex, transactions.sender, transactions.contractAddress, transactions.logsBloom, transactions.status, transactions.type FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE transactions.rowid IN (SELECT transactions.rowid FROM transactions INNER JOIN blocks ON transactions.block = blocks.number WHERE %v) LIMIT ? OFFSET ?;", whereClause)
+  query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gasUsed, transactions.cumulativeGasUsed, transactions.hash, transactions.recipient, transactions.transactionIndex, transactions.sender, transactions.contractAddress, transactions.logsBloom, transactions.status, transactions.type, transactions.gasPrice FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE transactions.rowid IN (SELECT transactions.rowid FROM transactions INNER JOIN blocks ON transactions.block = blocks.number WHERE %v) LIMIT ? OFFSET ?;", whereClause)
   rows, err := db.QueryContext(ctx, query, append(params, limit, offset)...)
   if err != nil { return nil, err }
   defer rows.Close()
   results := []map[string]interface{}{}
   for rows.Next() {
     var to, from, blockHash, txHash, contractAddress, bloomBytes []byte
-    var blockNumber, txIndex, gasUsed, cumulativeGasUsed, status  uint64
+    var blockNumber, txIndex, gasUsed, cumulativeGasUsed, status, gasPrice  uint64
     var txTypeRaw sql.NullInt32
     err := rows.Scan(
       &blockHash,
@@ -675,6 +675,7 @@ func getTransactionReceipts(ctx context.Context, db *sql.DB, offset, limit int, 
       &bloomBytes,
       &status,
       &txTypeRaw,
+      &gasPrice,
     )
     if err != nil { return nil, err }
     txType := uint8(txTypeRaw.Int32)
@@ -689,6 +690,7 @@ func getTransactionReceipts(ctx context.Context, db *sql.DB, offset, limit int, 
       "to":                bytesToAddress(to),
       "gasUsed":           hexutil.Uint64(gasUsed),
       "cumulativeGasUsed": hexutil.Uint64(cumulativeGasUsed),
+      "effectiveGasPrice": hexutil.Uint64(gasPrice),
       "contractAddress":   nil,
       "logsBloom":         hexutil.Bytes(logsBloom),
       "status":            hexutil.Uint(status),
