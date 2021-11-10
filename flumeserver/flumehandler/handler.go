@@ -137,6 +137,8 @@ func GetHandler(db *sql.DB, chainid uint64, wg *sync.WaitGroup) func(http.Respon
       feeHistory(r.Context(), w, call, db, chainid)
     case "eth_maxPriorityFeePerGas":
       maxPriorityFeePerGas(r.Context(), w, call, db, chainid)
+    case "eth_getTransactionCount":
+      getTransactionCount(r.Context(), w, call, db, chainid)
     case "flume_erc20ByAccount":
       getERC20ByAccount(r.Context(), w, call, db, chainid)
     case "flume_erc20Holders":
@@ -1282,6 +1284,12 @@ func getBlockByHash(ctx context.Context, w http.ResponseWriter, call *rpcCall, d
   w.Write(responseBytes)
 }
 
+func txCount(ctx context.Context, db *sql.DB, whereClause string, params ...interface{}) (hexutil.Uint64, error) {
+  var count uint64
+  err := db.QueryRowContext(ctx, fmt.Sprintf("SELECT count(*) FROM transactions WHERE %v", whereClause), params...).Scan(&count)
+  return hexutil.Uint64(count), err
+}
+
 func getBlockTransactionCountByNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   if len(call.Params) < 1 {
     handleError(w, "missing value for required argument 0", call.ID, 400)
@@ -1300,12 +1308,12 @@ func getBlockTransactionCountByNumber(ctx context.Context, w http.ResponseWriter
     }
     blockNumber = rpc.BlockNumber(latestBlock)
   }
-  var count uint64
-  if err := db.QueryRowContext(ctx, "SELECT count(*) FROM transactions WHERE block = ?", blockNumber).Scan(&count); err != nil {
+	count, err := txCount(ctx, db, "block = ?", blockNumber)
+  if err != nil {
     handleError(w, err.Error(), call.ID, 500)
     return
   }
-  responseBytes, err := json.Marshal(formatResponse(hexutil.Uint64(count), call))
+  responseBytes, err := json.Marshal(formatResponse(count, call))
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
     return
@@ -1500,4 +1508,27 @@ func maxPriorityFeePerGas(ctx context.Context, w http.ResponseWriter, call *rpcC
   }
   w.WriteHeader(200)
   w.Write(responseBytes)
+}
+func getTransactionCount(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
+	if len(call.Params) < 1 {
+		handleError(w, "missing value for required argument 0", call.ID, 400)
+		return
+	}
+	var addr common.Address
+	if err := json.Unmarshal(call.Params[0], &addr); err != nil {
+		handleError(w, "error reading params.0", call.ID, 400)
+		return
+	}
+	count, err := txCount(ctx, db, "sender = ?", addr)
+	if err != nil {
+		handleError(w, err.Error(), call.ID, 500)
+		return
+	}
+	responseBytes, err := json.Marshal(formatResponse(count, call))
+	if err != nil {
+		handleError(w, err.Error(), call.ID, 500)
+		return
+	}
+	w.WriteHeader(200)
+	w.Write(responseBytes)
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/rpc"
 	"sort"
-	"log"
+	// "log"
 )
 
 type feeHistoryResult struct {
