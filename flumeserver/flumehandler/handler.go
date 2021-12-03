@@ -668,7 +668,7 @@ func getPendingTransactions(ctx context.Context, db *sql.DB, offset, limit int, 
 func getTransactionReceipts(ctx context.Context, db *sql.DB, offset, limit int, chainid uint64, whereClause string, params ...interface{}) ([]map[string]interface{}, error) {
 	query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gasUsed, transactions.cumulativeGasUsed, transactions.hash, transactions.recipient, transactions.transactionIndex, transactions.sender, transactions.contractAddress, transactions.logsBloom, transactions.status, transactions.type FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE transactions.rowid IN (SELECT transactions.rowid FROM transactions INNER JOIN blocks ON transactions.block = blocks.number WHERE %v) LIMIT ? OFFSET ?;", whereClause)
 	logsQuery := fmt.Sprintf(`
-		SELECT transactionHash, address, topic0, topic1, topic2, topic3, data, logIndex
+		SELECT transactionHash, block, address, topic0, topic1, topic2, topic3, data, logIndex
 		FROM event_logs
 		WHERE (transactionHash, block) IN (
 			SELECT transactions.hash, block
