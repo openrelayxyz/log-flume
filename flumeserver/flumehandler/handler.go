@@ -674,7 +674,6 @@ func getTransactionReceipts(ctx context.Context, db *sql.DB, offset, limit int, 
 			SELECT transactions.hash, block
 			FROM transactions INNER JOIN blocks ON transactions.block = blocks.number
 			WHERE %v
-			LIMIT ? OFFSET ?
 		);`, whereClause)
 	return getTransactionReceiptsQuery(ctx, db, offset, limit, chainid, query, logsQuery, params...)
 }
