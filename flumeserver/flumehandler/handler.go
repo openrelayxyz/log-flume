@@ -782,7 +782,11 @@ func getTransactionReceiptsQuery(ctx context.Context, db *sql.DB, offset, limit 
       txLogs[txh][i].TxIndex = uint(txIndex)
       txLogs[txh][i].BlockHash = bytesToHash(blockHash)
     }
-    fields["logs"] = txLogs[txh]
+		var ok bool
+    fields["logs"], ok = txLogs[txh]
+		if !ok {
+			fields["logs"] = []*types.Log{}
+		}
     results = append(results, fields)
   }
   if err := rows.Err(); err != nil { return nil, err }
