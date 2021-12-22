@@ -1341,6 +1341,19 @@ func txCount(ctx context.Context, db *sql.DB, whereClause string, params ...inte
   err := db.QueryRowContext(ctx, fmt.Sprintf("SELECT count(*) FROM transactions WHERE %v", whereClause), params...).Scan(&count)
   return hexutil.Uint64(count), err
 }
+func getSenderNonce(ctx context.Context, db *sql.DB, sender common.Address) (hexutil.Uint64, error) {
+  var count, nonce uint64
+  if err := db.QueryRowContext(ctx, "SELECT count(*) FROM transactions WHERE sender = ?", trimPrefix(sender.Bytes())).Scan(&count); err != nil {
+    return 0, err
+  }
+  if err := db.QueryRowContext(ctx, "SELECT max(nonce) FROM mempool.transactions WHERE sender = ?", trimPrefix(sender.Bytes())).Scan(&count); err != nil {
+    return 0, err
+  }
+  if nonce > count {
+    return hexutil.Uint64(nonce), nil
+  }
+  return hexutil.Uint64(count), nil
+}
 
 func getBlockTransactionCountByNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   if len(call.Params) < 1 {
@@ -1571,12 +1584,12 @@ func getTransactionCount(ctx context.Context, w http.ResponseWriter, call *rpcCa
 		handleError(w, "error reading params.0", call.ID, 400)
 		return
 	}
-	count, err := txCount(ctx, db, "sender = ?", addr)
+	nonce, err := getSenderNonce(ctx, db, addr)
 	if err != nil {
 		handleError(w, err.Error(), call.ID, 500)
 		return
 	}
-	responseBytes, err := json.Marshal(formatResponse(count, call))
+	responseBytes, err := json.Marshal(formatResponse(nonce, call))
 	if err != nil {
 		handleError(w, err.Error(), call.ID, 500)
 		return
