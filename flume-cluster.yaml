@@ -1,4 +1,4 @@
-Description: A  pool of flume servers for Ether Cattle
+Description: A  pool of flume servers for Cardinal
 
 Parameters:
   FlumeDiskSize:
@@ -153,6 +153,10 @@ Parameters:
     Description: The time the last timestamp was taken (this is managed by the stack and can be ignored)
     Default: 0
     Type: Number
+  ConsulServiceName:
+    Description: The name of the consul service
+    Default: flume
+    Type: String
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -818,10 +822,10 @@ Resources:
                 content: !Sub |
                   {
                     "service": {
-                      "name": "${NetworkId}-flume",
+                      "name": "${NetworkId}-${ConsulServiceName}",
                       "tags": [
                         "${NetworkId}",
-                        "flume",
+                        "${ConsulServiceName}",
                         "${FlumeClusterVersion}"
                       ],
                       "port": 8000,
