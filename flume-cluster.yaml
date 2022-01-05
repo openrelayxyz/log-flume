@@ -911,7 +911,7 @@ Resources:
                     - |
                       Group=consul
                     - !Sub |
-                      ExecStart=/bin/sh -c '/usr/bin/consul connect envoy -sidecar-for ${NetworkId}-flume 2>&1 | grep -v -i deprecated'
+                      ExecStart=/bin/sh -c '/usr/bin/consul connect envoy -sidecar-for ${NetworkId}-${ConsulServiceName} 2>&1 | grep -v -i deprecated'
                     - |
                       ExecReload=/usr/bin/consul reload
                     - |
