@@ -37,7 +37,7 @@ type cardinalDataFeed struct{
 	chainid int64
 }
 
-func NewCardinalDataFeed(brokerURL string, rollback, reorgThreshold, chainid int64, db *sql.DB, whitelist map[uint64]ctypes.Hash) (DataFeed, error) {
+func NewCardinalDataFeed(brokerURL string, rollback, reorgThreshold, chainid, resumptionTime int64, db *sql.DB, whitelist map[uint64]ctypes.Hash) (DataFeed, error) {
 	if whitelist == nil { whitelist = make(map[uint64]ctypes.Hash) }
 	var tableName string
 	db.QueryRowContext(context.Background(), "SELECT name FROM sqlite_master WHERE type='table' and name='cardinal_offsets';").Scan(&tableName)
@@ -76,7 +76,18 @@ func NewCardinalDataFeed(brokerURL string, rollback, reorgThreshold, chainid int
 	var err error
 	log.Printf("Resuming to block number %v", lastNumber)
 	if strings.HasPrefix(parts[0], "kafka://") {
-		consumer, err = transports.NewKafkaConsumer(parts[0], topics[0], topics, []byte(resumption), rollback, lastNumber, ctypes.BytesToHash(lastHash), new(big.Int).SetBytes(lastWeight), reorgThreshold, trackedPrefixes, whitelist)
+		rt := []byte(resumption)
+		if resumptionTime > 0 {
+			r, err := transports.ResumptionForTimestamp([]transports.BrokerParams{
+				{URL: brokerURL, Topics: topics},
+				}, resumptionTime)
+			if err != nil {
+				log.Printf("Could not load resumption from timestamp: %v", err.Error())
+			} else {
+				rt = r
+			}
+		}
+		consumer, err = transports.NewKafkaConsumer(parts[0], topics[0], topics, rt, rollback, lastNumber, ctypes.BytesToHash(lastHash), new(big.Int).SetBytes(lastWeight), reorgThreshold, trackedPrefixes, whitelist)
 	} else if strings.HasPrefix(parts[0], "null://") {
 		consumer = transports.NewNullConsumer()
 	}

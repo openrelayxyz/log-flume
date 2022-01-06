@@ -51,6 +51,7 @@ func main() {
   reorgThreshold := flag.Int64("reorg-threshold", 128, "Minimum number of blocks to keep in memory to handle reorgs.")
   mempoolDb := flag.String("mempool-db", "", "A location for the mempool database (default: same dir as main db)")
   mempoolSlots := flag.Int("mempool-size", 4096, "Number of mempool entries before low priced entries get dropped")
+  resumptionTimestampMs := flag.Int64("resumption.ts", -1, "Timestamp (in ms) to resume from instead of database timestamp (requires Cardinal source)")
 
   flag.CommandLine.Parse(os.Args[1:])
 
@@ -139,7 +140,7 @@ func main() {
     log.Fatalf(err.Error())
   }
   var completionFeed event.Feed
-  feed, err := datafeed.ResolveFeed(feedURL, logsdb, *kafkaRollback, *reorgThreshold, chainid)
+  feed, err := datafeed.ResolveFeed(feedURL, logsdb, *kafkaRollback, *reorgThreshold, chainid, *resumptionTimestampMs)
   if err != nil { log.Fatalf(err.Error()) }
 
   txFeed, err := txfeed.ResolveTransactionFeed(feedURL, *txTopic)
