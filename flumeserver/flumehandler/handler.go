@@ -207,33 +207,27 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
   indexClause := ""
   params := []interface{}{}
   if crit.BlockHash != nil {
-    whereClause = append(whereClause, "blockHash = ?")
-    params = append(params, trimPrefix(crit.BlockHash.Bytes()))
-  }
-  var fromBlock, toBlock int64
-  if crit.FromBlock == nil || crit.FromBlock.Int64() < 0 {
-    fromBlock = latestBlock
+    var num int64
+    db.QueryRowContext(ctx, "SELECT number FROM blocks WHERE hash = ?", crit.BlockHash.Bytes()).Scan(&num)
+    whereClause = append(whereClause, "blockHash = ? AND block = ?")
+    params = append(params, trimPrefix(crit.BlockHash.Bytes()), num)
   } else {
-    fromBlock = crit.FromBlock.Int64()
+    var fromBlock, toBlock int64
+    if crit.FromBlock == nil || crit.FromBlock.Int64() < 0 {
+      fromBlock = latestBlock
+    } else {
+      fromBlock = crit.FromBlock.Int64()
+    }
+    whereClause = append(whereClause, "block >= ?")
+    params = append(params, fromBlock)
+    if crit.ToBlock == nil || crit.ToBlock.Int64() < 0{
+      toBlock = latestBlock
+    } else {
+      toBlock = crit.ToBlock.Int64()
+    }
+    whereClause = append(whereClause, "block <= ?")
+    params = append(params, toBlock)
   }
-  whereClause = append(whereClause, "block >= ?")
-  params = append(params, fromBlock)
-  if crit.ToBlock == nil || crit.ToBlock.Int64() < 0{
-    toBlock = latestBlock
-  } else {
-    toBlock = crit.ToBlock.Int64()
-  }
-  whereClause = append(whereClause, "block <= ?")
-  params = append(params, toBlock)
-  // if crit.BlockHash == nil && toBlock - fromBlock < 2500 {
-  //   // If the block range is smaller than 2.5k, that's probably the best index
-  //   // otherwise we'll lean on the query planner. Note that even if the result
-  //   // set for filtering by blocks is bigger than the result set filtering by
-  //   // other fields, it can still end up being more efficient because logs
-  //   // sorted by blocks are sequential and can be read with fewer disk
-  //   // operations, so while it might be tempting to
-  //   indexClause = "INDEXED BY eventblock"
-  // }
   addressClause := []string{}
   for _, address := range crit.Addresses {
     addressClause = append(addressClause, "address = ?")
