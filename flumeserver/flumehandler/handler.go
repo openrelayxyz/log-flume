@@ -766,9 +766,7 @@ func getTransactionReceiptsQuery(ctx context.Context, db *sql.DB, offset, limit 
       "contractAddress":   nil,
       "logsBloom":         hexutil.Bytes(logsBloom),
       "status":            hexutil.Uint(status),
-    }
-    if txType > 0 {
-      fields["type"] = hexutil.Uint(txType)
+      "type":              hexutil.Uint(txType),
     }
     // If the ContractAddress is 20 0x0 bytes, assume it is not a contract creation
     if address := bytesToAddress(contractAddress); address != (common.Address{}) {
