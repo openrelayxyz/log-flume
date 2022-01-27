@@ -1338,7 +1338,11 @@ func getBlockByHash(ctx context.Context, w http.ResponseWriter, call *rpcCall, d
     return
   }
   blocks, err := getBlocks(ctx, db, includeTxs, chainid, "hash = ?", trimPrefix(blockHash.Bytes()))
-  responseBytes, err := json.Marshal(formatResponse(blocks[0], call))
+  var blockVal interface{}
+  if len(blocks) > 0 {
+    blockVal = blocks[0]
+  }
+  responseBytes, err := json.Marshal(formatResponse(blockVal, call))
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
     return
