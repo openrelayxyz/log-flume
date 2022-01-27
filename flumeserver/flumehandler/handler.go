@@ -1309,7 +1309,11 @@ func getBlockByNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall,
     handleError(w, err.Error(), call.ID, 500)
     return
   }
-  responseBytes, err := json.Marshal(formatResponse(blocks[0], call))
+  var blockVal interface{}
+  if len(blocks) > 0 {
+    blockVal = blocks[0]
+  }
+  responseBytes, err := json.Marshal(formatResponse(blockVal, call))
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
     return
