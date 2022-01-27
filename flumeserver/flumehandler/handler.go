@@ -187,6 +187,23 @@ func getBlockNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall, d
   w.Write(responseBytes)
 }
 
+type sortLogs []*types.Log
+
+func (ms sortLogs) Len() int {
+  return len(ms)
+}
+
+func (ms sortLogs) Less(i, j int) bool {
+  if ms[i].BlockNumber != ms[j].BlockNumber {
+    return ms[i].BlockNumber < ms[j].BlockNumber
+  }
+  return ms[i].Index < ms[j].Index
+}
+
+func (ms sortLogs) Swap(i, j int) {
+  ms[i], ms[j] = ms[j], ms[i]
+}
+
 func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
   latestBlock, err := getLatestBlock(ctx, db)
   if err != nil {
@@ -260,7 +277,7 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
     return
   }
   defer rows.Close()
-  logs := []*types.Log{}
+  logs := sortLogs{}
   blockNumbersInResponse := make(map[uint64]struct{})
   for rows.Next() {
     var address, topic0, topic1, topic2, topic3, data, transactionHash, blockHash []byte
@@ -304,6 +321,7 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
     handleError(w, "database error", call.ID, 500)
     return
   }
+  sort.Sort(logs)
   responseBytes, err := json.Marshal(formatResponse(logs, call))
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
@@ -691,7 +709,7 @@ func getTransactionReceiptsQuery(ctx context.Context, db *sql.DB, offset, limit 
     log.Printf("Error selecting logs : %v - '%v'", err.Error(), query)
     return nil, err
   }
-  txLogs := make(map[common.Hash][]*types.Log)
+  txLogs := make(map[common.Hash]sortLogs)
   for logRows.Next() {
     var txHashBytes, address, topic0, topic1, topic2, topic3, data []byte
     var logIndex uint
@@ -703,7 +721,7 @@ func getTransactionReceiptsQuery(ctx context.Context, db *sql.DB, offset, limit 
     }
     txHash := bytesToHash(txHashBytes)
     if _, ok := txLogs[txHash]; !ok {
-      txLogs[txHash] = []*types.Log{}
+      txLogs[txHash] = sortLogs{}
     }
     topics := []common.Hash{}
     if len(topic0) > 0 { topics = append(topics, bytesToHash(topic0)) }
@@ -777,11 +795,12 @@ func getTransactionReceiptsQuery(ctx context.Context, db *sql.DB, offset, limit 
       txLogs[txh][i].TxIndex = uint(txIndex)
       txLogs[txh][i].BlockHash = bytesToHash(blockHash)
     }
-		var ok bool
-    fields["logs"], ok = txLogs[txh]
+    logs, ok := txLogs[txh]
 		if !ok {
-			fields["logs"] = []*types.Log{}
+			logs = sortLogs{}
 		}
+		sort.Sort(logs)
+		fields["logs"] = logs
     results = append(results, fields)
   }
   if err := rows.Err(); err != nil { return nil, err }
