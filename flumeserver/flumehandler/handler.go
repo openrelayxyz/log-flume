@@ -1527,8 +1527,16 @@ func gasTip(ctx context.Context, db *sql.DB) (*big.Int, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	sort.Sort(tips)
-	return tips[(len(tips) * 6) / 10], nil
+	if len(tips) > 0 {
+		sort.Sort(tips)
+		return tips[(len(tips) * 6) / 10], nil
+	}
+	// If there are no transactions in the last 20 blocks, just look at the
+	// latest transaction.
+	var gasPrice int64
+	var baseFeeBytes []byte
+	err = db.QueryRowContext(ctx, "SELECT gasPrice, baseFee from transactions INNER JOIN blocks ON transactions.block = blocks.number WHERE 1 ORDER BY id DESC LIMIT 1;").Scan(&gasPrice, &baseFeeBytes)
+	return new(big.Int).Sub(big.NewInt(gasPrice), new(big.Int).SetBytes(baseFeeBytes)), err
 }
 
 func nextBaseFee(ctx context.Context, db *sql.DB) (*big.Int, error) {
