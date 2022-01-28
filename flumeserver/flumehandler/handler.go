@@ -85,7 +85,7 @@ var (
 func GetHandler(db *sql.DB, chainid uint64, wg *sync.WaitGroup) func(http.ResponseWriter, *http.Request) {
   return func(w http.ResponseWriter, r *http.Request) {
     if r.Method == "GET" {
-      if _, err := getLatestBlock(r.Context(), db); err != nil {
+      if _, err := getLatestBlock(r.Context(), db, w); err != nil {
         w.WriteHeader(500)
         w.Write([]byte(`{"ok":false}`))
         log.Printf("Unhealthy: Error getting latest block: %v", err.Error())
@@ -166,14 +166,18 @@ func GetHandler(db *sql.DB, chainid uint64, wg *sync.WaitGroup) func(http.Respon
   }
 }
 
-func getLatestBlock(ctx context.Context, db *sql.DB) (int64, error) {
+func getLatestBlock(ctx context.Context, db *sql.DB, w http.ResponseWriter) (int64, error) {
   var result int64
-  err := db.QueryRowContext(ctx, "SELECT max(number) FROM blocks;").Scan(&result)
+  var hash []byte
+  err := db.QueryRowContext(ctx, "SELECT max(number), hash FROM blocks;").Scan(&result, &hash)
+  if w != nil {
+    w.Header().Set("X-Hash", fmt.Sprintf("%#x", hash))
+  }
   return result, err
 }
 
 func getBlockNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
-  blockNo, err := getLatestBlock(ctx, db)
+  blockNo, err := getLatestBlock(ctx, db, w)
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
     return
@@ -205,7 +209,7 @@ func (ms sortLogs) Swap(i, j int) {
 }
 
 func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
-  latestBlock, err := getLatestBlock(ctx, db)
+  latestBlock, err := getLatestBlock(ctx, db, w)
   if err != nil {
     handleError(w, err.Error(), call.ID, 500)
     return
@@ -1292,7 +1296,7 @@ func getBlockByNumber(ctx context.Context, w http.ResponseWriter, call *rpcCall,
     return
   }
   if blockNumber.Int64() < 0 {
-    latestBlock, err := getLatestBlock(ctx, db)
+    latestBlock, err := getLatestBlock(ctx, db, w)
     if err != nil {
       handleError(w, err.Error(), call.ID, 500)
       return
@@ -1385,7 +1389,7 @@ func getBlockTransactionCountByNumber(ctx context.Context, w http.ResponseWriter
     return
   }
   if blockNumber.Int64() < 0 {
-    latestBlock, err := getLatestBlock(ctx, db)
+    latestBlock, err := getLatestBlock(ctx, db, w)
     if err != nil {
       handleError(w, err.Error(), call.ID, 500)
       return
@@ -1441,7 +1445,7 @@ func getUncleCountByBlockNumber(ctx context.Context, w http.ResponseWriter, call
     return
   }
   if blockNumber.Int64() < 0 {
-    latestBlock, err := getLatestBlock(ctx, db)
+    latestBlock, err := getLatestBlock(ctx, db, w)
     if err != nil {
       handleError(w, err.Error(), call.ID, 500)
       return
@@ -1504,8 +1508,8 @@ func (ms bigList) Swap(i, j int) {
 	ms[i], ms[j] = ms[j], ms[i]
 }
 
-func gasTip(ctx context.Context, db *sql.DB) (*big.Int, error) {
-	latestBlock, err := getLatestBlock(ctx, db)
+func gasTip(ctx context.Context, db *sql.DB, w http.ResponseWriter) (*big.Int, error) {
+  latestBlock, err := getLatestBlock(ctx, db, w)
   if err != nil {
     return nil, err
   }
@@ -1568,7 +1572,7 @@ func nextBaseFee(ctx context.Context, db *sql.DB) (*big.Int, error) {
 }
 
 func gasPrice(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
-	tip, err := gasTip(ctx, db)
+	tip, err := gasTip(ctx, db, w)
 	if err != nil {
 		handleError(w, err.Error(), call.ID, 500)
 		return
@@ -1588,7 +1592,7 @@ func gasPrice(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql
   w.Write(responseBytes)
 }
 func maxPriorityFeePerGas(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.DB, chainid uint64) {
-	tip, err := gasTip(ctx, db)
+	tip, err := gasTip(ctx, db, w)
 	if err != nil {
 		handleError(w, err.Error(), call.ID, 500)
 		return

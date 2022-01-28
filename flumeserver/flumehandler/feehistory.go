@@ -59,7 +59,7 @@ func feeHistory(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *s
 		return
 	}
 	if int64(lastBlock) < 0 {
-		latestBlock, err := getLatestBlock(ctx, db)
+		latestBlock, err := getLatestBlock(ctx, db, w)
 		if err != nil {
 			handleError(w, err.Error(), call.ID, 500)
 			return
