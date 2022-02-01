@@ -781,7 +781,7 @@ func getTransactionReceiptsQuery(ctx context.Context, db *sql.DB, offset, limit 
       "transactionHash":   bytesToHash(txHash),
       "transactionIndex":  hexutil.Uint64(txIndex),
       "from":              bytesToAddress(from),
-      "to":                bytesToAddress(to),
+      "to":                bytesToAddressPtr(to),
       "gasUsed":           hexutil.Uint64(gasUsed),
       "cumulativeGasUsed": hexutil.Uint64(cumulativeGasUsed),
       "effectiveGasPrice": hexutil.Uint64(gasPrice),
