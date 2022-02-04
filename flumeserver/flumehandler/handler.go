@@ -82,7 +82,7 @@ var (
   fallbackId = json.RawMessage("-1")
 )
 
-func GetHandler(db *sql.DB, chainid uint64, wg *sync.WaitGroup) func(http.ResponseWriter, *http.Request) {
+func GetHandler(db *sql.DB, chainid uint64, mut *sync.RWMutex) func(http.ResponseWriter, *http.Request) {
   return func(w http.ResponseWriter, r *http.Request) {
     if r.Method == "GET" {
       if _, err := getLatestBlock(r.Context(), db, w); err != nil {
@@ -105,7 +105,12 @@ func GetHandler(db *sql.DB, chainid uint64, wg *sync.WaitGroup) func(http.Respon
       handleError(w, "error reading body", &fallbackId, 400)
       return
     }
-    wg.Wait()
+    // Quickly lock and unlock to make sure we're not starting in the middle of
+    // a write operation. We don't want to delay the write operation for this
+    // to finish, we just don't want to have lots of requests starting mid
+    // write operation
+    mut.RLock()
+    mut.RUnlock()
     switch call.Method {
     case "eth_getLogs":
       getLogs(r.Context(), w, call, db, chainid)

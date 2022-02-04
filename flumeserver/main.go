@@ -148,13 +148,13 @@ func main() {
 
   quit := make(chan struct{})
   // go indexer.ProcessFeed(feed, logsdb, quit)
-  wg := &sync.WaitGroup{}
-  go indexer.ProcessDataFeed(feed, completionFeed, txFeed, logsdb, quit, eip155Block, homesteadBlock, wg, *mempoolSlots)
+  mut := &sync.RWMutex{}
+  go indexer.ProcessDataFeed(feed, completionFeed, txFeed, logsdb, quit, eip155Block, homesteadBlock, mut, *mempoolSlots)
 
 
   mux := http.NewServeMux()
-  mux.HandleFunc("/", flumehandler.GetHandler(logsdb, chainid, wg))
-  mux.HandleFunc("/api", flumehandler.GetAPIHandler(logsdb, chainid, wg))
+  mux.HandleFunc("/", flumehandler.GetHandler(logsdb, chainid, mut))
+  mux.HandleFunc("/api", flumehandler.GetAPIHandler(logsdb, chainid, mut))
   s := &http.Server{
     Addr: fmt.Sprintf(":%v", *port),
     Handler: gziphandler.GzipHandler(cors.Default().Handler(mux)),

@@ -125,7 +125,7 @@ func applyParameters(query string, params ...interface{}) string {
   return fmt.Sprintf(query, preparedParams...)
 }
 
-func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *txfeed.TxFeed, db *sql.DB, quit <-chan struct{}, eip155Block, homesteadBlock uint64, wg *sync.WaitGroup, mempoolSlots int) {
+func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *txfeed.TxFeed, db *sql.DB, quit <-chan struct{}, eip155Block, homesteadBlock uint64, mut *sync.RWMutex, mempoolSlots int) {
   log.Printf("Processing data feed")
   txCh := make(chan *types.Transaction, 200)
   txSub := txFeed.Subscribe(txCh)
@@ -374,13 +374,13 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *
           }
         }
         // istart := time.Now()
-        wg.Add(1)
+        mut.Lock()
         if _, err := dbtx.Exec(strings.Join(statements, " ; ")); err != nil {
           dbtx.Rollback()
           stats := db.Stats()
           log.Printf("WARN: Failed to insert logs: %v", err.Error())
           log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
-          wg.Done()
+          mut.Unlock()
           continue BLOCKLOOP
         }
         // log.Printf("Spent %v on %v inserts", time.Since(istart), len(statements))
@@ -389,10 +389,10 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *
           stats := db.Stats()
           log.Printf("WARN: Failed to insert logs: %v", err.Error())
           log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
-          wg.Done()
+          mut.Unlock()
           continue BLOCKLOOP
         }
-        wg.Done()
+        mut.Unlock()
         processed = true
         completionFeed.Send(chainEvent.Block.Hash)
         // log.Printf("Spent %v on commit", time.Since(cstart))

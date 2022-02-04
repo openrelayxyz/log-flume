@@ -72,10 +72,11 @@ func handleApiResponse(w http.ResponseWriter, status int, message string, result
   w.Write([]byte("\n"))
 }
 
-func GetAPIHandler(db *sql.DB, network uint64, wg *sync.WaitGroup) func(http.ResponseWriter, *http.Request) {
+func GetAPIHandler(db *sql.DB, network uint64, mut *sync.RWMutex) func(http.ResponseWriter, *http.Request) {
   // module=account&action=txlist&address=0xde0b295669a9fd93d5f28d9ec85e40f4cb697bae&startblock=0&endblock=99999999&sort=asc
   return func(w http.ResponseWriter, r *http.Request) {
-    wg.Wait()
+    mut.RLock()
+    mut.RUnlock()
     query := r.URL.Query()
     chainTokens, ok := tokens.Tokens[network]
     if !ok {
