@@ -1370,15 +1370,19 @@ func txCount(ctx context.Context, db *sql.DB, whereClause string, params ...inte
   return hexutil.Uint64(count), err
 }
 func getSenderNonce(ctx context.Context, db *sql.DB, sender common.Address) (hexutil.Uint64, error) {
-  var count, nonce uint64
+  var count uint64
+  var nonce sql.NullInt64
   if err := db.QueryRowContext(ctx, "SELECT count(*) FROM transactions WHERE sender = ?", trimPrefix(sender.Bytes())).Scan(&count); err != nil {
     return 0, err
   }
-  if err := db.QueryRowContext(ctx, "SELECT max(nonce) FROM mempool.transactions WHERE sender = ?", trimPrefix(sender.Bytes())).Scan(&count); err != nil {
+  if err := db.QueryRowContext(ctx, "SELECT max(nonce) FROM mempool.transactions WHERE sender = ?", trimPrefix(sender.Bytes())).Scan(&nonce); err != nil {
     return 0, err
   }
-  if nonce > count {
-    return hexutil.Uint64(nonce), nil
+  if !nonce.Valid {
+    return hexutil.Uint64(count), nil
+  }
+  if uint64(nonce.Int64) > count {
+    return hexutil.Uint64(nonce.Int64), nil
   }
   return hexutil.Uint64(count), nil
 }
