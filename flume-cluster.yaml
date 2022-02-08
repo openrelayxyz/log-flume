@@ -1987,7 +1987,7 @@ Resources:
           SNS_TOPICS: !Join [",", [!If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue'], !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]]]
           BACKUP_BUCKET: !Ref S3FlumeBackupBucket
           NETWORK_ID: !Ref NetworkId
-          BACKUP_PREFIX: !Sub "${NetworkId}/${AWS::Stackname}/
+          BACKUP_PREFIX: !Sub "${NetworkId}/${AWS::Stackname}/"
           CURRENT_SNAPSHOT: !Ref S3FlumeBackup
       Handler: "index.gcHandler"
       Role: !Sub ${BackupGCRole.Arn}
