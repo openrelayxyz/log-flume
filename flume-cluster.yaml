@@ -21,7 +21,7 @@ Parameters:
     Type: String
     Description: "The backup bucket with path for the current backup. Do not include s3:// as that is provided in code"
   S3FlumeBackupBucket:
-    Default: flume-stage-db
+    Default: Flume-Backups
     Type: String
     Description: The bucket for Flume to store backups in
   S3FlumeBinaryDirectory:
@@ -1586,7 +1586,7 @@ Resources:
                 done
 
                 # upload Backup
-                export BACKUPNAME="${S3FlumeBackupBucket}/${NetworkId}/flume-$(date '+%Y%m%d-%H%M%S').sqlite"
+                export BACKUPNAME="${S3FlumeBackupBucket}/${NetworkId}/${AWS::Stackname}/flume-$(date '+%Y%m%d-%H%M%S').sqlite"
                 if ! backupmanager upload --concurrency=$concurrency /var/lib/flume/item.sqlite s3://$BACKUPNAME; then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
@@ -1981,20 +1981,70 @@ Resources:
   FlumeBackupGCFunction:
     Type: "AWS::Lambda::Function"
     Properties:
-      Code:
-        S3Bucket: !Ref S3ECBucketName
-        S3Key: flumeLambdaPackage-8.zip
       Description: "A lambda function to process Flume logs into metrics"
       Environment:
         Variables:
           SNS_TOPICS: !Join [",", [!If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue'], !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]]]
           BACKUP_BUCKET: !Ref S3FlumeBackupBucket
           NETWORK_ID: !Ref NetworkId
+          BACKUP_PREFIX: !Sub "${NetworkId}/${AWS::Stackname}/
           CURRENT_SNAPSHOT: !Ref S3FlumeBackup
-      Handler: "flumeBackupGC.gcHandler"
+      Handler: "index.gcHandler"
       Role: !Sub ${BackupGCRole.Arn}
       Runtime: python3.7
       Timeout: 300
+      Code:
+        ZipFile: !Sub |
+          import boto3
+          import os
+          import datetime
+
+          s3 = boto3.client('s3')
+          sns = boto3.client('sns')
+
+          def gcHandler(event, context):
+              topics = os.environ.get("SNS_TOPICS").split(",")
+              bucketName = os.environ.get("BACKUP_BUCKET").strip("/")
+              network = os.environ.get("NETWORK_ID")
+              currentSnapshot = os.environ.get("CURRENT_SNAPSHOT").strip("/")
+              response = s3.list_objects(
+                  Bucket=bucketName,
+                  Prefix= os.environ.get("BACKUP_PREFIX"),
+                  Delimiter="/"
+              )
+              prefixes = sorted(prefix["Prefix"].strip("/") for prefix in response["CommonPrefixes"])
+              currentPrefix = currentSnapshot[len(bucketName):].lstrip("/")
+              if currentSnapshot.startswith(bucketName):
+                  if currentPrefix not in prefixes:
+                      for topic in topics:
+                          sns.publish(
+                              TopicArn=topic,
+                              Subject="Warning: Master %s snapshot unavailable" % network,
+                              Message="The current master snapshot for %s is %s, but could not be found." % (network, currentSnapshot),
+                          )
+              # Delete all but the 5 most recent snapshots
+              for prefix in prefixes[:-5]:
+                  if currentPrefix == prefix:
+                      # Never delete the current backup. This could theoretically happen if
+                      # incomplete backups were taken and cloudformation was never updated.
+                      continue
+                  response = s3.list_objects(
+                      Bucket=bucketName,
+                      Prefix=prefix + "/",
+                  )
+                  while response.get("Contents"):
+                      s3.delete_objects(
+                          Bucket=bucketName,
+                          Delete={
+                              'Objects': [{"Key": item["Key"]} for item in response["Contents"]],
+                              'Quiet': True,
+                          }
+                      )
+                      response = s3.list_objects(
+                          Bucket=bucketName,
+                          Prefix=prefix + "/",
+                      )
+
   GCSchedulerRule:
     Type: AWS::Events::Rule
     Properties:
