@@ -1586,7 +1586,7 @@ Resources:
                 done
 
                 # upload Backup
-                export BACKUPNAME="${S3FlumeBackupBucket}/${NetworkId}/${AWS::Stackname}/flume-$(date '+%Y%m%d-%H%M%S').sqlite"
+                export BACKUPNAME="${S3FlumeBackupBucket}/${NetworkId}/${AWS::StackName}/flume-$(date '+%Y%m%d-%H%M%S').sqlite"
                 if ! backupmanager upload --concurrency=$concurrency /var/lib/flume/item.sqlite s3://$BACKUPNAME; then
                   if [ "${AggregatedNotifications}" != "" ]
                   then
@@ -1987,7 +1987,7 @@ Resources:
           SNS_TOPICS: !Join [",", [!If [ HasSNSTopic, !Ref AlarmSNSTopic,  !Ref 'AWS::NoValue'], !If [ HasWarningWebhook, !Ref WarningNotifications, !Ref 'AWS::NoValue' ]]]
           BACKUP_BUCKET: !Ref S3FlumeBackupBucket
           NETWORK_ID: !Ref NetworkId
-          BACKUP_PREFIX: !Sub "${NetworkId}/${AWS::Stackname}/"
+          BACKUP_PREFIX: !Sub "${NetworkId}/${AWS::StackName}/"
           CURRENT_SNAPSHOT: !Ref S3FlumeBackup
       Handler: "index.gcHandler"
       Role: !Sub ${BackupGCRole.Arn}
