@@ -131,6 +131,7 @@ func main() {
       Addr: fmt.Sprintf(":%v", *pprofPort),
       Handler: http.DefaultServeMux,
       ReadHeaderTimeout: 5 * time.Second,
+      IdleTimeout: 120 * time.Second,
       MaxHeaderBytes: 1 << 20,
     }
     go p.ListenAndServe()
