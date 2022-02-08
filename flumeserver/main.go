@@ -160,6 +160,7 @@ func main() {
     Addr: fmt.Sprintf(":%v", *port),
     Handler: gziphandler.GzipHandler(cors.Default().Handler(mux)),
     ReadHeaderTimeout: 5 * time.Second,
+    IdleTimeout: 120 * time.Second,
     MaxHeaderBytes: 1 << 20,
   }
   <-feed.Ready()
