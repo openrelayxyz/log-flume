@@ -372,8 +372,8 @@ github.com/openrelayxyz/cardinal-evm v0.0.0-20211007195410-cf1ee1556687/go.mod h
 github.com/openrelayxyz/cardinal-rpc v0.0.5/go.mod h1:KlJmoN8ClqZIJsuLbvPS271T+IT+WCX2HO5blrUlPrk=
 github.com/openrelayxyz/cardinal-storage v0.0.3/go.mod h1:O5tdrkOCx+kXTW8iXeMilfzwWBxLNmUX2BIHw8rbBkE=
 github.com/openrelayxyz/cardinal-streams v0.0.2/go.mod h1:aCKrT8rkDKCWuf+AgwigQK8NYv63ZXPBgvPEpPG1o3E=
-github.com/openrelayxyz/cardinal-streams v0.0.17 h1:0xLc4L8X4bETBy1mlLmGgZ2SRXowOo4PqYH/VMIcXSw=
-github.com/openrelayxyz/cardinal-streams v0.0.17/go.mod h1:vWhZnK1k17MpJurV/rzEJskQCAEZam6KcCJ4kelb9tQ=
+github.com/openrelayxyz/cardinal-streams v0.0.24 h1:kLAtCjS/9v/xPQOPEFdNPo3rf25nDR/gqxOffEDbpDs=
+github.com/openrelayxyz/cardinal-streams v0.0.24/go.mod h1:KSIWleyIxxJQYXBfpU9PIQlGyfdYZKUiIxo1KloXnWM=
 github.com/openrelayxyz/cardinal-types v0.0.2/go.mod h1:PEbimhE1ZWP5ZAYwjZjnSaKcDY+E+yJrIl0ckU5GMeo=
 github.com/openrelayxyz/cardinal-types v0.0.4 h1:/oTns+C4I/oeJmPHAEKTxVM3DEVFiNOF3ZiQt9Q1hEY=
 github.com/openrelayxyz/cardinal-types v0.0.4/go.mod h1:PEbimhE1ZWP5ZAYwjZjnSaKcDY+E+yJrIl0ckU5GMeo=
@@ -415,8 +415,9 @@ github.com/prometheus/procfs v0.0.0-20181005140218-185b4288413d/go.mod h1:c3At6R
 github.com/prometheus/procfs v0.0.2/go.mod h1:TjEm7ze935MbeOT/UhFTIMYKhuLP4wbCsTZCD3I8kEA=
 github.com/prometheus/tsdb v0.7.1 h1:YZcsG11NqnK4czYLrWd9mpEuAJIHVQLwdrleYfszMAA=
 github.com/prometheus/tsdb v0.7.1/go.mod h1:qhTCs0VvXwvX/y3TZrWD7rabWM+ijKTux40TwIPHuXU=
-github.com/rcrowley/go-metrics v0.0.0-20200313005456-10cdbea86bc0 h1:MkV+77GLUNo5oJ0jf870itWm3D0Sjh7+Za9gazKc5LQ=
 github.com/rcrowley/go-metrics v0.0.0-20200313005456-10cdbea86bc0/go.mod h1:bCqnVzQkZxMG4s8nGwiZ5l3QUCyqpo9Y+/ZMZ9VjZe4=
+github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 h1:N/ElC8H3+5XpJzTSTfLsJV/mx9Q9g7kxmchpfZyxgzM=
+github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475/go.mod h1:bCqnVzQkZxMG4s8nGwiZ5l3QUCyqpo9Y+/ZMZ9VjZe4=
 github.com/retailnext/hllpp v1.0.1-0.20180308014038-101a6d2f8b52/go.mod h1:RDpi1RftBQPUCDRw6SmxeaREsAaRKnOclghuzp/WRzc=
 github.com/rjeczalik/notify v0.9.1 h1:CLCKso/QK1snAlnhNR/CNvNiFU2saUtjV0bx3EwNeCE=
 github.com/rjeczalik/notify v0.9.1/go.mod h1:rKwnCoCGeuQnwBtTSPL9Dad03Vh2n40ePRrjvIXnJho=
