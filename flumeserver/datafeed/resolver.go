@@ -33,8 +33,8 @@ func ResolveFeed(url string, db *sql.DB, kafkaRollback, finishedLimit int64, cha
     }, nil
 
 
-  } else if strings.HasPrefix(url, "kafka://") {
-    return NewKafkaDataFeed(url, db, kafkaRollback, int(finishedLimit))
+  // } else if strings.HasPrefix(url, "kafka://") {
+  //   return NewKafkaDataFeed(url, db, kafkaRollback, int(finishedLimit))
   } else if strings.HasPrefix(url, "cardinal://") {
 		// TODO: Add whitelist support
     return NewCardinalDataFeed(strings.TrimPrefix(url, "cardinal://"), kafkaRollback, finishedLimit, int64(chainid), timestamp, db, nil)

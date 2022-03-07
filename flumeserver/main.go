@@ -9,7 +9,7 @@ import (
   "github.com/openrelayxyz/flume/flumeserver/datafeed"
   "github.com/openrelayxyz/flume/flumeserver/indexer"
   "github.com/openrelayxyz/flume/flumeserver/migrations"
-  "github.com/openrelayxyz/flume/flumeserver/notify"
+  // "github.com/openrelayxyz/flume/flumeserver/notify"
   gethLog "github.com/ethereum/go-ethereum/log"
   "github.com/ethereum/go-ethereum/event"
   "net/http"
@@ -39,13 +39,14 @@ func main() {
   goerli := flag.Bool("goerli", false, "Goerli Testnet")
   ropsten := flag.Bool("ropsten", false, "Ropsten Testnet")
   rinkeby := flag.Bool("rinkeby", false, "Rinkeby Testnet")
+	polygon := flag.Bool("polygon", false, "Polygon Mainnet")
   homesteadBlockFlag := flag.Int("homestead", 0, "Block of the homestead hardfork")
   eip155BlockFlag := flag.Int("eip155", 0, "Block of the eip155 hardfork")
   verbosity := flag.Bool("verbose", false, "Increase verbosity")
   mmap := flag.Int("mmap-size", 1073741824, "Set mmap size")
   cacheSize := flag.Int("cache-size", 2000, "Set cache size (in 4 kb pages")
   memstore := flag.Bool("memstore", false, "Store temporary tables in memory")
-  completionTopic := flag.String("completion-topic", "", "A kafka topic to broadcast newly indexed blocks")
+  // completionTopic := flag.String("completion-topic", "", "A kafka topic to broadcast newly indexed blocks")
   txTopic := flag.String("mempool-topic", "", "A kafka topic for receiving pending transactions")
   kafkaRollback := flag.Int64("kafka-rollback", 5000, "A number of Kafka offsets to roll back before resumption")
   reorgThreshold := flag.Int64("reorg-threshold", 128, "Minimum number of blocks to keep in memory to handle reorgs.")
@@ -86,6 +87,10 @@ func main() {
     homesteadBlock = 0
     eip155Block = 0
     chainid = 5
+	} else if *polygon {
+		homesteadBlock = 0
+		eip155Block = 0
+		chainid = 137
   } else {
     homesteadBlock = uint64(*homesteadBlockFlag)
     eip155Block = uint64(*eip155BlockFlag)
@@ -164,9 +169,9 @@ func main() {
     MaxHeaderBytes: 1 << 20,
   }
   <-feed.Ready()
-  if *completionTopic != "" {
-    notify.SendKafkaNotifications(completionFeed, *completionTopic)
-  }
+  // if *completionTopic != "" {
+  //   notify.SendKafkaNotifications(completionFeed, *completionTopic)
+  // }
   var minBlock int
   logsdb.QueryRowContext(context.Background(), "SELECT min(blockNumber) FROM event_logs;").Scan(&minBlock)
   if minBlock > *minSafeBlock {

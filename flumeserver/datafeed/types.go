@@ -17,6 +17,7 @@ type receiptMeta struct {
   status uint64
 }
 
+
 // In websockets.go, load this via query
 // In kafka.go, load this from the chainEvent
 type miniBlock struct {
@@ -48,6 +49,7 @@ type ChainEvent struct {
   Block *miniBlock
   Commit func(*sql.Tx) error
   receiptMeta map[common.Hash]*receiptMeta
+	BorReceipt *types.Receipt
   logs map[common.Hash][]*types.Log
 }
 
@@ -75,6 +77,26 @@ func (ce *ChainEvent) TxWithReceipts() []*TxWithReceipt {
 }
 
 func (ce *ChainEvent) Receipts() []*types.Receipt {
+  receipts := make([]*types.Receipt, len(ce.Block.Transactions))
+  for i, tx := range ce.Block.Transactions {
+    meta := ce.receiptMeta[tx.Hash()]
+    receipts[i] = &types.Receipt{
+      Status: meta.status,
+      CumulativeGasUsed: meta.cumulativeGasUsed,
+      Bloom: meta.logsBloom,
+      Logs: ce.logs[tx.Hash()],
+      TxHash: tx.Hash(),
+      ContractAddress: meta.contractAddress,
+      GasUsed: meta.gasUsed,
+      BlockHash: ce.Block.Hash,
+      BlockNumber: ce.Block.Number.ToInt(),
+      TransactionIndex: uint(i),
+    }
+  }
+  return receipts
+}
+
+func (ce *ChainEvent) BorReceipts() []*types.Receipt {
   receipts := make([]*types.Receipt, len(ce.Block.Transactions))
   for i, tx := range ce.Block.Transactions {
     meta := ce.receiptMeta[tx.Hash()]

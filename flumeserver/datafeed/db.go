@@ -59,9 +59,10 @@ func (feed *dbDataFeed) subscribe() {
       quit()
       return
     }
-    receipts := rawdb.ReadReceipts(feed.db, h, n, chainConfig)
+
+		logs := make(map[common.Hash][]*types.Log)
+		receipts := rawdb.ReadReceipts(feed.db, h, n, chainConfig)
     td := rawdb.ReadTd(feed.db, h, n)
-    logs := make(map[common.Hash][]*types.Log)
     if receipts != nil {
       // Receipts will be nil if the list is empty, so this is not an error condition
       for _, receipt := range receipts {
@@ -73,6 +74,10 @@ func (feed *dbDataFeed) subscribe() {
       tmp := hexutil.Big(*bf)
       baseFee = &tmp
     }
+
+
+
+
     ce := &ChainEvent{
       Block: &miniBlock{
         Difficulty: hexutil.Big(*block.Difficulty()),
@@ -101,7 +106,8 @@ func (feed *dbDataFeed) subscribe() {
       receiptMeta: make(map[common.Hash]*receiptMeta),
       Commit: func(*sql.Tx) (error) { return nil },
     }
-    for _, receipt := range receipts {
+		ce.BorReceipt = rawdb.ReadBorReceipt(feed.db, h, n) 
+		for _, receipt := range receipts {
       ce.receiptMeta[receipt.TxHash] = &receiptMeta{
         contractAddress: receipt.ContractAddress,
         cumulativeGasUsed: receipt.CumulativeGasUsed,

@@ -329,6 +329,34 @@ func Migrate(db *sql.DB, chainid uint64) error {
 		db.Exec(`DROP INDEX sender`)
 		db.Exec(`UPDATE migrations SET version = 10;`)
 	}
+	if schemaVersion < 11 && chainid == 137 {
+		if _, err := db.Exec(`CREATE TABLE bor_receipts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      hash varchar(32) UNIQUE,
+      transactionIndex MEDIUMINT,
+      logsBloom blob,
+      status TINYINT,
+      block BIGINT
+    );`); err != nil { return err }
+		if _, err := db.Exec(`CREATE TABLE bor_logs (
+			address varchar(20),
+			topic0 varchar(32),
+			topic1 varchar(32),
+			topic2 varchar(32),
+			topic3 varchar(32),
+			topic4 varchar(32),
+			data blob,
+			transactionHash varchar(32),
+			transactionIndex varcahr(32),
+			blockHash varchar(32),
+			block BIGINT,
+			logIndex MEDIUMINT,
+			PRIMARY KEY (block, logIndex)
+		);`); err != nil { return err }
+		db.Exec(`CREATE INDEX bor_log_block ON bor_logs(block);`)
+		db.Exec(`CREATE INDEX bor_receipt_block ON bor_receipts(block);`)
+		db.Exec(`UPDATE migrations SET version = 11;`)
+	}
 
 	tableName = ""
 	db.QueryRow("SELECT name FROM mempool.sqlite_master WHERE type='table' and name='migrations';").Scan(&tableName)

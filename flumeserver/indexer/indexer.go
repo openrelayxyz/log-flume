@@ -282,7 +282,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *
         for _, txwr := range chainEvent.TxWithReceipts() {
           ch := make(chan common.Address, 1)
           senderMap[txwr.Transaction.Hash()] = ch
-          go func(tx *types.Transaction, ch chan<- common.Address) {
+          go func(tx *types.Transaction, ch chan<- common.Address) { //probably as the first case in this switch
             switch {
             case tx.Type() == types.AccessListTxType:
               signer = types.NewEIP2930Signer(tx.ChainId())
@@ -373,6 +373,33 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *
             ))
           }
         }
+				if chainEvent.BorReceipt != nil {
+					statements = append(statements, applyParameters(
+            "INSERT INTO bor_receipts(block, hash, transactionIndex, logsBloom, status) VALUES (%v, %v, %v, %v, %v)",
+            chainEvent.Block.Number.ToInt().Int64(),
+            chainEvent.BorReceipt.TxHash,
+            chainEvent.BorReceipt.TransactionIndex,
+            getCopy(compress(chainEvent.BorReceipt.Bloom.Bytes())),
+            chainEvent.BorReceipt.Status,
+          ))
+					for _, logRecord := range chainEvent.BorReceipt.Logs {
+						statements = append(statements, applyParameters(
+							"INSERT OR IGNORE INTO bor_logs(address, topic0, topic1, topic2, topic3, data, block, logIndex, transactionHash, transactionIndex, blockhash) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
+							logRecord.Address,
+							getTopicIndex(logRecord.Topics, 0),
+							getTopicIndex(logRecord.Topics, 1),
+							getTopicIndex(logRecord.Topics, 2),
+							getTopicIndex(logRecord.Topics, 3),
+							compress(logRecord.Data),
+							chainEvent.Block.Number.ToInt().Int64(),
+							logRecord.Index,
+							chainEvent.BorReceipt.TxHash,
+							chainEvent.BorReceipt.TransactionIndex,
+							chainEvent.Block.Hash,
+						))
+					}
+					}
+
         // istart := time.Now()
         mut.Lock()
         if _, err := dbtx.Exec(strings.Join(statements, " ; ")); err != nil {
