@@ -2,14 +2,14 @@ package main
 
 import (
   "context"
-  "github.com/NYTimes/gziphandler"
   "os"
-  "github.com/openrelayxyz/flume/flumeserver/flumehandler"
+	"github.com/openrelayxyz/cardinal-rpc/transports"
   "github.com/openrelayxyz/flume/flumeserver/txfeed"
   "github.com/openrelayxyz/flume/flumeserver/datafeed"
   "github.com/openrelayxyz/flume/flumeserver/indexer"
   "github.com/openrelayxyz/flume/flumeserver/migrations"
   "github.com/openrelayxyz/flume/flumeserver/notify"
+	"github.com/openrelayxyz/flume/flumeserver/api"
   gethLog "github.com/ethereum/go-ethereum/log"
   "github.com/ethereum/go-ethereum/event"
   "net/http"
@@ -21,16 +21,13 @@ import (
   "github.com/mattn/go-sqlite3"
   _ "net/http/pprof"
   "database/sql"
-  "os/signal"
-  "syscall"
-  "github.com/rs/cors"
   "sync"
 )
 
 func main() {
 
   // shutdownSync := flag.Bool("shutdownSync", false, "Shutdown server once sync is completed")
-  port := flag.Int("port", 8000, "Serving port")
+  port := flag.Int64("port", 8000, "Serving port")
   pprofPort := flag.Int("pprof-port", 6969, "pprof port")
   minSafeBlock := flag.Int("min-safe-block", 1000000, "Do not start serving if the smallest block exceeds this value")
   shutdownSync := flag.Bool("shutdown.sync", false, "Sync after shutdown")
@@ -52,6 +49,7 @@ func main() {
   mempoolDb := flag.String("mempool-db", "", "A location for the mempool database (default: same dir as main db)")
   mempoolSlots := flag.Int("mempool-size", 4096, "Number of mempool entries before low priced entries get dropped")
   resumptionTimestampMs := flag.Int64("resumption.ts", -1, "Timestamp (in ms) to resume from instead of database timestamp (requires Cardinal source)")
+	concurrency :=flag.Int("concurrency", 16, "Number of concurrent requests to handle")
 
   flag.CommandLine.Parse(os.Args[1:])
 
@@ -152,17 +150,12 @@ func main() {
   mut := &sync.RWMutex{}
   go indexer.ProcessDataFeed(feed, completionFeed, txFeed, logsdb, quit, eip155Block, homesteadBlock, mut, *mempoolSlots)
 
+	tm := transports.NewTransportManager(*concurrency)
+	tm.AddHTTPServer(*port)
+	tm.Register("eth", api.NewLogsAPI(logsdb, chainid))
+	tm.Register("eth", api.NewBlockAPI(logsdb, chainid))
 
-  mux := http.NewServeMux()
-  mux.HandleFunc("/", flumehandler.GetHandler(logsdb, chainid, mut))
-  mux.HandleFunc("/api", flumehandler.GetAPIHandler(logsdb, chainid, mut))
-  s := &http.Server{
-    Addr: fmt.Sprintf(":%v", *port),
-    Handler: gziphandler.GzipHandler(cors.Default().Handler(mux)),
-    ReadHeaderTimeout: 5 * time.Second,
-    IdleTimeout: 120 * time.Second,
-    MaxHeaderBytes: 1 << 20,
-  }
+
   <-feed.Ready()
   if *completionTopic != "" {
     notify.SendKafkaNotifications(completionFeed, *completionTopic)
@@ -173,12 +166,13 @@ func main() {
     log.Fatalf("Earliest log found on block %v. Should be less than or equal to %v", minBlock, *minSafeBlock)
   }
   if !*shutdownSync {
-    sigs := make(chan os.Signal, 1)
-    signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-    go s.ListenAndServe()
-    log.Printf("Serving logs on %v", *port)
-    <-sigs
-    time.Sleep(time.Second)
+		if err := tm.Run(9999); err != nil {
+			quit <- struct{}{}
+		  logsdb.Close()
+		  time.Sleep(time.Second)
+			os.Exit(1)
+		}
+
   }
   quit <- struct{}{}
   logsdb.Close()
