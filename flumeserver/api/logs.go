@@ -2,8 +2,8 @@ package api
 
 import (
 	"sort"
-  "bytes"
-  "github.com/klauspost/compress/zlib"
+  // "bytes"
+  // "github.com/klauspost/compress/zlib"
   "strings"
   // "time"
   // "encoding/json"
@@ -16,8 +16,8 @@ import (
   "github.com/ethereum/go-ethereum/eth/filters"
   // "github.com/ethereum/go-ethereum/rlp"
   // "github.com/ethereum/go-ethereum/rpc"
-  "io/ioutil"
-  "io"
+  // "io/ioutil"
+  // "io"
   "context"
   "fmt"
   "log"
@@ -29,23 +29,6 @@ type LogsAPI struct {
 	network uint64
 }
 
-type sortLogs []*types.Log
-
-
-func (ms sortLogs) Len() int {
-  return len(ms)
-}
-
-func (ms sortLogs) Less(i, j int) bool {
-  if ms[i].BlockNumber != ms[j].BlockNumber {
-    return ms[i].BlockNumber < ms[j].BlockNumber
-  }
-  return ms[i].Index < ms[j].Index
-}
-
-func (ms sortLogs) Swap(i, j int) {
-  ms[i], ms[j] = ms[j], ms[i]
-}
 
 func NewLogsAPI (db *sql.DB, network uint64 ) *LogsAPI {
 	return &LogsAPI{
@@ -55,51 +38,8 @@ func NewLogsAPI (db *sql.DB, network uint64 ) *LogsAPI {
 }
 
 
-func (api *LogsAPI) Hello() string {
+func (api *LogsAPI) Logs() string {
 	return "goodbuy horses"
-}
-
-func getLatestBlock(ctx context.Context, db *sql.DB,) (int64, error) {
-  var result int64
-  var hash []byte
-  err := db.QueryRowContext(ctx, "SELECT max(number), hash FROM blocks;").Scan(&result, &hash)
-  return result, err
-}
-
-
-func trimPrefix(data []byte) ([]byte) {
-  v := bytes.TrimLeft(data, string([]byte{0}))
-  if len(v) == 0 {
-    return []byte{0}
-  }
-  return v
-}
-
-func bytesToAddress(data []byte) (common.Address) {
-  result := common.Address{}
-  copy(result[20 - len(data):], data[:])
-  return result
-}
-func bytesToAddressPtr(data []byte) (*common.Address) {
-  if len(data) == 0 { return nil }
-  result := bytesToAddress(data)
-  return &result
-}
-func bytesToHash(data []byte) (common.Hash) {
-  result := common.Hash{}
-  copy(result[32 - len(data):], data[:])
-  return result
-}
-
-func decompress(data []byte) ([]byte, error) {
-  if len(data) == 0 { return data, nil }
-  r, err := zlib.NewReader(bytes.NewBuffer(data))
-  if err != nil { return []byte{}, err }
-  raw, err := ioutil.ReadAll(r)
-  if err == io.EOF || err == io.ErrUnexpectedEOF {
-    return raw, nil
-  }
-  return raw, err
 }
 
 func (api *LogsAPI) GetLogs(ctx context.Context, crit filters.FilterCriteria) ([]*types.Log, error) {
