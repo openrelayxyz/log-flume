@@ -36,21 +36,6 @@ func NewBlockAPI (db *sql.DB, network uint64 ) *BlockAPI {
 	}
 }
 
-// case "eth_blockNumber": CHECK
-// 	getBlockNumber(r.Context(), w, call, db, chainid)
-// "eth_getBlockByNumber": CHECK
-// 	getBlockByNumber(r.Context(), w, call, db, chainid)
-// case "eth_getBlockByHash": CHECK
-// 	getBlockByHash(r.Context(), w, call, db, chainid)
-// case "eth_getBlockTransactionCountByNumber": CHECK
-// 	getBlockTransactionCountByNumber(r.Context(), w, call, db, chainid)
-// case "eth_getBlockTransactionCountByHash": CHECK
-// 	getBlockTransactionCountByHash(r.Context(), w, call, db, chainid)
-// case "eth_getUncleCountByBlockNumber":
-// 	getUncleCountByBlockNumber(r.Context(), w, call, db, chainid)
-// case "eth_getUncleCountByBlockHash":
-// 	getUncleCountByBlockHash(r.Context(), w, call, db, chainid)
-
 func (api *BlockAPI) Block() string {
 	return "hello Clarice"
 }
@@ -61,13 +46,17 @@ func (api *BlockAPI) Block() string {
 	  return hexutil.Uint64(blockNo), nil
 	}
 
-	func (api *BlockAPI) GetBlockByNumber(ctx context.Context, bkNumber rpc.BlockNumber, txns bool) (interface{}, error) {
-		var err error
-		var includeTxs bool
-	  var blockNumber rpc.BlockNumber
-		includeTxs = txns
-		blockNumber = rpc.BlockNumber(bkNumber)
-	  blocks, err := getBlocks(ctx, api.db, includeTxs, api.network, "number = ?", blockNumber)
+	func (api *BlockAPI) GetBlockByNumber(ctx context.Context, blockNumber rpc.BlockNumber, includeTxns bool) (interface{}, error) {
+
+		if blockNumber.Int64() < 0 {
+	    latestBlock, err := getLatestBlock(ctx, api.db)
+	    if err != nil {
+	      return nil, err
+	    }
+	    blockNumber = rpc.BlockNumber(latestBlock)
+	  }
+
+	  blocks, err := getBlocks(ctx, api.db, includeTxns, api.network, "number = ?", blockNumber)
 	  if err != nil {
 	    return nil, err
 	  }
@@ -78,12 +67,8 @@ func (api *BlockAPI) Block() string {
 	return blockVal, nil
 	}
 
-	func (api *BlockAPI) GetBlockByHash(ctx context.Context, bkHash common.Hash, txns bool) (interface{}, error) {
-		var err error
-		var includeTxs bool
-		var blockHash common.Hash
-		includeTxs = txns
-		blockHash = bkHash
+	func (api *BlockAPI) GetBlockByHash(ctx context.Context, blockHash common.Hash, includeTxs bool) (interface{}, error) {
+
 	  blocks, err := getBlocks(ctx, api.db, includeTxs, api.network, "hash = ?", trimPrefix(blockHash.Bytes()))
 		if err != nil {return nil, err}
 	  var blockVal interface{}
@@ -98,7 +83,13 @@ func (api *BlockAPI) GetBlockTransactionCountByNumber(ctx context.Context, bkNum
   var blockNumber rpc.BlockNumber
 	var count hexutil.Uint64
 
-	blockNumber = rpc.BlockNumber(bkNumber)
+	if blockNumber.Int64() < 0 {
+		latestBlock, err := getLatestBlock(ctx, api.db)
+		if err != nil {
+			return 0, err
+		}
+		blockNumber = rpc.BlockNumber(latestBlock)
+	}
   count, err = txCount(ctx, api.db, "block = ?", blockNumber)
   if err != nil {return 0, err}
 return count, nil
@@ -121,7 +112,13 @@ func (api *BlockAPI) GetUncleCountByBlockNumber(ctx context.Context, bkNumber rp
 	var uncles []byte
 	unclesList := []common.Hash{}
 
-	blockNumber = rpc.BlockNumber(bkNumber)
+	if blockNumber.Int64() < 0 {
+		latestBlock, err := getLatestBlock(ctx, api.db)
+		if err != nil {
+			return nil, err
+		}
+		blockNumber = rpc.BlockNumber(latestBlock)
+	}
   if err := api.db.QueryRowContext(ctx, "SELECT uncles FROM blocks WHERE number = ?", blockNumber).Scan(&uncles); err != nil {
     return nil, err
   }
