@@ -11,11 +11,11 @@ import (
   // "net/http"
   "database/sql"
   // "github.com/ethereum/go-ethereum/common"
-  // "github.com/ethereum/go-ethereum/common/hexutil"
+  "github.com/ethereum/go-ethereum/common/hexutil"
   // "github.com/ethereum/go-ethereum/core/types"
   // "github.com/ethereum/go-ethereum/eth/filters"
   // "github.com/ethereum/go-ethereum/rlp"
-  // "github.com/ethereum/go-ethereum/rpc"
+  "github.com/ethereum/go-ethereum/rpc"
   // "io/ioutil"
   // "io"
   "context"
@@ -29,8 +29,8 @@ type GasAPI struct {
 	network uint64
 }
 
-func NewGasAPI (db *sql.DB, network uint64 ) *LogsAPI {
-	return &LogsAPI{
+func NewGasAPI (db *sql.DB, network uint64 ) *GasAPI {
+	return &GasAPI{
 		db: db,
 		network: network,
 	}
@@ -110,14 +110,135 @@ func (api *GasAPI) nextBaseFee(ctx context.Context) (*big.Int, error) {
 	return new(big.Int).Sub(baseFee, baseFeeDelta), nil
 }
 
-func (api *GasAPI) GasPrice(ctx context.Context) (*big.Int, error) {
+func (api *GasAPI) GasPrice(ctx context.Context) (string, error) {
+	var err error
 	tip, err := api.gasTip(ctx)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	baseFee, err := api.nextBaseFee(ctx)
 	if err != nil {
+		return "", err
+	}
+	sum := big.NewInt(0)
+	sum.Add(tip, baseFee)
+	result := hexutil.EncodeBig(sum)
+	return result, nil
+}
+
+func (api *GasAPI) MaxPriorityFeePerGas(ctx context.Context) (string, error) {
+	var err error
+	tip, err := api.gasTip(ctx)
+	if err != nil {
+		return "", err
+	}
+  result := hexutil.EncodeBig(tip)
+	return result, nil
+}
+
+func (api *GasAPI) FeeHistory(ctx context.Context, blockCount rpc.DecimalOrHex, lastBlock rpc.BlockNumber, rewardPercentiles []float64) (interface{}, error){
+	// var blockCount rpc.DecimalOrHex
+	// var lastBlock rpc.BlockNumber
+	// var rewardPercentiles []float64
+
+	if blockCount > 128 {
+		blockCount = rpc.DecimalOrHex(128)
+	} else if blockCount == 0 {
+		blockCount = rpc.DecimalOrHex(20)
+	}
+
+	if int64(lastBlock) < 0 {
+		latestBlock, err := getLatestBlock(ctx, api.db)
+		if err != nil {
+			return nil, err
+		}
+		lastBlock = rpc.BlockNumber(latestBlock)
+	}
+
+	rows, err := api.db.QueryContext(ctx, "SELECT baseFee, number, gasUsed, gasLimit FROM blocks WHERE number > ? LIMIT ?;", int64(lastBlock) - int64(blockCount), blockCount)
+	if err != nil {
 		return nil, err
 	}
-	return 
+
+	result := &feeHistoryResult{
+		OldestBlock:  (*hexutil.Big)(new(big.Int).SetInt64(int64(lastBlock) - int64(blockCount) + 1)),
+		BaseFee:      make([]*hexutil.Big, int(blockCount) + 1),
+		GasUsedRatio: make([]float64, int(blockCount)),
+	}
+	if len(rewardPercentiles) > 0 {
+		result.Reward = make([][]*hexutil.Big, int(blockCount))
+	}
+	// TODO: Add next base fee to baseFeeList
+	var lastBaseFee *big.Int
+	var lastGasUsed, lastGasLimit int64
+	for i := 0; rows.Next(); i++ {
+		var baseFeeBytes []byte
+		var number uint64
+		var gasUsed, gasLimit sql.NullInt64
+		if err := rows.Scan(&baseFeeBytes, &number, &gasUsed, &gasLimit); err != nil {
+			return nil, err
+		}
+		baseFee := new(big.Int).SetBytes(baseFeeBytes)
+		lastBaseFee = baseFee
+		result.BaseFee[i] = (*hexutil.Big)(baseFee)
+		result.GasUsedRatio[i] = float64(gasUsed.Int64) / float64(gasLimit.Int64)
+		lastGasUsed = gasUsed.Int64
+		lastGasLimit = gasLimit.Int64
+		if len(rewardPercentiles) > 0 {
+			tips := sortGasAndReward{}
+			txRows, err := api.db.QueryContext(ctx, "SELECT gasPrice, gasUsed FROM transactions WHERE block = ?;", number)
+			if err != nil {
+				return nil, err
+			}
+			for txRows.Next() {
+				var gasPrice, txGasUsed uint64
+				if err := txRows.Scan(&gasPrice, &txGasUsed); err != nil {
+					return nil, err
+				}
+				tip := new(big.Int).Sub(new(big.Int).SetUint64(gasPrice), baseFee)
+				tips = append(tips, txGasAndReward{reward: tip, gasUsed: txGasUsed})
+			}
+			if err := txRows.Err(); err != nil {
+				return nil, err
+			}
+			result.Reward[i] = make([]*hexutil.Big, len(rewardPercentiles))
+			if len(tips) == 0 {
+				for j := range rewardPercentiles {
+					result.Reward[i][j] = new(hexutil.Big)
+				}
+				continue
+			}
+			sort.Sort(tips)
+			var txIndex int
+			sumGasUsed := tips[0].gasUsed
+			for j, p := range rewardPercentiles {
+				thresholdGasUsed := uint64(float64(gasUsed.Int64) * p / 100)
+				for sumGasUsed < thresholdGasUsed && txIndex < len(tips) - 1 {
+					txIndex++
+					sumGasUsed += tips[txIndex].gasUsed
+				}
+				result.Reward[i][j] = (*hexutil.Big)(tips[txIndex].reward)
+			}
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+	}
+
+	gasTarget := lastGasLimit / 2
+	if lastGasUsed == gasTarget {
+		result.BaseFee[len(result.BaseFee) - 1] = (*hexutil.Big)(lastBaseFee)
+	} else if lastGasUsed > gasTarget {
+		delta := lastGasUsed - gasTarget
+		baseFeeDelta := new(big.Int).Div(new(big.Int).Div(new(big.Int).Mul(lastBaseFee, new(big.Int).SetInt64(delta)), new(big.Int).SetInt64(gasTarget)), big.NewInt(8))
+		if baseFeeDelta.Cmp(new(big.Int)) == 0 {
+			baseFeeDelta = big.NewInt(1)
+		}
+		result.BaseFee[len(result.BaseFee) - 1] = (*hexutil.Big)(new(big.Int).Add(lastBaseFee, baseFeeDelta))
+	} else {
+		delta := gasTarget - lastGasUsed
+		baseFeeDelta := new(big.Int).Div(new(big.Int).Div(new(big.Int).Mul(lastBaseFee, new(big.Int).SetInt64(delta)), new(big.Int).SetInt64(gasTarget)), big.NewInt(8))
+		result.BaseFee[len(result.BaseFee) - 1] = (*hexutil.Big)(new(big.Int).Sub(lastBaseFee, baseFeeDelta))
+	}
+	return result, nil
 }
