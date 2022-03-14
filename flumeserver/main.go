@@ -154,6 +154,11 @@ func main() {
 	tm.AddHTTPServer(*port)
 	tm.Register("eth", api.NewLogsAPI(logsdb, chainid))
 	tm.Register("eth", api.NewBlockAPI(logsdb, chainid))
+	tm.Register("eth", api.NewGasAPI(logsdb, chainid))
+	tm.Register("eth", api.NewTransactionAPI(logsdb, chainid))
+	tm.Register("flume", api.NewFlumeTokensAPI(logsdb, chainid))
+	tm.Register("flume", api.NewFlumeAPI(logsdb, chainid))
+
 
 
   <-feed.Ready()

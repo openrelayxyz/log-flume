@@ -79,3 +79,8 @@ func (s sortGasAndReward) Swap(i, j int) {
 func (s sortGasAndReward) Less(i, j int) bool {
 	return s[i].reward.Cmp(s[j].reward) < 0
 }
+
+type paginator struct {
+  Items interface{} `json:"items"`
+  Token interface{} `json:"next,omitempty"`
+}
