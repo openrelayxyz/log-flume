@@ -492,12 +492,12 @@ func txCount(ctx context.Context, db *sql.DB, whereClause string, params ...inte
   return hexutil.Uint64(count), err
 }
 
-func returnSingleReceipt(txs []map[string]interface{}) (interface{}, error){
+func returnSingleReceipt(txs []map[string]interface{}) interface{} {
 	var result interface{}
 	if len(txs) > 0 {
 		result = txs[0]
 	} else {
 		result = nil
 	}
-	return result, nil
+	return result
 }

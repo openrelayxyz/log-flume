@@ -37,7 +37,7 @@ func NewBlockAPI (db *sql.DB, network uint64 ) *BlockAPI {
 }
 
 func (api *BlockAPI) Block() string {
-	return "hello Clarice"
+	return "goodbuy horses"
 }
 
 	func (api *BlockAPI) BlockNumber(ctx context.Context) (hexutil.Uint64, error) {
@@ -78,9 +78,8 @@ func (api *BlockAPI) Block() string {
 	return blockVal, nil
 }
 
-func (api *BlockAPI) GetBlockTransactionCountByNumber(ctx context.Context, bkNumber rpc.BlockNumber) (hexutil.Uint64, error) {
+func (api *BlockAPI) GetBlockTransactionCountByNumber(ctx context.Context, blockNumber rpc.BlockNumber) (hexutil.Uint64, error) {
 	var err error
-  var blockNumber rpc.BlockNumber
 	var count hexutil.Uint64
 
 	if blockNumber.Int64() < 0 {
@@ -95,46 +94,41 @@ func (api *BlockAPI) GetBlockTransactionCountByNumber(ctx context.Context, bkNum
 return count, nil
 }
 
-func (api *BlockAPI) GetBlockTransactionCountByHash(ctx context.Context, bkHash common.Hash) (hexutil.Uint64, error) {
-	var err error
-  var blockHash common.Hash
+func (api *BlockAPI) GetBlockTransactionCountByHash(ctx context.Context, blockHash common.Hash) (hexutil.Uint64, error) {
   var count hexutil.Uint64
-	blockHash = bkHash
 
-  if err = api.db.QueryRowContext(ctx, "SELECT count(*) FROM v_transactions WHERE blockHash = ?", trimPrefix(blockHash.Bytes())).Scan(&count); err != nil {
+  if err := api.db.QueryRowContext(ctx, "SELECT count(*) FROM v_transactions WHERE blockHash = ?", trimPrefix(blockHash.Bytes())).Scan(&count); err != nil {
     return 0, err
   }
 	return count, nil
 }
 
-func (api *BlockAPI) GetUncleCountByBlockNumber(ctx context.Context, bkNumber rpc.BlockNumber) ([]common.Hash, error) {
-	var blockNumber rpc.BlockNumber
+func (api *BlockAPI) GetUncleCountByBlockNumber(ctx context.Context, blockNumber rpc.BlockNumber) (hexutil.Uint64, error) {
 	var uncles []byte
 	unclesList := []common.Hash{}
 
 	if blockNumber.Int64() < 0 {
 		latestBlock, err := getLatestBlock(ctx, api.db)
 		if err != nil {
-			return nil, err
+			return 0, err
 		}
 		blockNumber = rpc.BlockNumber(latestBlock)
 	}
   if err := api.db.QueryRowContext(ctx, "SELECT uncles FROM blocks WHERE number = ?", blockNumber).Scan(&uncles); err != nil {
-    return nil, err
+    return 0, err
   }
   rlp.DecodeBytes(uncles, &unclesList)
 
-	return unclesList, nil
+	return hexutil.Uint64(len(unclesList)), nil
+
+	//is supposed to return count len of uncles list both here and below
 }
 
-func (api *BlockAPI) GetUncleCountByBlockHash(ctx context.Context, bkHash common.Hash) ([]common.Hash, error) {
-	var err error
-	var blockHash common.Hash
+func (api *BlockAPI) GetUncleCountByBlockHash(ctx context.Context, blockHash common.Hash) ([]common.Hash, error) {
 	var uncles []byte
 	unclesList := []common.Hash{}
 
-	blockHash = bkHash
-  if err = api.db.QueryRowContext(ctx, "SELECT uncles FROM blocks WHERE hash = ?", trimPrefix(blockHash.Bytes())).Scan(&uncles); err != nil {
+  if err := api.db.QueryRowContext(ctx, "SELECT uncles FROM blocks WHERE hash = ?", trimPrefix(blockHash.Bytes())).Scan(&uncles); err != nil {
     return nil, err
   }
   rlp.DecodeBytes(uncles, &unclesList)

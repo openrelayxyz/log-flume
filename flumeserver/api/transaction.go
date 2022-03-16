@@ -37,7 +37,7 @@ func NewTransactionAPI (db *sql.DB, network uint64 ) *TransactionAPI {
 }
 
 
-func (api *TransactionAPI) Transactions() string {
+func (api *TransactionAPI) Transaction() string {
 	return "goodbuy horses"
 }
 
@@ -53,9 +53,9 @@ func (api *TransactionAPI) GetTransactionByHash(ctx context.Context, txHash comm
 	if err != nil {
     return nil, err
   }
-  returnSingleTransaction(txs)
+  result := returnSingleTransaction(txs)
 
-	return txs, nil
+	return result, nil
 }
 
 func (api *TransactionAPI) GetTransactionByBlockHashAndIndex(ctx context.Context, txHash common.Hash, index hexutil.Uint64) (interface{}, error) {
@@ -94,7 +94,6 @@ func (api *TransactionAPI) GetTransactionReceipt(ctx context.Context, txHash com
 }
 
 func (api *TransactionAPI) GetTransactionCount(ctx context.Context, addr common.Address) (hexutil.Uint64, error){
-	// var err error
 	nonce, err := getSenderNonce(ctx, api.db, addr)
 	if err != nil {
 		return 0, err
