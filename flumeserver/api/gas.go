@@ -16,6 +16,7 @@ import (
   // "github.com/ethereum/go-ethereum/eth/filters"
   // "github.com/ethereum/go-ethereum/rlp"
   "github.com/ethereum/go-ethereum/rpc"
+  eh "github.com/openrelayxyz/flume/flumeserver/errhandle"
   // "io/ioutil"
   // "io"
   "context"
@@ -126,20 +127,16 @@ func (api *GasAPI) GasPrice(ctx context.Context) (string, error) {
 	return result, nil
 }
 
-func (api *GasAPI) MaxPriorityFeePerGas(ctx context.Context) (string, error) {
-	var err error
-	tip, err := api.gasTip(ctx)
-	if err != nil {
-		return "", err
-	}
-  result := hexutil.EncodeBig(tip)
-	return result, nil
+func (api *GasAPI) MaxPriorityFeePerGas(ctx context.Context) (res string, err error) {
+	defer eh.HandleErr(&err)
+	return hexutil.EncodeBig(eh.CheckAndAssign(api.gasTip(ctx))), nil
 }
 
-func (api *GasAPI) FeeHistory(ctx context.Context, blockCount rpc.DecimalOrHex, lastBlock rpc.BlockNumber, rewardPercentiles []float64) (interface{}, error){
+func (api *GasAPI) FeeHistory(ctx context.Context, blockCount rpc.DecimalOrHex, lastBlock rpc.BlockNumber, rewardPercentiles []float64) (res interface{}, err error){
 	// var blockCount rpc.DecimalOrHex
 	// var lastBlock rpc.BlockNumber
 	// var rewardPercentiles []float64
+	defer eh.HandleErr(&err)
 
 	if blockCount > 128 {
 		blockCount = rpc.DecimalOrHex(128)
@@ -155,10 +152,7 @@ func (api *GasAPI) FeeHistory(ctx context.Context, blockCount rpc.DecimalOrHex, 
 		lastBlock = rpc.BlockNumber(latestBlock)
 	}
 
-	rows, err := api.db.QueryContext(ctx, "SELECT baseFee, number, gasUsed, gasLimit FROM blocks WHERE number > ? LIMIT ?;", int64(lastBlock) - int64(blockCount), blockCount)
-	if err != nil {
-		return nil, err
-	}
+	rows := eh.CheckAndAssign(api.db.QueryContext(ctx, "SELECT baseFee, number, gasUsed, gasLimit FROM blocks WHERE number > ? LIMIT ?;", int64(lastBlock) - int64(blockCount), blockCount))
 
 	result := &feeHistoryResult{
 		OldestBlock:  (*hexutil.Big)(new(big.Int).SetInt64(int64(lastBlock) - int64(blockCount) + 1)),
@@ -175,9 +169,7 @@ func (api *GasAPI) FeeHistory(ctx context.Context, blockCount rpc.DecimalOrHex, 
 		var baseFeeBytes []byte
 		var number uint64
 		var gasUsed, gasLimit sql.NullInt64
-		if err := rows.Scan(&baseFeeBytes, &number, &gasUsed, &gasLimit); err != nil {
-			return nil, err
-		}
+		eh.Check(rows.Scan(&baseFeeBytes, &number, &gasUsed, &gasLimit))
 		baseFee := new(big.Int).SetBytes(baseFeeBytes)
 		lastBaseFee = baseFee
 		result.BaseFee[i] = (*hexutil.Big)(baseFee)
@@ -186,21 +178,14 @@ func (api *GasAPI) FeeHistory(ctx context.Context, blockCount rpc.DecimalOrHex, 
 		lastGasLimit = gasLimit.Int64
 		if len(rewardPercentiles) > 0 {
 			tips := sortGasAndReward{}
-			txRows, err := api.db.QueryContext(ctx, "SELECT gasPrice, gasUsed FROM transactions WHERE block = ?;", number)
-			if err != nil {
-				return nil, err
-			}
+			txRows := eh.CheckAndAssign(api.db.QueryContext(ctx, "SELECT gasPrice, gasUsed FROM transactions WHERE block = ?;", number))
 			for txRows.Next() {
 				var gasPrice, txGasUsed uint64
-				if err := txRows.Scan(&gasPrice, &txGasUsed); err != nil {
-					return nil, err
-				}
+				eh.Check(txRows.Scan(&gasPrice, &txGasUsed))
 				tip := new(big.Int).Sub(new(big.Int).SetUint64(gasPrice), baseFee)
 				tips = append(tips, txGasAndReward{reward: tip, gasUsed: txGasUsed})
 			}
-			if err := txRows.Err(); err != nil {
-				return nil, err
-			}
+			eh.Check(txRows.Err())
 			result.Reward[i] = make([]*hexutil.Big, len(rewardPercentiles))
 			if len(tips) == 0 {
 				for j := range rewardPercentiles {
@@ -220,9 +205,7 @@ func (api *GasAPI) FeeHistory(ctx context.Context, blockCount rpc.DecimalOrHex, 
 				result.Reward[i][j] = (*hexutil.Big)(tips[txIndex].reward)
 			}
 		}
-		if err := rows.Err(); err != nil {
-			return nil, err
-		}
+		eh.Check(rows.Err())
 	}
 
 	gasTarget := lastGasLimit / 2
