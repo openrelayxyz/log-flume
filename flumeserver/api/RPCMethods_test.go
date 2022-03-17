@@ -29,22 +29,15 @@ import (
 
 var farewell string = "goodbuy horses"
 
-var l LogsAPI
-// var b BlockAPI
-var g GasAPI
-var tx TransactionAPI
-var f FlumeAPI
-var ft FlumeTokensAPI
 
 
-
-func connectToDatabase() (*sql.DB, error) {
+func connectToDatabase(name string) (*sql.DB, error) {
   sqlitePath := "../../testdata.sqlite"
   // feedURL := "null://"
 
   mempoolDb := filepath.Join(filepath.Dir(sqlitePath), "mempool.sqlite")
 
-  sql.Register("sqlite3_hooked",
+  sql.Register(name,
     &sqlite3.SQLiteDriver{
       ConnectHook: func(conn *sqlite3.SQLiteConn) error {
         conn.Exec(fmt.Sprintf("ATTACH DATABASE '%v' AS 'mempool'; PRAGMA mempool.journal_mode = WAL ; PRAGMA mempool.synchronous = OFF ;", mempoolDb), nil)
@@ -52,19 +45,22 @@ func connectToDatabase() (*sql.DB, error) {
       },
   })
 
-  logsdb, err := sql.Open("sqlite3_hooked", fmt.Sprintf("file:%v?_sync=0&_journal_mode=WAL&_foreign_keys=on", sqlitePath))
-	//we should migrations process
+  logsdb, err := sql.Open(name, fmt.Sprintf("file:%v?_sync=0&_journal_mode=WAL&_foreign_keys=on", sqlitePath))
+	//we should add migrations process
 	if err != nil {
 		return nil, err
 	}
 	return logsdb, nil
 }
 
+
+
 func TestBlockNumber(t *testing.T) {
-	db, err := connectToDatabase()
+	db, err := connectToDatabase("test1")
 	if err != nil {
 		t.Fatal(err.Error())
 	}
+	defer db.Close()
 	b := NewBlockAPI(db, 1)
 	expectedResult, _ := hexutil.DecodeUint64("0xd59f80")
 	test , err:= b.BlockNumber(context.Background())
@@ -72,7 +68,41 @@ func TestBlockNumber(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 	if test != hexutil.Uint64(expectedResult) {
-		t.Fatalf("result not accurate")
+		t.Fatalf("BlockNumber() result not accurate")
+	}
+}
+
+func TestGasPrice(t *testing.T) {
+	db, err := connectToDatabase("test2")
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	defer db.Close()
+	g := NewGasAPI(db, 1)
+	expectedResult  := "0x1f47a69b13"
+	test , err:= g.GasPrice(context.Background())
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	if test != expectedResult {
+		t.Fatalf("GasPrice() result not accurate")
+	}
+}
+
+func TestMaxPriorityFeePerGas(t *testing.T) {
+	db, err := connectToDatabase("test3")
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	defer db.Close()
+	g := NewGasAPI(db, 1)
+	expectedResult  := "0xa84b504a"
+	test , err:= g.MaxPriorityFeePerGas(context.Background())
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	if test != expectedResult {
+		t.Fatalf("GasPrice() result not accurate")
 	}
 }
 
