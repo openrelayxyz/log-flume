@@ -4,6 +4,7 @@ import (
 	"testing"
 	"context"
 	"fmt"
+
 	// "os"
 	// "github.com/openrelayxyz/cardinal-rpc/transports"
 	// "github.com/openrelayxyz/flume/flumeserver/txfeed"
@@ -14,9 +15,11 @@ import (
 	// "github.com/openrelayxyz/flume/flumeserver/api"
 	// gethLog "github.com/ethereum/go-ethereum/log"
 	// "github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	// "net/http"
 	"path/filepath"
+	"encoding/json"
 	// "flag"
 	// "fmt"
 	// "time"
@@ -24,28 +27,28 @@ import (
 	"github.com/mattn/go-sqlite3"
 	_ "net/http/pprof"
 	"database/sql"
-	// "sync"
+	"sync"
 )
 
 var farewell string = "goodbuy horses"
 
+var register sync.Once
 
-
-func connectToDatabase(name string) (*sql.DB, error) {
+func connectToDatabase() (*sql.DB, error) {
   sqlitePath := "../../testdata.sqlite"
   // feedURL := "null://"
 
   mempoolDb := filepath.Join(filepath.Dir(sqlitePath), "mempool.sqlite")
 
-  sql.Register(name,
+  register.Do(func () {sql.Register("sqlite3_hooked",
     &sqlite3.SQLiteDriver{
       ConnectHook: func(conn *sqlite3.SQLiteConn) error {
         conn.Exec(fmt.Sprintf("ATTACH DATABASE '%v' AS 'mempool'; PRAGMA mempool.journal_mode = WAL ; PRAGMA mempool.synchronous = OFF ;", mempoolDb), nil)
         return nil
       },
-  })
+  })})
 
-  logsdb, err := sql.Open(name, fmt.Sprintf("file:%v?_sync=0&_journal_mode=WAL&_foreign_keys=on", sqlitePath))
+  logsdb, err := sql.Open("sqlite3_hooked", fmt.Sprintf("file:%v?_sync=0&_journal_mode=WAL&_foreign_keys=on", sqlitePath))
 	//we should add migrations process
 	if err != nil {
 		return nil, err
@@ -54,9 +57,8 @@ func connectToDatabase(name string) (*sql.DB, error) {
 }
 
 
-
 func TestBlockNumber(t *testing.T) {
-	db, err := connectToDatabase("test1")
+	db, err := connectToDatabase()
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -72,8 +74,51 @@ func TestBlockNumber(t *testing.T) {
 	}
 }
 
+func TestGetBlockByNumber(t *testing.T) {
+	// var hash common.Hash
+	// hash = common.HexToHash("0x8e38b4dbf6b11fcc3b9dee84fb7986e29ca0a02cecd8977c161ff7333329681e")
+	db, err := connectToDatabase()
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	defer db.Close()
+	b := NewBlockAPI(db, 1)
+	// actual , err := b.GetBlockByHash(context.Background(), hash, true)
+	// if err != nil {
+	// 	t.Fatal(err.Error())
+	// }
+	// actualBytes, _ := json.Marshal(actual)
+	// if string(actualBytes) != gBBNExpectedResults[0] {
+	// 	t.Fatal(string(actualBytes), gBBNExpectedResults[0])
+	// }
+	for i, block := range blockNumbers {
+    t.Run("GetBlockByNumber", func(T *testing.T) {
+			actual , err := b.GetBlockByNumber(context.Background(), block, true)
+			if err != nil {
+				t.Fatal(err.Error())
+			}
+			actualBytes, _ := json.Marshal(actual)
+      if string(actualBytes) != gBBNExpectedResults[i] {
+        t.Errorf("Error with block %v", i)
+      }
+    })
+  }
+	for i, hash := range blockHashes {
+		t.Run("GetBlockByHash", func(T *testing.T) {
+			actual , err := b.GetBlockByHash(context.Background(), common.HexToHash(hash), true)
+			if err != nil {
+				t.Fatal(err.Error())
+			}
+			actualBytes, _ := json.Marshal(actual)
+			if string(actualBytes) != gBBNExpectedResults[i] {
+				t.Errorf("Error with block %v", i)
+			}
+		})
+	}
+}
+
 func TestGasPrice(t *testing.T) {
-	db, err := connectToDatabase("test2")
+	db, err := connectToDatabase()
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -89,22 +134,22 @@ func TestGasPrice(t *testing.T) {
 	}
 }
 
-func TestMaxPriorityFeePerGas(t *testing.T) {
-	db, err := connectToDatabase("test3")
-	if err != nil {
-		t.Fatal(err.Error())
-	}
-	defer db.Close()
-	g := NewGasAPI(db, 1)
-	expectedResult  := "0xa84b504a"
-	test , err:= g.MaxPriorityFeePerGas(context.Background())
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-	if test != expectedResult {
-		t.Fatalf("GasPrice() result not accurate")
-	}
-}
+// func TestMaxPriorityFeePerGas(t *testing.T) {
+// 	db, err := connectToDatabase()
+// 	if err != nil {
+// 		t.Fatal(err.Error())
+// 	}
+// 	defer db.Close()
+// 	g := NewGasAPI(db, 1)
+// 	expectedResult  := "0xa84b504a"
+// 	test , err:= g.MaxPriorityFeePerGas(context.Background())
+// 	if err != nil {
+// 		t.Fatalf(err.Error())
+// 	}
+// 	if test != expectedResult {
+// 		t.Fatalf("GasPrice() result not accurate")
+// 	}
+// }
 
 // func TestLogMethod(t *testing.T) {
 // 	var err error

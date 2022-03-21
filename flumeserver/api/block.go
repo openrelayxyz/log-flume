@@ -40,6 +40,10 @@ func (api *BlockAPI) Block() string {
 	return "goodbuy horses"
 }
 
+// func (api *BlockAPI) ReturnBlock(ctx context.Context) [22]rpc.BlockNumber {
+// 	return blockNumbers
+// }
+
 	func (api *BlockAPI) BlockNumber(ctx context.Context) (hexutil.Uint64, error) {
 	  blockNo, err := getLatestBlock(ctx, api.db)
 		if err != nil {return 0, err}
