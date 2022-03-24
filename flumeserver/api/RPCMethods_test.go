@@ -1,6 +1,7 @@
 package api
 
 import (
+	"reflect"
 	"testing"
 	"context"
 	"fmt"
@@ -15,7 +16,7 @@ import (
 	// "github.com/openrelayxyz/flume/flumeserver/api"
 	// gethLog "github.com/ethereum/go-ethereum/log"
 	// "github.com/ethereum/go-ethereum/event"
-	"github.com/ethereum/go-ethereum/common"
+	// "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	// "net/http"
 	"path/filepath"
@@ -24,6 +25,7 @@ import (
 	// "fmt"
 	// "time"
 	// "log"
+	"io/ioutil"
 	"github.com/mattn/go-sqlite3"
 	_ "net/http/pprof"
 	"database/sql"
@@ -74,65 +76,223 @@ func TestBlockNumber(t *testing.T) {
 	}
 }
 
-func TestGetBlockByNumber(t *testing.T) {
-	// var hash common.Hash
-	// hash = common.HexToHash("0x8e38b4dbf6b11fcc3b9dee84fb7986e29ca0a02cecd8977c161ff7333329681e")
-	db, err := connectToDatabase()
+func decompressAndUnmarshal(fileString string, reciever interface{}) (interface{}, error) {
+	file, err := ioutil.ReadFile(fileString)
 	if err != nil {
-		t.Fatal(err.Error())
+		return nil, err
 	}
-	defer db.Close()
-	b := NewBlockAPI(db, 1)
-	// actual , err := b.GetBlockByHash(context.Background(), hash, true)
-	// if err != nil {
-	// 	t.Fatal(err.Error())
-	// }
-	// actualBytes, _ := json.Marshal(actual)
-	// if string(actualBytes) != gBBNExpectedResults[0] {
-	// 	t.Fatal(string(actualBytes), gBBNExpectedResults[0])
-	// }
-	for i, block := range blockNumbers {
-    t.Run("GetBlockByNumber", func(T *testing.T) {
-			actual , err := b.GetBlockByNumber(context.Background(), block, true)
-			if err != nil {
-				t.Fatal(err.Error())
-			}
-			actualBytes, _ := json.Marshal(actual)
-      if string(actualBytes) != gBBNExpectedResults[i] {
-        t.Errorf("Error with block %v", i)
-      }
-    })
-  }
-	for i, hash := range blockHashes {
-		t.Run("GetBlockByHash", func(T *testing.T) {
-			actual , err := b.GetBlockByHash(context.Background(), common.HexToHash(hash), true)
-			if err != nil {
-				t.Fatal(err.Error())
-			}
-			actualBytes, _ := json.Marshal(actual)
-			if string(actualBytes) != gBBNExpectedResults[i] {
-				t.Errorf("Error with block %v", i)
-			}
-		})
-	}
+	result := reciever
+	json.Unmarshal([]byte(file), &reciever)
+	return result, nil
 }
 
-func TestGasPrice(t *testing.T) {
-	db, err := connectToDatabase()
-	if err != nil {
-		t.Fatal(err.Error())
+// func TestGetBlockByNumber(t *testing.T) {
+// 	db, err := connectToDatabase()
+// 	if err != nil {
+// 		t.Fatal(err.Error())
+// 	}
+// 	defer db.Close()
+// 	b := NewBlockAPI(db, 1)
+// 	blocksMap := []*Block{}
+// 	file, _ := ioutil.ReadFile("data.json")
+// 	json.Unmarshal([]byte(file), &blocksMap)
+// 	for i, block := range blockNumbers[5:] {
+// 			actual, err := b.GetBlockByNumber(context.Background(), block, true)
+// 			if err != nil {
+// 				t.Fatal(err.Error())
+// 			}
+// 			if actual != blocksMap[i + 5]{
+// 				t.Errorf("Error with block %v and %v", actual, blocksMap[i])
+// 			}
+// 	}
+// }
+
+// var blocksMap []map[string]hexutil.Uint64
+
+func TestJson(t *testing.T) {
+		db, err := connectToDatabase()
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+		defer db.Close()
+		b := NewBlockAPI(db, 1)
+		var blocksMap []map[string]interface{}
+		raw, _ := jsonDecompress("data.json.gz")
+		json.Unmarshal(raw, &blocksMap)
+		actual, err := b.GetBlockByNumber(context.Background(), blockNumbers[0], true)
+		if err != nil {t.Fatal(err.Error())}
+		if actual["gasUsed"].(string) != blocksMap[0]["gasUsed"].(string) {
+			t.Errorf("%v %v", reflect.TypeOf(actual["gasUsed"]), reflect.TypeOf(blocksMap[5]["gasUsed"]))
 	}
-	defer db.Close()
-	g := NewGasAPI(db, 1)
-	expectedResult  := "0x1f47a69b13"
-	test , err:= g.GasPrice(context.Background())
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-	if test != expectedResult {
-		t.Fatalf("GasPrice() result not accurate")
-	}
+
 }
+
+
+
+
+
+
+
+
+// func TestGetBlockByNumber(t *testing.T) {
+// 	db, err := connectToDatabase()
+// 	if err != nil {
+// 		t.Fatal(err.Error())
+// 	}
+// 	defer db.Close()
+// 	b := NewBlockAPI(db, 1)
+// 	// actual , err := b.GetBlockByHash(context.Background(), hash, true)
+// 	// if err != nil {
+// 	// 	t.Fatal(err.Error())
+// 	// }
+// 	// actualBytes, _ := json.Marshal(actual)
+// 	// if string(actualBytes) != gBBNExpectedResults[0] {
+// 	// 	t.Fatal(string(actualBytes), gBBNExpectedResults[0])
+// 	// }
+// 	for i, block := range blockNumbers {
+//     t.Run("GetBlockByNumber", func(T *testing.T) {
+// 			actual , err := b.GetBlockByNumber(context.Background(), block, true)
+// 			if err != nil {
+// 				t.Fatal(err.Error())
+// 			}
+// 			actualBytes, _ := json.Marshal(actual)
+//       if string(actualBytes) != gBBNExpectedResults[i] {
+//         t.Errorf("Error with block %v", i)
+//       }
+//     })
+//   }
+// 	for i, hash := range blockHashes {
+// 		t.Run("GetBlockByHash", func(T *testing.T) {
+// 			actual , err := b.GetBlockByHash(context.Background(), common.HexToHash(hash), true)
+// 			if err != nil {
+// 				t.Fatal(err.Error())
+// 			}
+// 			actualBytes, _ := json.Marshal(actual)
+// 			if string(actualBytes) != gBBNExpectedResults[i] {
+// 				t.Errorf("Error with block %v", i)
+// 			}
+// 		})
+// 	}
+// }
+// func TestGetBlockTransactionCount(t *testing.T) {
+// 	db, err := connectToDatabase()
+// 	if err != nil {
+// 		t.Fatal(err.Error())
+// 	}
+// 	defer db.Close()
+// 	b := NewBlockAPI(db, 1)
+// 	for i, block := range blockNumbers {
+//     t.Run("GetBlockTransactionCountByNumber", func(T *testing.T) {
+// 			actual , err := b.GetBlockTransactionCountByNumber(context.Background(), block)
+// 			if err != nil {
+// 				t.Fatal(err.Error())
+// 			}
+//       if actual != txCountResults[i] {
+//         t.Errorf("Error with block %v", i)
+//       }
+//     })
+//   }
+// 	for i, hash := range blockHashes {
+//     t.Run("GetBlockTransactionCountByHash", func(T *testing.T) {
+// 			actual , err := b.GetBlockTransactionCountByHash(context.Background(), common.HexToHash(hash))
+// 			if err != nil {
+// 				t.Fatal(err.Error())
+// 			}
+//       if actual != txCountResults[i] {
+//         t.Errorf("Error with block %v", i)
+//       }
+//     })
+//   }
+// }
+//
+// func TestGetUncleCount(t *testing.T) {
+// 	db, err := connectToDatabase()
+// 	if err != nil {
+// 		t.Fatal(err.Error())
+// 	}
+// 	defer db.Close()
+// 	b := NewBlockAPI(db, 1)
+// 	for i, block := range blockNumbers {
+//     t.Run("GetUncleCountByBlockNumber", func(T *testing.T) {
+// 			actual , err := b.GetUncleCountByBlockNumber(context.Background(), block)
+// 			if err != nil {
+// 				t.Fatal(err.Error())
+// 			}
+//       if actual != uncleCountResults[i] {
+//         t.Errorf("Error with block %v", i)
+//       }
+//     })
+//   }
+// 	for i, hash := range blockHashes {
+//     t.Run("GetUncleCountByBlockHash", func(T *testing.T) {
+// 			actual , err := b.GetUncleCountByBlockHash(context.Background(), common.HexToHash(hash))
+// 			if err != nil {
+// 				t.Fatal(err.Error())
+// 			}
+//       if actual != uncleCountResults[i] {
+//         t.Errorf("Error with block %v", i)
+//       }
+//     })
+//   }
+// }
+//
+// func TestGetTransactions(t *testing.T) {
+// 	db, err := connectToDatabase()
+// 	if err != nil {
+// 		t.Fatal(err.Error())
+// 	}
+// 	defer db.Close()
+// 	tx := NewTransactionAPI(db, 1)
+// 	// b := NewBlockAPI(db, 1)
+//
+// 	for i, block := range blockNumbers {
+//     t.Run("GetTransactionByBlockNumberAndIndex", func(T *testing.T) {
+// 			blockMap := Block{}
+// 			json.Unmarshal([]byte(gBBNExpectedResults[i]), &blockMap)
+// 			txns := blockMap.Transactions
+// 			for j, _ := range txns {
+// 				actual , err := tx.GetTransactionByBlockNumberAndIndex(context.Background(), block, hexutil.Uint64(j))
+// 				if err != nil {
+// 					t.Fatal(err.Error())
+// 			}
+// 			if actual != txns[j] {
+// 				t.Errorf("Error with block %v %v %v %v", actual, txns[j], block, j)
+// 			}
+//       }
+//     })
+//   }
+//
+// 	// for i, hash := range blockHashes {
+//   //   t.Run("GetUncleCountByBlockHash", func(T *testing.T) {
+// 	// 		actual , err := b.GetUncleCountByBlockHash(context.Background(), common.HexToHash(hash))
+// 	// 		if err != nil {
+// 	// 			t.Fatal(err.Error())
+// 	// 		}
+//   //     if actual != uncleCountResults[i] {
+//   //       t.Errorf("Error with block %v", i)
+//   //     }
+//   //   })
+//   // }
+// }
+//
+// // GetTransactionByBlockNumberAndIndex
+//
+// func TestGasPrice(t *testing.T) {
+// 	db, err := connectToDatabase()
+// 	if err != nil {
+// 		t.Fatal(err.Error())
+// 	}
+// 	defer db.Close()
+// 	g := NewGasAPI(db, 1)
+// 	expectedResult  := "0x1f47a69b13"
+// 	test , err:= g.GasPrice(context.Background())
+// 	if err != nil {
+// 		t.Fatalf(err.Error())
+// 	}
+// 	if test != expectedResult {
+// 		t.Fatalf("GasPrice() result not accurate")
+// 	}
+// }
 
 // func TestMaxPriorityFeePerGas(t *testing.T) {
 // 	db, err := connectToDatabase()
@@ -148,76 +308,5 @@ func TestGasPrice(t *testing.T) {
 // 	}
 // 	if test != expectedResult {
 // 		t.Fatalf("GasPrice() result not accurate")
-// 	}
-// }
-
-// func TestLogMethod(t *testing.T) {
-// 	var err error
-//
-// 	test := l.Logs()
-//
-// 	if test != farewell {
-// 		t.Fatalf(err.Error())
-// 	}
-// }
-
-// func TestBlockMethod(t *testing.T) {
-// 	var err error
-//
-// 	test := b.Block()
-//
-// 	if test != farewell {
-// 		t.Fatalf(err.Error())
-// 	}
-// }
-
-// func TestGasMethod(t *testing.T) {
-// 	var err error
-//
-// 	test := g.Gas()
-//
-// 	if test != farewell {
-// 		t.Fatalf(err.Error())
-// 	}
-// }
-//
-// func TestTransactionMethod(t *testing.T) {
-// 	var err error
-//
-// 	test := tx.Transaction()
-//
-// 	if test != farewell {
-// 		t.Fatalf(err.Error())
-// 	}
-// }
-//
-// func TestFlumeMethod(t *testing.T) {
-// 	var err error
-//
-// 	test := f.Flume()
-//
-// 	if test != farewell {
-// 		t.Fatalf(err.Error())
-// 	}
-// }
-//
-// func TestFlumeTokensMethod(t *testing.T) {
-// 	var err error
-//
-// 	test := ft.FlumeTokens()
-//
-// 	if test != farewell {
-// 		t.Fatalf(err.Error())
-// 	}
-// }
-
-// func TestGetBlockMethod(t *testing.T) {
-// 	var err error
-// 	var expectedResult
-//
-// 	test := b.BlockNumber()
-//
-// 	if test != expectedResult {
-// 		t.Fatalf(err.Error())
 // 	}
 // }

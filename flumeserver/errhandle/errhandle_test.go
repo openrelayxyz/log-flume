@@ -11,19 +11,6 @@ func giveError(b bool) (int, error) {
   }
   return 1, nil
 }
-
-func BenchmarkHandler50p(b *testing.B){
-  for i := 0; i < b.N; i++ {
-    func() (err error) {
-      defer HandleErr(&err)
-      v := CheckAndAssign(giveError(i % 2 == 0))
-      if v != 1 {
-        b.Errorf("Unexpected v")
-      }
-      return
-    }()
-  }
-}
 func BenchmarkCondition50p(b *testing.B){
   for i := 0; i < b.N; i++ {
     func() (error) {

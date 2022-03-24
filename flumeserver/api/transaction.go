@@ -15,7 +15,7 @@ import (
   // "github.com/ethereum/go-ethereum/core/types"
   // "github.com/ethereum/go-ethereum/eth/filters"
   // "github.com/ethereum/go-ethereum/rlp"
-  // "github.com/ethereum/go-ethereum/rpc"
+  "github.com/ethereum/go-ethereum/rpc"
   // "io/ioutil"
   // "io"
   "context"
@@ -70,15 +70,23 @@ func (api *TransactionAPI) GetTransactionByBlockHashAndIndex(ctx context.Context
 	return txs, nil
 }
 
-func (api *TransactionAPI) GetTransactionByBlockNumberAndIndex(ctx context.Context, blockNumber, index hexutil.Uint64) (interface{}, error) {
+func (api *TransactionAPI) GetTransactionByBlockNumberAndIndex(ctx context.Context, blockNumber rpc.BlockNumber, index hexutil.Uint64) (*rpcTransaction, error) {
+
+	if blockNumber.Int64() < 0 {
+		latestBlock, err := getLatestBlock(ctx, api.db)
+		if err != nil {
+			return nil, err
+		}
+		blockNumber = rpc.BlockNumber(latestBlock)
+	}
 
   txs, err := getTransactionsBlock(ctx, api.db, 0, 1, api.network, "block = ? AND transactionIndex = ?", uint64(blockNumber), uint64(index))
   if err != nil {
     return nil, err
   }
-  returnSingleTransaction(txs)
+  tx :=returnSingleTransaction(txs)
 
-	return txs, nil
+	return tx, nil
 }
 
 func (api *TransactionAPI) GetTransactionReceipt(ctx context.Context, txHash common.Hash) (interface{}, error) {

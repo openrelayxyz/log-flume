@@ -21,6 +21,7 @@ import (
   "context"
   "fmt"
   "log"
+	"compress/gzip"
   // "sync"
 )
 
@@ -30,6 +31,17 @@ func getLatestBlock(ctx context.Context, db *sql.DB,) (int64, error) {
   var hash []byte
   err := db.QueryRowContext(ctx, "SELECT max(number), hash FROM blocks;").Scan(&result, &hash)
   return result, err
+}
+
+func jsonDecompress(fileString string) ([]byte, error) {
+	file, _ := ioutil.ReadFile(fileString)
+  r, err := gzip.NewReader(bytes.NewReader(file))
+  if err != nil { return []byte{}, err }
+  raw, err := ioutil.ReadAll(r)
+  if err == io.EOF || err == io.ErrUnexpectedEOF {
+    return raw, nil
+  }
+  return raw, err
 }
 
 
@@ -78,27 +90,6 @@ func decompress(data []byte) ([]byte, error) {
   return raw, err
 }
 
-type rpcTransaction struct {
-  BlockHash        *common.Hash      `json:"blockHash"`
-  BlockNumber      *hexutil.Big      `json:"blockNumber"`
-  From             common.Address    `json:"from"`
-  Gas              hexutil.Uint64    `json:"gas"`
-  GasPrice         *hexutil.Big      `json:"gasPrice"`
-  GasFeeCap        *hexutil.Big      `json:"maxFeePerGas,omitempty"`
-	GasTipCap        *hexutil.Big      `json:"maxPriorityFeePerGas,omitempty"`
-  Hash             common.Hash       `json:"hash"`
-  Input            hexutil.Bytes     `json:"input"`
-  Nonce            hexutil.Uint64    `json:"nonce"`
-  To               *common.Address   `json:"to"`
-  TransactionIndex *hexutil.Uint64   `json:"transactionIndex"`
-  Value            *hexutil.Big      `json:"value"`
-  Type             hexutil.Uint64    `json:"type"`
-  Accesses         *types.AccessList `json:"accessList,omitempty"`
-  ChainID          *hexutil.Big      `json:"chainId,omitempty"`
-  V                *hexutil.Big      `json:"v"`
-  R                *hexutil.Big      `json:"r"`
-  S                *hexutil.Big      `json:"s"`
-}
 
 func getTransactionsQuery(ctx context.Context, db *sql.DB, offset, limit int, chainid uint64, query string, params ...interface{}) ([]*rpcTransaction, error) {
   rows, err := db.QueryContext(ctx, query, append(params, limit, offset)...)
@@ -476,8 +467,8 @@ func getSenderNonce(ctx context.Context, db *sql.DB, sender common.Address) (hex
   return hexutil.Uint64(count), nil
 }
 
-func returnSingleTransaction(txs []*rpcTransaction) interface{} {
-  var result interface{}
+func returnSingleTransaction(txs []*rpcTransaction) *rpcTransaction {
+  var result *rpcTransaction
   if len(txs) > 0 {
     result = txs[0]
   } else {
