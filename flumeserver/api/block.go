@@ -72,11 +72,11 @@ func (api *BlockAPI) Block() string {
 	}
 
 
-	func (api *BlockAPI) GetBlockByHash(ctx context.Context, blockHash common.Hash, includeTxs bool) (interface{}, error) {
+	func (api *BlockAPI) GetBlockByHash(ctx context.Context, blockHash common.Hash, includeTxs bool) (map[string]interface{}, error) {
 
 	  blocks, err := getBlocks(ctx, api.db, includeTxs, api.network, "hash = ?", trimPrefix(blockHash.Bytes()))
 		if err != nil {return nil, err}
-	  var blockVal interface{}
+	  var blockVal map[string]interface{}
 	  if len(blocks) > 0 {
 	    blockVal = blocks[0]
 	  }

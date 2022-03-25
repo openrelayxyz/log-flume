@@ -1,6 +1,7 @@
 package api
 
 import (
+	"reflect"
 	"sort"
   "bytes"
   "github.com/klauspost/compress/zlib"
@@ -91,11 +92,11 @@ func decompress(data []byte) ([]byte, error) {
 }
 
 
-func getTransactionsQuery(ctx context.Context, db *sql.DB, offset, limit int, chainid uint64, query string, params ...interface{}) ([]*rpcTransaction, error) {
+func getTransactionsQuery(ctx context.Context, db *sql.DB, offset, limit int, chainid uint64, query string, params ...interface{}) ([]map[string]interface{}, error) {
   rows, err := db.QueryContext(ctx, query, append(params, limit, offset)...)
   if err != nil { return nil, err }
   defer rows.Close()
-  results := []*rpcTransaction{}
+  var results []map[string]interface{}
   for rows.Next() {
     var amount, to, from, data, blockHashBytes, txHash, r, s, cAccessListRLP, baseFeeBytes, gasFeeCapBytes, gasTipCapBytes []byte
     var nonce, gasLimit, blockNumber, gasPrice, txIndex, v uint64
@@ -145,33 +146,40 @@ func getTransactionsQuery(ctx context.Context, db *sql.DB, offset, limit int, ch
     case types.LegacyTxType:
       chainID = nil
     }
-    results = append(results, &rpcTransaction{
-      BlockHash: &blockHash,                  //*common.Hash
-      BlockNumber: uintToHexBig(blockNumber), //*hexutil.Big
-      From: bytesToAddress(from),             //common.Address
-      Gas: hexutil.Uint64(gasLimit),          //hexutil.Uint64
-      GasPrice:  uintToHexBig(gasPrice),      //*hexutil.Big
-      GasFeeCap: gasFeeCap,                   //*hexutil.Big
-      GasTipCap: gasTipCap,                   //*hexutil.Big
-      Hash: bytesToHash(txHash),              //common.Hash
-      Input: hexutil.Bytes(inputBytes),       //hexutil.Bytes
-      Nonce: hexutil.Uint64(nonce),           //hexutil.Uint64
-      To: bytesToAddressPtr(to),              //*common.Address
-      TransactionIndex: &txIndexHex,          //*hexutil.Uint64
-      Value: bytesToHexBig(amount),           //*hexutil.Big
-      V: uintToHexBig(v),                     //*hexutil.Big
-      R: bytesToHexBig(r),                    //*hexutil.Big
-      S: bytesToHexBig(s),                    //*hexutil.Big
-      Type: hexutil.Uint64(txType),
-      ChainID: chainID,
-      Accesses: accessList,
+    results = append(results, map[string]interface{}{
+      "blockHash": &blockHash,                  //*common.Hash
+      "blockNumber": uintToHexBig(blockNumber), //*hexutil.Big
+      "from": bytesToAddress(from),             //common.Address
+      "gas": hexutil.Uint64(gasLimit),          //hexutil.Uint64
+      "gasPrice":  uintToHexBig(gasPrice),      //*hexutil.Big
+      "gasFeeCap": gasFeeCap,                   //*hexutil.Big
+      "gasTipCap": gasTipCap,                   //*hexutil.Big
+      "hash": bytesToHash(txHash),              //common.Hash
+      "input": hexutil.Bytes(inputBytes),       //hexutil.Bytes
+      "nonce": hexutil.Uint64(nonce),           //hexutil.Uint64
+      "to": bytesToAddressPtr(to),              //*common.Address
+      "transactionIndex": &txIndexHex,          //*hexutil.Uint64
+      "value": bytesToHexBig(amount),           //*hexutil.Big
+      "v": uintToHexBig(v),                     //*hexutil.Big
+      "r": bytesToHexBig(r),                    //*hexutil.Big
+      "s": bytesToHexBig(s),                    //*hexutil.Big
+      "type": hexutil.Uint64(txType),
+      "chainID": chainID,
+      "accesses": accessList,
     })
   }
   if err := rows.Err(); err != nil { return nil, err }
+	for _, item := range results{
+		for k, v := range item {
+				if k == "chainID" || v == nil {
+						delete(item, k)
+				}
+			}
+	}
   return results, nil
 }
 
-func getTransactionsBlock(ctx context.Context, db *sql.DB, offset, limit int, chainid uint64, whereClause string, params ...interface{}) ([]*rpcTransaction, error) {
+func getTransactionsBlock(ctx context.Context, db *sql.DB, offset, limit int, chainid uint64, whereClause string, params ...interface{}) ([]map[string]interface{}, error) {
 	query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gas, transactions.gasPrice, transactions.hash, transactions.input, transactions.nonce, transactions.recipient, transactions.transactionIndex, transactions.value, transactions.v, transactions.r, transactions.s, transactions.sender, transactions.type, transactions.access_list, blocks.baseFee, transactions.gasFeeCap, transactions.gasTipCap FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE %v ORDER BY transactions.transactionIndex LIMIT ? OFFSET ?;", whereClause)
 	return getTransactionsQuery(ctx, db, offset, limit, chainid, query, params...)
 }
@@ -242,12 +250,12 @@ func getBlocks(ctx context.Context, db *sql.DB, includeTxs bool, chainid uint64,
   return results, nil
 }
 
-func getPendingTransactions(ctx context.Context, db *sql.DB, offset, limit int, chainid uint64, whereClause string, params ...interface{}) ([]*rpcTransaction, error) {
+func getPendingTransactions(ctx context.Context, db *sql.DB, offset, limit int, chainid uint64, whereClause string, params ...interface{}) ([]map[string]interface{}, error) {
   query := fmt.Sprintf("SELECT transactions.gas, transactions.gasPrice, transactions.hash, transactions.input, transactions.nonce, transactions.recipient, transactions.value, transactions.v, transactions.r, transactions.s, transactions.sender, transactions.type, transactions.access_list, transactions.gasFeeCap, transactions.gasTipCap FROM mempool.transactions WHERE %v LIMIT ? OFFSET ?;", whereClause)
   rows, err := db.QueryContext(ctx, query, append(params, limit, offset)...)
   if err != nil { return nil, err }
   defer rows.Close()
-  results := []*rpcTransaction{}
+  results := []map[string]interface{}{}
   for rows.Next() {
     var amount, to, from, data, txHash, r, s, cAccessListRLP, gasFeeCapBytes, gasTipCapBytes []byte
     var nonce, gasLimit, gasPrice, v uint64
@@ -291,30 +299,55 @@ func getPendingTransactions(ctx context.Context, db *sql.DB, offset, limit int, 
     case types.LegacyTxType:
       chainID = nil
     }
-    results = append(results, &rpcTransaction{
-      From: bytesToAddress(from),             //common.Address
-      Gas: hexutil.Uint64(gasLimit),          //hexutil.Uint64
-      GasPrice:  uintToHexBig(gasPrice),      //*hexutil.Big
-      GasFeeCap: gasFeeCap,                   //*hexutil.Big
-      GasTipCap: gasTipCap,                   //*hexutil.Big
-      Hash: bytesToHash(txHash),              //common.Hash
-      Input: hexutil.Bytes(inputBytes),       //hexutil.Bytes
-      Nonce: hexutil.Uint64(nonce),           //hexutil.Uint64
-      To: bytesToAddressPtr(to),              //*common.Address
-      Value: bytesToHexBig(amount),           //*hexutil.Big
-      V: uintToHexBig(v),                     //*hexutil.Big
-      R: bytesToHexBig(r),                    //*hexutil.Big
-      S: bytesToHexBig(s),                    //*hexutil.Big
-      Type: hexutil.Uint64(txType),
-      ChainID: chainID,
-      Accesses: accessList,
-    })
+    // results = append(results, &rpcTransaction{
+    //   From: bytesToAddress(from),             //common.Address
+    //   Gas: hexutil.Uint64(gasLimit),          //hexutil.Uint64
+    //   GasPrice:  uintToHexBig(gasPrice),      //*hexutil.Big
+    //   GasFeeCap: gasFeeCap,                   //*hexutil.Big
+    //   GasTipCap: gasTipCap,                   //*hexutil.Big
+    //   Hash: bytesToHash(txHash),              //common.Hash
+    //   Input: hexutil.Bytes(inputBytes),       //hexutil.Bytes
+    //   Nonce: hexutil.Uint64(nonce),           //hexutil.Uint64
+    //   To: bytesToAddressPtr(to),              //*common.Address
+    //   Value: bytesToHexBig(amount),           //*hexutil.Big
+    //   V: uintToHexBig(v),                     //*hexutil.Big
+    //   R: bytesToHexBig(r),                    //*hexutil.Big
+    //   S: bytesToHexBig(s),                    //*hexutil.Big
+    //   Type: hexutil.Uint64(txType),
+    //   ChainID: chainID,
+    //   Accesses: accessList,
+    // })
+		results = append(results, map[string]interface{}{
+			"from": bytesToAddress(from),             //common.Address
+			"gas": hexutil.Uint64(gasLimit),          //hexutil.Uint64
+			"gasPrice":  uintToHexBig(gasPrice),      //*hexutil.Big
+			"gasFeeCap": gasFeeCap,                   //*hexutil.Big
+			"gasTipCap": gasTipCap,                   //*hexutil.Big
+			"hash": bytesToHash(txHash),              //common.Hash
+			"input": hexutil.Bytes(inputBytes),       //hexutil.Bytes
+			"nonce": hexutil.Uint64(nonce),           //hexutil.Uint64
+			"to": bytesToAddressPtr(to),              //*common.Address
+			"value": bytesToHexBig(amount),           //*hexutil.Big
+			"v": uintToHexBig(v),                     //*hexutil.Big
+			"r": bytesToHexBig(r),                    //*hexutil.Big
+			"s": bytesToHexBig(s),                    //*hexutil.Big
+			"type": hexutil.Uint64(txType),
+			"chainID": chainID,
+			"accesses": accessList,
+		})
   }
   if err := rows.Err(); err != nil { return nil, err }
+	for _, item := range results{
+		for k, v := range item {
+			 	if reflect.ValueOf(v).IsZero() {
+					 	delete(item, k)
+			 	}
+	 		}
+	}
   return results, nil
 }
 
-func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, chainid uint64, whereClause string, params ...interface{}) ([]*rpcTransaction, error) {
+func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, chainid uint64, whereClause string, params ...interface{}) ([]map[string]interface{}, error) {
 	query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gas, transactions.gasPrice, transactions.hash, transactions.input, transactions.nonce, transactions.recipient, transactions.transactionIndex, transactions.value, transactions.v, transactions.r, transactions.s, transactions.sender, transactions.type, transactions.access_list, blocks.baseFee, transactions.gasFeeCap, transactions.gasTipCap FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE transactions.rowid IN (SELECT transactions.rowid FROM transactions INNER JOIN blocks ON transactions.block = blocks.number WHERE %v) LIMIT ? OFFSET ?;", whereClause)
 	return getTransactionsQuery(ctx, db, offset, limit, chainid, query, params...)
 }
@@ -467,8 +500,8 @@ func getSenderNonce(ctx context.Context, db *sql.DB, sender common.Address) (hex
   return hexutil.Uint64(count), nil
 }
 
-func returnSingleTransaction(txs []*rpcTransaction) *rpcTransaction {
-  var result *rpcTransaction
+func returnSingleTransaction(txs []map[string]interface{}) map[string]interface{} {
+  var result map[string]interface{}
   if len(txs) > 0 {
     result = txs[0]
   } else {
