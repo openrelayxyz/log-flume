@@ -51,11 +51,13 @@ func (feed *dbDataFeed) subscribe() {
   OrderedProcessor(feed.startingBlock, 10, func(n uint64, ch chan<- interface{}, quit func()) {
     h := rawdb.ReadCanonicalHash(feed.db, n)
     if h == (common.Hash{}) {
+			log.Printf("no cannonical hash for block %v", n)
       quit()
       return
     }
     block := rawdb.ReadBlock(feed.db, h, n)
     if block == nil {
+			log.Printf("failed to feed block %v", n)
       quit()
       return
     }
@@ -106,7 +108,7 @@ func (feed *dbDataFeed) subscribe() {
       receiptMeta: make(map[common.Hash]*receiptMeta),
       Commit: func(*sql.Tx) (error) { return nil },
     }
-		ce.BorReceipt = rawdb.ReadBorReceipt(feed.db, h, n) 
+		ce.BorReceipt = rawdb.ReadBorReceipt(feed.db, h, n)
 		for _, receipt := range receipts {
       ce.receiptMeta[receipt.TxHash] = &receiptMeta{
         contractAddress: receipt.ContractAddress,
