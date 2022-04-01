@@ -1,6 +1,7 @@
 package api
 
 import (
+	"os"
 	"reflect"
 	"sort"
   "bytes"
@@ -22,7 +23,7 @@ import (
   "context"
   "fmt"
   "log"
-	"compress/gzip"
+	// "compress/gzip"
   // "sync"
 )
 
@@ -34,17 +35,29 @@ func getLatestBlock(ctx context.Context, db *sql.DB,) (int64, error) {
   return result, err
 }
 
-func jsonDecompress(fileString string) ([]byte, error) {
-	file, _ := ioutil.ReadFile(fileString)
-  r, err := gzip.NewReader(bytes.NewReader(file))
-  if err != nil { return []byte{}, err }
-  raw, err := ioutil.ReadAll(r)
-  if err == io.EOF || err == io.ErrUnexpectedEOF {
-    return raw, nil
-  }
-  return raw, err
+func testingJson(fileString string) ([]byte, error) {
+	jsonFile, err := os.Open(fileString)
+	defer jsonFile.Close()
+	if err != nil {
+    	return nil, err
+	}
+	byteValue, err := ioutil.ReadAll(jsonFile)
+	if err != nil {
+		return nil, err
+	}
+	return byteValue, nil
 }
 
+func decompress(data []byte) ([]byte, error) {
+	if len(data) == 0 { return data, nil }
+	r, err := zlib.NewReader(bytes.NewBuffer(data))
+	if err != nil { return []byte{}, err }
+	raw, err := ioutil.ReadAll(r)
+	if err == io.EOF || err == io.ErrUnexpectedEOF {
+		return raw, nil
+	}
+	return raw, err
+}
 
 func trimPrefix(data []byte) ([]byte) {
   v := bytes.TrimLeft(data, string([]byte{0}))
@@ -80,16 +93,6 @@ func bytesToHexBig(a []byte) *hexutil.Big {
   return &x
 }
 
-func decompress(data []byte) ([]byte, error) {
-  if len(data) == 0 { return data, nil }
-  r, err := zlib.NewReader(bytes.NewBuffer(data))
-  if err != nil { return []byte{}, err }
-  raw, err := ioutil.ReadAll(r)
-  if err == io.EOF || err == io.ErrUnexpectedEOF {
-    return raw, nil
-  }
-  return raw, err
-}
 
 
 func getTransactionsQuery(ctx context.Context, db *sql.DB, offset, limit int, chainid uint64, query string, params ...interface{}) ([]map[string]interface{}, error) {
@@ -152,8 +155,8 @@ func getTransactionsQuery(ctx context.Context, db *sql.DB, offset, limit int, ch
       "from": bytesToAddress(from),             //common.Address
       "gas": hexutil.Uint64(gasLimit),          //hexutil.Uint64
       "gasPrice":  uintToHexBig(gasPrice),      //*hexutil.Big
-      "gasFeeCap": gasFeeCap,                   //*hexutil.Big
-      "gasTipCap": gasTipCap,                   //*hexutil.Big
+      "maxFeePerGas": gasFeeCap,                   //*hexutil.Big
+      "maxPriorityFeePerGas": gasTipCap,                   //*hexutil.Big
       "hash": bytesToHash(txHash),              //common.Hash
       "input": hexutil.Bytes(inputBytes),       //hexutil.Bytes
       "nonce": hexutil.Uint64(nonce),           //hexutil.Uint64
@@ -165,17 +168,21 @@ func getTransactionsQuery(ctx context.Context, db *sql.DB, offset, limit int, ch
       "s": bytesToHexBig(s),                    //*hexutil.Big
       "type": hexutil.Uint64(txType),
       "chainID": chainID,
-      "accesses": accessList,
+      "accessList": accessList,
     })
   }
   if err := rows.Err(); err != nil { return nil, err }
-	for _, item := range results{
-		for k, v := range item {
-				if k == "chainID" || v == nil {
+	keys := []string{"chainID", "accessList", "maxFeePerGas", "maxPriorityFeePerGas"}
+	for _, key := range keys {
+		for _, item := range results{
+			for k, v := range item {
+				if k == key || v == nil {
 						delete(item, k)
 				}
 			}
+		}
 	}
+
   return results, nil
 }
 
@@ -333,7 +340,7 @@ func getPendingTransactions(ctx context.Context, db *sql.DB, offset, limit int, 
 			"s": bytesToHexBig(s),                    //*hexutil.Big
 			"type": hexutil.Uint64(txType),
 			"chainID": chainID,
-			"accesses": accessList,
+			"accessList": accessList,
 		})
   }
   if err := rows.Err(); err != nil { return nil, err }
@@ -516,8 +523,8 @@ func txCount(ctx context.Context, db *sql.DB, whereClause string, params ...inte
   return hexutil.Uint64(count), err
 }
 
-func returnSingleReceipt(txs []map[string]interface{}) interface{} {
-	var result interface{}
+func returnSingleReceipt(txs []map[string]interface{}) map[string]interface{} {
+	var result map[string]interface{}
 	if len(txs) > 0 {
 		result = txs[0]
 	} else {
