@@ -61,7 +61,7 @@ func connectToDatabase() (*sql.DB, error) {
 	return logsdb, nil
 }
 
-func jsonDecompress() ([]map[string]json.RawMessage, error) {
+func blocksDecompress() ([]map[string]json.RawMessage, error) {
 	file, _ := ioutil.ReadFile("data2.json.gz")
   r, err := gzip.NewReader(bytes.NewReader(file))
 	if err != nil {return nil, err }
@@ -69,11 +69,9 @@ func jsonDecompress() ([]map[string]json.RawMessage, error) {
   if err == io.EOF || err == io.ErrUnexpectedEOF {
     return nil, err
   }
-
-	var blocksMap []map[string]json.RawMessage
-	json.Unmarshal(raw, &blocksMap)
-
-  return blocksMap, nil
+	var blocksObject []map[string]json.RawMessage
+	json.Unmarshal(raw, &blocksObject)
+  return blocksObject, nil
 }
 
 func receiptsDecompress() ([]map[string]json.RawMessage, error) {
@@ -84,17 +82,14 @@ func receiptsDecompress() ([]map[string]json.RawMessage, error) {
   if err == io.EOF || err == io.ErrUnexpectedEOF {
     return nil, err
   }
-
-	var receiptsMap []map[string]json.RawMessage
-	json.Unmarshal(raw, &receiptsMap)
-
-  return receiptsMap, nil
+	var receiptsObject []map[string]json.RawMessage
+	json.Unmarshal(raw, &receiptsObject)
+  return receiptsObject, nil
 }
 
-func getBlockNumbers() []rpc.BlockNumber {
-	blocksMap, _ := jsonDecompress()
+func getBlockNumbers(jsonBlockObject []map[string]json.RawMessage) []rpc.BlockNumber {
 	result := []rpc.BlockNumber{}
-	for _, block := range blocksMap {
+	for _, block := range jsonBlockObject {
 		var x rpc.BlockNumber
 		json.Unmarshal(block["number"], &x)
 		result = append(result, x)
@@ -102,10 +97,9 @@ func getBlockNumbers() []rpc.BlockNumber {
 	return result
 }
 
-func getBlockHashes() []common.Hash {
-	blocksMap, _ := jsonDecompress()
+func getBlockHashes(jsonBlockObject []map[string]json.RawMessage) []common.Hash {
 	result := []common.Hash{}
-	for _, block := range blocksMap {
+	for _, block := range jsonBlockObject {
 		var x common.Hash
 		json.Unmarshal(block["hash"], &x)
 		result = append(result, x)
@@ -137,9 +131,9 @@ func TestBlockAPI(t *testing.T) {
 		}
 		defer db.Close()
 		b := NewBlockAPI(db, 1)
-		blocksMap, _ := jsonDecompress()
+		blockObject, _ := blocksDecompress()
 		// blockNumbers := getBlockNumbers()
-		for i, block := range blocksMap {
+		for i, block := range blockObject {
 			var n rpc.BlockNumber
 			json.Unmarshal(block["number"], &n)
 			actual, err := b.GetBlockByNumber(context.Background(), n, true)
@@ -159,7 +153,7 @@ func TestBlockAPI(t *testing.T) {
 							var y interface{}
 							json.Unmarshal(block[k], &x)
 							json.Unmarshal(data, &y)
-							t.Fatalf("block values are different %v, %v, %v '%v'", i, len(blocksMap), string(data), string(block[k]))
+							t.Fatalf("block values are different %v, %v, %v '%v'", i, len(blockObject), string(data), string(block[k]))
 					}
 				}
 			}

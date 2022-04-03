@@ -80,8 +80,8 @@ func (s sortGasAndReward) Less(i, j int) bool {
 	return s[i].reward.Cmp(s[j].reward) < 0
 }
 
-type paginator struct {
-  Items interface{} `json:"items"`
+type paginator[T any] struct {
+  Items []T `json:"items"`
   Token interface{} `json:"next,omitempty"`
 }
 

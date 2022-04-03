@@ -39,10 +39,9 @@ import (
 
 
 
-func getTransactionsForTesting() []map[string]json.RawMessage {
-	blocksMap, _  := jsonDecompress()
+func getTransactionsForTesting(blockObject []map[string]json.RawMessage) []map[string]json.RawMessage {
 	result := []map[string]json.RawMessage{}
-	for _, block := range blocksMap {
+	for _, block := range blockObject {
 		txns := []map[string]json.RawMessage{}
 		json.Unmarshal(block["transactions"], &txns)
 		result = append(result, txns...)
@@ -50,10 +49,9 @@ func getTransactionsForTesting() []map[string]json.RawMessage {
 	return result
 }
 
-func getTransactionsListsForTesting() [][]map[string]json.RawMessage {
-	blocksMap, _  := jsonDecompress()
+func getTransactionsListsForTesting(blockObject []map[string]json.RawMessage) [][]map[string]json.RawMessage {
 	result := [][]map[string]json.RawMessage{}
-	for _, block := range blocksMap {
+	for _, block := range blockObject {
 		txns := []map[string]json.RawMessage{}
 		json.Unmarshal(block["transactions"], &txns)
 		result = append(result, txns)
@@ -61,10 +59,9 @@ func getTransactionsListsForTesting() [][]map[string]json.RawMessage {
 	return result
 }
 
-func getTransactionHashes() []common.Hash {
-	blocksMap, _  := jsonDecompress()
+func getTransactionHashes(blockObject []map[string]json.RawMessage) []common.Hash {
 	result := []common.Hash{}
-	for _, block := range blocksMap {
+	for _, block := range blockObject {
 		txnLevel := []map[string]interface{}{}
 		json.Unmarshal(block["transactions"], &txnLevel)
 		if len(txnLevel) > 0 {
@@ -84,13 +81,13 @@ func TestTransactionAPI(t *testing.T) {
 	}
 	defer db.Close()
 	tx := NewTransactionAPI(db, 1)
-	blocksMap, _  := jsonDecompress()
+	blockObject, _  := blocksDecompress()
 	// blockHashes := getBlockHashes()
 	// txIndexes := getTransactionIndexes()
 	receiptsMap, _  := receiptsDecompress()
-	transactionLists := getTransactionsListsForTesting()
-	transactions := getTransactionsForTesting()
-	txHashes := getTransactionHashes()
+	transactionLists := getTransactionsListsForTesting(blockObject)
+	transactions := getTransactionsForTesting(blockObject)
+	txHashes := getTransactionHashes(blockObject)
 
 	for i, hash := range txHashes {
 		t.Run(fmt.Sprintf("GetTransactionByHash %v", i), func(t *testing.T){
@@ -121,7 +118,7 @@ func TestTransactionAPI(t *testing.T) {
 			}
 		})
 	}
-	for i, block := range blocksMap{
+	for i, block := range blockObject{
 		t.Run(fmt.Sprintf("GetTransactionByBlockHashAndIndex %v", i), func(t *testing.T){
 			var h common.Hash
 			json.Unmarshal(block["hash"], &h)

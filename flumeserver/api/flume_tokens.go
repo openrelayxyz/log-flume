@@ -19,7 +19,7 @@ import (
   // "io/ioutil"
   // "io"
   "context"
-  // "fmt"
+  "fmt"
   "log"
   // "sync"
 )
@@ -40,7 +40,7 @@ func (api *FlumeTokensAPI) FlumeTokens() string {
 	return "goodbuy horses"
 }
 
-func (api *FlumeTokensAPI) GetERC20ByAccount(ctx context.Context, addr common.Address, offset int) (interface{}, error) {
+func (api *FlumeTokensAPI) GetERC20ByAccount(ctx context.Context, addr common.Address, offset int) (*paginator[common.Address], error) {
 
   tctx, cancel := context.WithTimeout(ctx, 5 * time.Second)
   defer cancel()
@@ -67,14 +67,14 @@ func (api *FlumeTokensAPI) GetERC20ByAccount(ctx context.Context, addr common.Ad
     log.Printf("Error scanning: %v", err.Error())
     return nil, err
   }
-  result := paginator{Items: addresses}
+  result := paginator[common.Address]{Items: addresses}
   if len(addresses) == 1000 {
     result.Token = offset + len(addresses)
   }
-return result, nil
+return &result, nil
 }
 
-func (api *FlumeTokensAPI) GetERC20Holders(ctx context.Context, addr common.Address, offset int) (interface{}, error) {
+func (api *FlumeTokensAPI) GetERC20Holders(ctx context.Context, addr common.Address, offset int) (*paginator[common.Address], error) {
 
   tctx, cancel := context.WithTimeout(ctx, 5 * time.Second)
   defer cancel()
@@ -99,11 +99,11 @@ func (api *FlumeTokensAPI) GetERC20Holders(ctx context.Context, addr common.Addr
   }
   if err := rows.Err(); err != nil {
     log.Printf("Error scanning: %v", err.Error())
-    return "database error", nil
+    return nil, fmt.Errorf("database error")
   }
-  result := paginator{Items: addresses}
+  result := paginator[common.Address]{Items: addresses}
   if len(addresses) == 1000 {
     result.Token = offset + len(addresses)
   }
-	return result, nil
+	return &result, nil
 }

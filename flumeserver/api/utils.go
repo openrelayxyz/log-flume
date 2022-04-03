@@ -2,7 +2,7 @@ package api
 
 import (
 	"os"
-	"reflect"
+	// "reflect"
 	"sort"
   "bytes"
   "github.com/klauspost/compress/zlib"
@@ -292,6 +292,7 @@ func getPendingTransactions(ctx context.Context, db *sql.DB, offset, limit int, 
     if err != nil { return nil, err }
     var accessList *types.AccessList
     var chainID, gasFeeCap, gasTipCap *hexutil.Big
+		//move below and assign to mao conditionally 
     switch txType {
     case types.AccessListTxType:
       accessList = &types.AccessList{}
@@ -344,12 +345,15 @@ func getPendingTransactions(ctx context.Context, db *sql.DB, offset, limit int, 
 		})
   }
   if err := rows.Err(); err != nil { return nil, err }
-	for _, item := range results{
-		for k, v := range item {
-			 	if reflect.ValueOf(v).IsZero() {
-					 	delete(item, k)
-			 	}
-	 		}
+	keys := []string{"chainID", "accessList", "maxFeePerGas", "maxPriorityFeePerGas"}
+	for _, key := range keys {
+		for _, item := range results{
+			for k, v := range item {
+				if k == key || v == nil {
+						delete(item, k)
+				}
+			}
+		}
 	}
   return results, nil
 }

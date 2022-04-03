@@ -36,11 +36,9 @@ func NewFlumeAPI (db *sql.DB, network uint64 ) *FlumeAPI {
 	}
 }
 
-func (api *FlumeAPI) Flume() string {
-	return "goodbuy horses"
-}
+//offset should be a pointer to an int so that it is optional
 
-func (api *FlumeAPI) GetTransactionsBySender(ctx context.Context, address common.Address, offset int) (interface{}, error) {
+func (api *FlumeAPI) GetTransactionsBySender(ctx context.Context, address common.Address, offset int) (*paginator[map[string]interface{}], error) {
 
   txs, err := getPendingTransactions(ctx, api.db, offset, 1000, api.network, "sender = ?", trimPrefix(address.Bytes()))
   if err != nil {
@@ -53,29 +51,29 @@ func (api *FlumeAPI) GetTransactionsBySender(ctx context.Context, address common
     return nil, err
   }
   txs = append(txs, ctxs...)
-  result := paginator{Items: txs}
+  result := paginator[map[string]interface{}]{Items: txs}
   if len(txs) >= 1000 {
     result.Token = offset + len(txs)
   }
-  return result, nil
+  return &result, nil
 }
 
-func (api *FlumeAPI) GetTransactionReceiptsBySender(ctx context.Context, address common.Address, offset int) (interface{}, error) {
+func (api *FlumeAPI) GetTransactionReceiptsBySender(ctx context.Context, address common.Address, offset int) (*paginator[map[string]interface{}], error) {
 
   receipts, err := getTransactionReceipts(ctx, api.db, offset, 1000, api.network, "sender = ?", trimPrefix(address.Bytes()))
   if err != nil {
     log.Printf("Error getting receipts: %v", err.Error())
     return nil, err
   }
-  result := paginator{Items: receipts}
+  result := paginator[map[string]interface{}]{Items: receipts}
   if len(receipts) == 1000 {
     result.Token = offset + len(receipts)
   }
 
-	return result, nil
+	return &result, nil
 }
 
-func (api *FlumeAPI) GetTransactionsByRecipient(ctx context.Context, address common.Address, offset int) (interface{}, error) {
+func (api *FlumeAPI) GetTransactionsByRecipient(ctx context.Context, address common.Address, offset int) (*paginator[map[string]interface{}], error) {
 
   txs, err := getPendingTransactions(ctx, api.db, offset, 1000, api.network, "recipient = ?", trimPrefix(address.Bytes()))
   if err != nil {
@@ -88,28 +86,28 @@ func (api *FlumeAPI) GetTransactionsByRecipient(ctx context.Context, address com
     return nil, err
   }
   txs = append(txs, ctxs...)
-  result := paginator{Items: txs}
+  result := paginator[map[string]interface{}]{Items: txs}
   if len(txs) >= 1000 {
     result.Token = offset + len(txs)
   }
-  return result, nil
+  return &result, nil
 }
 
-func (api *FlumeAPI) GetTransactionReceiptsByRecipient(ctx context.Context, address common.Address, offset int) (interface{}, error) {
+func (api *FlumeAPI) GetTransactionReceiptsByRecipient(ctx context.Context, address common.Address, offset int) (*paginator[map[string]interface{}], error) {
 
   receipts, err := getTransactionReceipts(ctx, api.db, offset, 1000, api.network, "recipient = ?", trimPrefix(address.Bytes()))
   if err != nil {
     log.Printf("Error getting receipts: %v", err.Error())
     return nil, err
   }
-  result := paginator{Items: receipts}
+  result := paginator[map[string]interface{}]{Items: receipts}
   if len(receipts) == 1000 {
     result.Token = offset + len(receipts)
   }
-	return result, nil
+	return &result, nil
 }
 
-func (api *FlumeAPI) GetTransactionsByParticipant(ctx context.Context, address common.Address, offset int) (interface{}, error) {
+func (api *FlumeAPI) GetTransactionsByParticipant(ctx context.Context, address common.Address, offset int) (*paginator[map[string]interface{}], error) {
 
   txs, err := getPendingTransactions(ctx, api.db, offset, 1000, api.network, "sender = ? OR recipient = ?", trimPrefix(address.Bytes()), trimPrefix(address.Bytes()))
   if err != nil {
@@ -122,27 +120,27 @@ func (api *FlumeAPI) GetTransactionsByParticipant(ctx context.Context, address c
     return nil, err
   }
   txs = append(txs, ctxs...)
-  result := paginator{Items: txs}
+  result := paginator[map[string]interface{}]{Items: txs}
   if len(txs) >= 1000 {
     result.Token = offset + len(txs)
   }
 
-	return result, nil
+	return &result, nil
 }
 
-func (api *FlumeAPI) GetTransactionReceiptsByParticipant(ctx context.Context, address common.Address, offset int) (interface{}, error){
+func (api *FlumeAPI) GetTransactionReceiptsByParticipant(ctx context.Context, address common.Address, offset int) (*paginator[map[string]interface{}], error){
 
   receipts, err := getTransactionReceipts(ctx, api.db, offset, 1000, api.network, "sender = ? OR recipient = ?", trimPrefix(address.Bytes()), trimPrefix(address.Bytes()))
   if err != nil {
     log.Printf("Error getting receipts: %v", err.Error())
     return nil, err
   }
-  result := paginator{Items: receipts}
+  result := paginator[map[string]interface{}]{Items: receipts}
   if len(receipts) == 1000 {
     result.Token = offset + len(receipts)
   }
 
-	return result, nil
+	return &result, nil
 }
 
 func (api *FlumeAPI) GetTransactionReceiptsByBlockHash(ctx context.Context, blockHash common.Hash) ([]map[string]interface{}, error) {
