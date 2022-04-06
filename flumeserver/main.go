@@ -39,6 +39,8 @@ func main() {
   goerli := flag.Bool("goerli", false, "Goerli Testnet")
   ropsten := flag.Bool("ropsten", false, "Ropsten Testnet")
   rinkeby := flag.Bool("rinkeby", false, "Rinkeby Testnet")
+  kiln := flag.Bool("kiln", false, "Kiln Testnet")
+  sepolia := flag.Bool("sepolia", false, "Sepolia Testnet")
   homesteadBlockFlag := flag.Int("homestead", 0, "Block of the homestead hardfork")
   eip155BlockFlag := flag.Int("eip155", 0, "Block of the eip155 hardfork")
   verbosity := flag.Bool("verbose", false, "Increase verbosity")
@@ -86,6 +88,10 @@ func main() {
     homesteadBlock = 0
     eip155Block = 0
     chainid = 5
+  } else if *sepolia{
+    chainid = 11155111
+  } else if *kiln {
+    chainid = 1337802
   } else {
     homesteadBlock = uint64(*homesteadBlockFlag)
     eip155Block = uint64(*eip155BlockFlag)
