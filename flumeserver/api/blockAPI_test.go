@@ -1,59 +1,43 @@
 package api
 
 import (
-	// "reflect"
-	"testing"
+	"bytes"
 	"context"
 	"fmt"
-	"bytes"
-	// "cmp"
+	"testing"
 
-	// "os"
-	// "github.com/openrelayxyz/cardinal-rpc/transports"
-	// "github.com/openrelayxyz/flume/flumeserver/txfeed"
-	// "github.com/openrelayxyz/flume/flumeserver/datafeed"
-	// "github.com/openrelayxyz/flume/flumeserver/indexer"
-	// "github.com/openrelayxyz/flume/flumeserver/migrations"
-	// "github.com/openrelayxyz/flume/flumeserver/notify"
-	// "github.com/openrelayxyz/flume/flumeserver/api"
-	// gethLog "github.com/ethereum/go-ethereum/log"
-	// "github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/rpc"
-	// "github.com/google/go-cmp/cmp"
-	// "net/http"'https://2ebb6d9d2bbb42a3a9b1cf4d129e9609.eth.rpc.rivet.cloud/', json=d).json()
-	"path/filepath"
 	"encoding/json"
-	// "flag"
-	// "fmt"
-	// "time"
-	// "log"
-	"io"
+	"path/filepath"
 	"compress/gzip"
-	"io/ioutil"
-	"github.com/mattn/go-sqlite3"
-	_ "net/http/pprof"
 	"database/sql"
+	"github.com/mattn/go-sqlite3"
+	"io"
+	"io/ioutil"
+	_ "net/http/pprof"
 	"sync"
 )
 
 var register sync.Once
 
 func connectToDatabase() (*sql.DB, error) {
-  sqlitePath := "../../testdata.sqlite"
+	sqlitePath := "../../testdata.sqlite"
 
-  mempoolDb := filepath.Join(filepath.Dir(sqlitePath), "mempool.sqlite")
+	mempoolDb := filepath.Join(filepath.Dir(sqlitePath), "mempool.sqlite")
 
-  register.Do(func () {sql.Register("sqlite3_hooked",
-    &sqlite3.SQLiteDriver{
-      ConnectHook: func(conn *sqlite3.SQLiteConn) error {
-        conn.Exec(fmt.Sprintf("ATTACH DATABASE '%v' AS 'mempool'; PRAGMA mempool.journal_mode = WAL ; PRAGMA mempool.synchronous = OFF ;", mempoolDb), nil)
-        return nil
-      },
-  })})
+	register.Do(func() {
+		sql.Register("sqlite3_hooked",
+			&sqlite3.SQLiteDriver{
+				ConnectHook: func(conn *sqlite3.SQLiteConn) error {
+					conn.Exec(fmt.Sprintf("ATTACH DATABASE '%v' AS 'mempool'; PRAGMA mempool.journal_mode = WAL ; PRAGMA mempool.synchronous = OFF ;", mempoolDb), nil)
+					return nil
+				},
+			})
+	})
 
-  logsdb, err := sql.Open("sqlite3_hooked", fmt.Sprintf("file:%v?_sync=0&_journal_mode=WAL&_foreign_keys=on", sqlitePath))
+	logsdb, err := sql.Open("sqlite3_hooked", fmt.Sprintf("file:%v?_sync=0&_journal_mode=WAL&_foreign_keys=on", sqlitePath))
 	//we should add migrations process
 	if err != nil {
 		return nil, err
@@ -62,29 +46,33 @@ func connectToDatabase() (*sql.DB, error) {
 }
 
 func blocksDecompress() ([]map[string]json.RawMessage, error) {
-	file, _ := ioutil.ReadFile("data2.json.gz")
-  r, err := gzip.NewReader(bytes.NewReader(file))
-	if err != nil {return nil, err }
-  raw, _ := ioutil.ReadAll(r)
-  if err == io.EOF || err == io.ErrUnexpectedEOF {
-    return nil, err
-  }
+	file, _ := ioutil.ReadFile("new_data.json.gz")
+	r, err := gzip.NewReader(bytes.NewReader(file))
+	if err != nil {
+		return nil, err
+	}
+	raw, _ := ioutil.ReadAll(r)
+	if err == io.EOF || err == io.ErrUnexpectedEOF {
+		return nil, err
+	}
 	var blocksObject []map[string]json.RawMessage
 	json.Unmarshal(raw, &blocksObject)
-  return blocksObject, nil
+	return blocksObject, nil
 }
 
 func receiptsDecompress() ([]map[string]json.RawMessage, error) {
-	file, _ := ioutil.ReadFile("receipts.json.gz")
-  r, err := gzip.NewReader(bytes.NewReader(file))
-	if err != nil {return nil, err }
-  raw, _ := ioutil.ReadAll(r)
-  if err == io.EOF || err == io.ErrUnexpectedEOF {
-    return nil, err
-  }
+	file, _ := ioutil.ReadFile("new_receipts.json.gz")
+	r, err := gzip.NewReader(bytes.NewReader(file))
+	if err != nil {
+		return nil, err
+	}
+	raw, _ := ioutil.ReadAll(r)
+	if err == io.EOF || err == io.ErrUnexpectedEOF {
+		return nil, err
+	}
 	var receiptsObject []map[string]json.RawMessage
 	json.Unmarshal(raw, &receiptsObject)
-  return receiptsObject, nil
+	return receiptsObject, nil
 }
 
 func getBlockNumbers(jsonBlockObject []map[string]json.RawMessage) []rpc.BlockNumber {
@@ -114,8 +102,8 @@ func TestBlockNumber(t *testing.T) {
 	}
 	defer db.Close()
 	b := NewBlockAPI(db, 1)
-	expectedResult, _ := hexutil.DecodeUint64("0xd59f80")
-	test , err:= b.BlockNumber(context.Background())
+	expectedResult, _ := hexutil.DecodeUint64("0xd59f95")
+	test, err := b.BlockNumber(context.Background())
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -123,129 +111,132 @@ func TestBlockNumber(t *testing.T) {
 		t.Fatalf("BlockNumber() result not accurate")
 	}
 }
-//
+
 func TestBlockAPI(t *testing.T) {
-		db, err := connectToDatabase()
-		if err != nil {
-			t.Fatal(err.Error())
-		}
-		defer db.Close()
-		b := NewBlockAPI(db, 1)
-		blockObject, _ := blocksDecompress()
-		// blockNumbers := getBlockNumbers()
-		for i, block := range blockObject {
-			var n rpc.BlockNumber
-			json.Unmarshal(block["number"], &n)
-			actual, err := b.GetBlockByNumber(context.Background(), n, true)
-					if err != nil {
-						t.Fatal(err.Error())
+	db, err := connectToDatabase()
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	defer db.Close()
+	b := NewBlockAPI(db, 1)
+	blockObject, _ := blocksDecompress()
+	blockNumbers := getBlockNumbers(blockObject)
+	for i, block := range blockNumbers {
+		t.Run(fmt.Sprintf("GetBlockByNumber %v", i), func(t *testing.T) {
+			actual, err := b.GetBlockByNumber(context.Background(), block, true)
+			if err != nil {
+				t.Fatal(err.Error())
+			}
+			for k, v := range actual {
+				if k == "transactions" {
+					txs := v.([]map[string]interface{})
+					var blockTxs []map[string]json.RawMessage
+					json.Unmarshal(blockObject[i]["transactions"], &blockTxs)
+					for j, item := range txs {
+						for key, value := range item {
+							d, err := json.Marshal(value)
+							if err != nil {
+								t.Fatalf("transaction key marshalling error on block %v  tx index %v", i, j)
+							}
+							if !bytes.Equal(d, blockTxs[j][key]) {
+								t.Fatalf("didnt work")
+							}
+
+						}
 					}
-					for k, v := range actual {
-						if k == "transactions" {
-							continue
-						} else {
+				} else {
+					data, err := json.Marshal(v)
+					if err != nil {
+						t.Errorf("nope %v", k)
+					}
+					if !bytes.Equal(data, blockObject[i][k]) {
+						t.Fatalf("not equal %v", k)
+					}
+				}
+			}
+		})
+
+		t.Run("GetBlockTransactionCountByNumber", func(t *testing.T) {
+			actual, err := b.GetBlockTransactionCountByNumber(context.Background(), block)
+			if err != nil {
+				t.Fatal(err.Error())
+			}
+			var txSlice []map[string]interface{}
+			json.Unmarshal(blockObject[i]["transactions"], &txSlice)
+			if actual != hexutil.Uint64(len(txSlice)) {
+				t.Fatalf("transaction count by block %v %v", actual, hexutil.Uint64(len(txSlice)))
+			}
+		})
+
+		t.Run("GetUncleCountByBlockNumber", func(t *testing.T) {
+			actual, err := b.GetUncleCountByBlockNumber(context.Background(), block)
+			if err != nil {
+				t.Fatal(err.Error())
+			}
+			var uncleSlice []common.Hash
+			json.Unmarshal(blockObject[i]["uncles"], &uncleSlice)
+			if actual != hexutil.Uint64(len(uncleSlice)) {
+				t.Fatalf("uncle count by block %v %v", actual, hexutil.Uint64(len(uncleSlice)))
+			}
+		})
+		blockHashes := getBlockHashes(blockObject)
+		for i, hash := range blockHashes {
+			t.Run(fmt.Sprintf("GetBlockByHash %v", i), func(t *testing.T) {
+				actual, err := b.GetBlockByHash(context.Background(), hash, true)
+				if err != nil {
+					t.Fatal(err.Error())
+				}
+				for k, v := range actual {
+					if k == "transactions" {
+						txs := v.([]map[string]interface{})
+						var blockTxs []map[string]json.RawMessage
+						json.Unmarshal(blockObject[i]["transactions"], &blockTxs)
+						for j, item := range txs {
+							for key, value := range item {
+								d, err := json.Marshal(value)
+								if err != nil {
+									t.Fatalf("transaction key marshalling error on block %v  tx index %v", i, j)
+								}
+								if !bytes.Equal(d, blockTxs[j][key]) {
+									t.Fatalf("didnt work")
+								}
+
+							}
+						}
+					} else {
 						data, err := json.Marshal(v)
 						if err != nil {
 							t.Errorf("nope %v", k)
 						}
-						if !bytes.Equal(data, block[k]) {
-							var x interface{}
-							var y interface{}
-							json.Unmarshal(block[k], &x)
-							json.Unmarshal(data, &y)
-							t.Fatalf("block values are different %v, %v, %v '%v'", i, len(blockObject), string(data), string(block[k]))
+						if !bytes.Equal(data, blockObject[i][k]) {
+							t.Fatalf("not equal %v", k)
+						}
 					}
 				}
-			}
+			})
+			t.Run("GetBlockTransactionCountByHash", func(t *testing.T) {
+				actual, err := b.GetBlockTransactionCountByHash(context.Background(), hash)
+				if err != nil {
+					t.Fatal(err.Error())
+				}
+				var txSlice []map[string]interface{}
+				json.Unmarshal(blockObject[i]["transactions"], &txSlice)
+				if actual != hexutil.Uint64(len(txSlice)) {
+					t.Fatalf("transaction count by hash %v %v", actual, hexutil.Uint64(len(txSlice)))
+				}
+			})
+
+			t.Run("GetUncleCountByBlockHash", func(t *testing.T) {
+				actual, err := b.GetUncleCountByBlockHash(context.Background(), hash)
+				if err != nil {
+					t.Fatal(err.Error())
+				}
+				var uncleSlice []common.Hash
+				json.Unmarshal(blockObject[i]["uncles"], &uncleSlice)
+				if actual != hexutil.Uint64(len(uncleSlice)) {
+					t.Fatalf("uncle count by hash %v %v", actual, hexutil.Uint64(len(uncleSlice)))
+				}
+			})
 		}
+	}
 }
-// func TestBlockAPI(t *testing.T) {
-// 		db, err := connectToDatabase()
-// 		if err != nil {
-// 			t.Fatal(err.Error())
-// 		}
-// 		defer db.Close()
-// 		b := NewBlockAPI(db, 1)
-// 		var blocksMap []map[string]json.RawMessage
-// 		// raw, _ := jsonDecompress("data.json.gz")
-// 		raw, _ := testingJson("data.json")
-// 		json.Unmarshal(raw, &blocksMap)
-// 		for i, block := range blockNumbers[4:] {
-// 			t.Run(fmt.Sprintf("GetBlockByNumber %v", i), func(t *testing.T){
-// 				actual, err := b.GetBlockByNumber(context.Background(), block, true)
-// 					if err != nil {
-// 						t.Fatal(err.Error())
-// 					}
-// 					for k, v := range actual {
-// 						data, err := json.Marshal(v)
-// 						if err != nil {
-// 							t.Errorf("nope %v", k)
-// 						}
-// 						if !bytes.Equal(data, blocksMap[i + 4][k]) {
-// 							t.Fatalf("not equal %v", k)
-// 					}
-// 			}
-// 			})
-// 			t.Run("GetBlockTransactionCountByNumber", func(t *testing.T){
-// 				actual, err := b.GetBlockTransactionCountByNumber(context.Background(), block)
-// 					if err != nil {
-// 						t.Fatal(err.Error())
-// 					}
-// 					var txSlice []*rpcTransaction
-// 					json.Unmarshal(blocksMap[i + 4]["transactions"], &txSlice)
-// 					if actual != hexutil.Uint64(len(txSlice)) {
-// 						t.Fatalf("transaction count by block %v %v", actual, hexutil.Uint64(len(txSlice)))
-// 					}
-// 			})
-// 			t.Run("GetUncleCountByBlockNumber", func(t *testing.T){
-// 				actual, err := b.GetUncleCountByBlockNumber(context.Background(), block)
-// 					if err != nil {
-// 						t.Fatal(err.Error())
-// 					}
-// 					var uncleSlice []common.Hash
-// 					json.Unmarshal(blocksMap[i + 4]["uncles"], &uncleSlice)
-// 					if actual != hexutil.Uint64(len(uncleSlice)) {
-// 						t.Fatalf("uncle count by block %v %v", actual, hexutil.Uint64(len(uncleSlice)))
-// 					}
-// 			})
-// 	}
-// 	for i, hash := range blockHashes[4:] {
-// 		t.Run("GetBlockByHash", func(t *testing.T){
-// 			actual, err := b.GetBlockByHash(context.Background(), common.HexToHash(hash), true)
-// 				if err != nil {
-// 					t.Fatal(err.Error())
-// 				}
-// 				for k, v := range actual {
-// 					data, err := json.Marshal(v)
-// 					if err != nil {
-// 						t.Errorf("nope %v", k)
-// 					}
-// 					if !bytes.Equal(data, blocksMap[i + 4][k]) {
-// 						t.Fatalf("not equal %v", k)
-// 				}
-// 		}
-// 		})
-// 		t.Run("GetBlockTransactionCountByHash", func(t *testing.T){
-// 			actual, err := b.GetBlockTransactionCountByHash(context.Background(), common.HexToHash(hash))
-// 				if err != nil {
-// 					t.Fatal(err.Error())
-// 				}
-// 				var txSlice []*rpcTransaction
-// 				json.Unmarshal(blocksMap[i + 4]["transactions"], &txSlice)
-// 				if actual != hexutil.Uint64(len(txSlice)) {
-// 					t.Fatalf("transaction count by hash %v %v", actual, hexutil.Uint64(len(txSlice)))
-// 				}
-// 		})
-// 		t.Run("GetUncleCountByBlockHash", func(t *testing.T){
-// 			actual, err := b.GetUncleCountByBlockHash(context.Background(), common.HexToHash(hash))
-// 				if err != nil {
-// 					t.Fatal(err.Error())
-// 				}
-// 				var uncleSlice []common.Hash
-// 				json.Unmarshal(blocksMap[i + 4]["uncles"], &uncleSlice)
-// 				if actual != hexutil.Uint64(len(uncleSlice)) {
-// 					t.Fatalf("uncle count by hash %v %v", actual, hexutil.Uint64(len(uncleSlice)))
-// 				}
-// 		})
-// }
-// }

@@ -1,28 +1,11 @@
 package api
 
 import (
-	// "reflect"
-	// "sort"
-  // "bytes"
-  // "github.com/klauspost/compress/zlib"
-  // "strings"
-  // "time"
-  // "encoding/json"
-  // "math/big"
-  // "net/http"
   "database/sql"
   "github.com/ethereum/go-ethereum/common"
   "github.com/ethereum/go-ethereum/common/hexutil"
-  // "github.com/ethereum/go-ethereum/core/types"
-  // "github.com/ethereum/go-ethereum/eth/filters"
-  // "github.com/ethereum/go-ethereum/rlp"
   "github.com/ethereum/go-ethereum/rpc"
-  // "io/ioutil"
-  // "io"
   "context"
-  // "fmt"
-  // "log"
-  // "sync"
 )
 
 type TransactionAPI struct {
@@ -37,10 +20,6 @@ func NewTransactionAPI (db *sql.DB, network uint64 ) *TransactionAPI {
 	}
 }
 
-
-func (api *TransactionAPI) Transaction() string {
-	return "goodbuy horses"
-}
 
 func (api *TransactionAPI) GetTransactionByHash(ctx context.Context, txHash common.Hash) (map[string]interface{}, error) {
 	var err error
@@ -57,12 +36,6 @@ func (api *TransactionAPI) GetTransactionByHash(ctx context.Context, txHash comm
 
   result := returnSingleTransaction(txs)
 
-	// for k, v := range result {
-	// 		 if reflect.ValueOf(v).IsZero() {
-	// 				 delete(result, k)
-	// 		 }
-	//  }
-
 	return result, nil
 }
 
@@ -74,12 +47,6 @@ func (api *TransactionAPI) GetTransactionByBlockHashAndIndex(ctx context.Context
     return nil, err
   }
   result := returnSingleTransaction(txs)
-
-	// for k, v := range result {
-	// 		 if reflect.ValueOf(v).IsZero() {
-	// 				 delete(result, k)
-	// 		 }
-	//  }
 
 	return result, nil
 }

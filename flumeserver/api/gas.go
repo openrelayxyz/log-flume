@@ -132,7 +132,7 @@ func (api *GasAPI) MaxPriorityFeePerGas(ctx context.Context) (res string, err er
 	return hexutil.EncodeBig(eh.CheckAndAssign(api.gasTip(ctx))), nil
 }
 
-func (api *GasAPI) FeeHistory(ctx context.Context, blockCount rpc.DecimalOrHex, lastBlock rpc.BlockNumber, rewardPercentiles []float64) (res interface{}, err error){
+func (api *GasAPI) FeeHistory(ctx context.Context, blockCount rpc.DecimalOrHex, lastBlock rpc.BlockNumber, rewardPercentiles []float64) (res *feeHistoryResult, err error){
 	// var blockCount rpc.DecimalOrHex
 	// var lastBlock rpc.BlockNumber
 	// var rewardPercentiles []float64

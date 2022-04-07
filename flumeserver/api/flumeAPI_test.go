@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"testing"
 
+	"encoding/json"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/rpc"
-	"encoding/json"
 	_ "net/http/pprof"
 )
 
@@ -47,24 +47,24 @@ func getBlockReceipts(jsonBlockObject, jsonReceiptObject []map[string]json.RawMe
 	return result
 }
 
-func getSenderTransactionList(jsonBlockObject []map[string]json.RawMessage) []map[string]json.RawMessage {
+func getTransactionList(jsonBlockObject []map[string]json.RawMessage, address, key string) []map[string]json.RawMessage {
 	results := []map[string]json.RawMessage{}
 	transactions := getTransactionsForTesting(jsonBlockObject)
-	addr, _ := json.Marshal("0x52bc44d5378309ee2abf1539bf71de1b7d7be3b5")
+	addr, _ := json.Marshal(address)
 	for _, tx := range transactions {
-		if bytes.Equal(tx["from"], addr) {
+		if bytes.Equal(tx[key], addr) {
 			results = append(results, tx)
 		}
 	}
 	return results
 }
 
-func getRecipientTransactionList(jsonBlockObject []map[string]json.RawMessage) []map[string]json.RawMessage {
+func getParticipantTransactionList(jsonBlockObject []map[string]json.RawMessage, address, keyOne, keyTwo string) []map[string]json.RawMessage {
 	results := []map[string]json.RawMessage{}
 	transactions := getTransactionsForTesting(jsonBlockObject)
-	addr, _ := json.Marshal("0x7a250d5630b4cf539739df2c5dacb4c659f2488d")
+	addr, _ := json.Marshal(address)
 	for _, tx := range transactions {
-		if bytes.Equal(tx["to"], addr) {
+		if bytes.Equal(tx[keyOne], addr) || bytes.Equal(tx[keyTwo], addr) {
 			results = append(results, tx)
 		}
 	}
@@ -82,16 +82,33 @@ func getSenderReceiptList(jsonReceiptObject []map[string]json.RawMessage) []map[
 	return results
 }
 
-func getRecieverReceiptList(jsonReceiptObject []map[string]json.RawMessage) []map[string]json.RawMessage {
+func getReceiptList(jsonReceiptObject []map[string]json.RawMessage, address, key string) []map[string]json.RawMessage {
 	results := []map[string]json.RawMessage{}
-	addr, _ := json.Marshal("0x7a250d5630b4cf539739df2c5dacb4c659f2488d")
+	addr, _ := json.Marshal(address)
 	for _, receipt := range jsonReceiptObject {
-		if bytes.Equal(receipt["to"], addr) {
+		if bytes.Equal(receipt[key], addr) {
 			results = append(results, receipt)
 		}
 	}
 	return results
 }
+
+func getParticipantReceiptList(jsonReceiptObject []map[string]json.RawMessage, address, keyOne, keyTwo string) []map[string]json.RawMessage {
+	results := []map[string]json.RawMessage{}
+	addr, _ := json.Marshal(address)
+	for _, receipt := range jsonReceiptObject {
+		if bytes.Equal(receipt[keyOne], addr) || bytes.Equal(receipt[keyTwo], addr) {
+			results = append(results, receipt)
+		}
+	}
+	return results
+}
+
+var (
+	senderAddr    = "0x52bc44d5378309ee2abf1539bf71de1b7d7be3b5"
+	recipientAddr = "0x7a250d5630b4cf539739df2c5dacb4c659f2488d"
+	genericAddr   = "0x3cd751e6b0078be393132286c442345e5dc49699"
+)
 
 func TestFumeAPI(t *testing.T) {
 	db, err := connectToDatabase()
@@ -142,8 +159,8 @@ func TestFumeAPI(t *testing.T) {
 			}
 		})
 	}
-	sender := common.HexToAddress("0x52bc44d5378309ee2abf1539bf71de1b7d7be3b5")
-	senderTxns := getSenderTransactionList(blockObject)
+	senderTxns := getTransactionList(blockObject, senderAddr, "from")
+	sender := common.HexToAddress(senderAddr)
 	if len(senderTxns) != 47 {
 		t.Fatalf("sender transactions list of incorrect length expected 47 got %v", len(senderTxns))
 	}
@@ -164,24 +181,7 @@ func TestFumeAPI(t *testing.T) {
 			}
 		}
 	})
-	t.Run(fmt.Sprintf("GetTransactionsByParticipant sender"), func(t *testing.T) {
-		actual, _ := f.GetTransactionsByParticipant(context.Background(), sender, 0)
-		if len(actual.Items) != len(senderTxns) {
-			t.Fatalf("getTransactionsByParticipant (sender) result of incorrect length expected %v got %v", len(actual.Items), len(senderTxns))
-		}
-		for i, tx := range actual.Items {
-			for k, v := range tx {
-				data, err := json.Marshal(v)
-				if err != nil {
-					t.Errorf(err.Error())
-				}
-				if !bytes.Equal(data, senderTxns[i][k]) {
-					t.Fatalf("getTransactionsByParticipant (sender) error index %v, key %v", i, k)
-				}
-			}
-		}
-	})
-	senderReceipts := getSenderReceiptList(receiptObject)
+	senderReceipts := getReceiptList(receiptObject, senderAddr, "from")
 	if len(senderReceipts) != 47 {
 		t.Fatalf("sender transactions list of incorrect length expected 47 got %v", len(senderReceipts))
 	}
@@ -202,26 +202,9 @@ func TestFumeAPI(t *testing.T) {
 			}
 		}
 	})
-	t.Run(fmt.Sprintf("GetTransactionReceiptsByParticipant sender"), func(t *testing.T) {
-		actual, _ := f.GetTransactionReceiptsByParticipant(context.Background(), sender, 0)
-		if len(actual.Items) != len(senderReceipts) {
-			t.Fatalf("getTransactionReceiptsByParticipant (sender) result of incorrect length expected %v got %v", len(actual.Items), len(senderReceipts))
-		}
-		for i, tx := range actual.Items {
-			for k, v := range tx {
-				data, err := json.Marshal(v)
-				if err != nil {
-					t.Errorf(err.Error())
-				}
-				if !bytes.Equal(data, senderReceipts[i][k]) {
-					t.Fatalf("getTransactionReceiptsByParticipant (sender) error index %v, key %v", i, k)
-				}
-			}
-		}
-	})
-	recipient := common.HexToAddress("0x7a250d5630b4cf539739df2c5dacb4c659f2488d")
-	recipientTxns := getRecipientTransactionList(blockObject)
-	if len(recipientTxns) != 107 {
+	recipientTxns := getTransactionList(blockObject, recipientAddr, "to")
+	recipient := common.HexToAddress(recipientAddr)
+	if len(recipientTxns) != 141 {
 		t.Fatalf("recipient transactions list of incorrect length expected 107 got %v", len(recipientTxns))
 	}
 	t.Run(fmt.Sprintf("GetTransactionsByRecipient"), func(t *testing.T) {
@@ -242,26 +225,8 @@ func TestFumeAPI(t *testing.T) {
 			}
 		}
 	})
-	t.Run(fmt.Sprintf("GetTransactionsByParicipant"), func(t *testing.T) {
-		actual, _ := f.GetTransactionsByParticipant(context.Background(), recipient, 0)
-		if len(actual.Items) != len(recipientTxns) {
-			t.Fatalf("getTransactionsByParticipant (recipient) result of incorrect length expected %v got %v", len(actual.Items), len(recipientTxns))
-		}
-		for i, tx := range actual.Items {
-
-			for k, v := range tx {
-				data, err := json.Marshal(v)
-				if err != nil {
-					t.Errorf(err.Error())
-				}
-				if !bytes.Equal(data, recipientTxns[i][k]) {
-					t.Fatalf("getTransactionsByParticipant (recipient) error index %v, key %v", i, k)
-				}
-			}
-		}
-	})
-	recipientReceipts := getRecieverReceiptList(receiptObject)
-	if len(recipientReceipts) != 107 {
+	recipientReceipts := getReceiptList(receiptObject, recipientAddr, "to")
+	if len(recipientReceipts) != 141 {
 		t.Fatalf("recipient transactions list of incorrect length expected 107 got %v", len(recipientReceipts))
 	}
 	t.Run(fmt.Sprintf("GetTransactionsReceiptsByRecipient"), func(t *testing.T) {
@@ -281,10 +246,31 @@ func TestFumeAPI(t *testing.T) {
 			}
 		}
 	})
+	participantTxns := getParticipantTransactionList(blockObject, genericAddr, "to", "from")
+	participant := common.HexToAddress(genericAddr)
+	t.Run(fmt.Sprintf("GetTransactionsByParicipant"), func(t *testing.T) {
+		actual, _ := f.GetTransactionsByParticipant(context.Background(), participant, 0)
+		if len(actual.Items) != len(participantTxns) {
+			t.Fatalf("getTransactionsByParticipant result of incorrect length expected %v got %v", len(actual.Items), len(participantTxns))
+		}
+		for i, tx := range actual.Items {
+
+			for k, v := range tx {
+				data, err := json.Marshal(v)
+				if err != nil {
+					t.Errorf(err.Error())
+				}
+				if !bytes.Equal(data, participantTxns[i][k]) {
+					t.Fatalf("getTransactionsByParticipant error index %v, key %v", i, k)
+				}
+			}
+		}
+	})
+	participantReceipts := getParticipantReceiptList(receiptObject, genericAddr, "to", "from")
 	t.Run(fmt.Sprintf("GetTransactionsReceiptsByParticipant"), func(t *testing.T) {
-		actual, _ := f.GetTransactionReceiptsByParticipant(context.Background(), recipient, 0)
-		if len(actual.Items) != len(recipientReceipts) {
-			t.Fatalf("getTransactionReceiptsByParticipant (recipient) result of incorrect length expected %v got %v", len(actual.Items), len(recipientReceipts))
+		actual, _ := f.GetTransactionReceiptsByParticipant(context.Background(), participant, 0)
+		if len(actual.Items) != len(participantReceipts) {
+			t.Fatalf("getTransactionReceiptsByParticipant result of incorrect length expected %v got %v", len(actual.Items), len(participantReceipts))
 		}
 		for i, tx := range actual.Items {
 			for k, v := range tx {
@@ -292,7 +278,7 @@ func TestFumeAPI(t *testing.T) {
 				if err != nil {
 					t.Errorf(err.Error())
 				}
-				if !bytes.Equal(data, recipientReceipts[i][k]) {
+				if !bytes.Equal(data, participantReceipts[i][k]) {
 					t.Fatalf("getTransactionReceiptsByParticipant (recipient) error index %v, key %v", i, k)
 				}
 			}

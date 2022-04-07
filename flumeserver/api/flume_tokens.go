@@ -36,9 +36,6 @@ func NewFlumeTokensAPI (db *sql.DB, network uint64 ) *FlumeTokensAPI {
 	}
 }
 
-func (api *FlumeTokensAPI) FlumeTokens() string {
-	return "goodbuy horses"
-}
 
 func (api *FlumeTokensAPI) GetERC20ByAccount(ctx context.Context, addr common.Address, offset int) (*paginator[common.Address], error) {
 
