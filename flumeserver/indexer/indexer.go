@@ -232,46 +232,48 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, csConsum
       }
       txCount++
     case chainUpdate := <-csCh:
-      for _, pb := chainUpdate.Added() {
-        BLOCKLOOP:
-        for {
-          statements := []strings{}
+      UPDATELOOP:
+      var lastBatch *delivery.PendingBatch
+      for {
+        statements := []strings{}
+        for _, pb := chainUpdate.Added() {
           for _, indexer := range indexers {
             s, err := indexer.Index(pb)
             if err != nil {
               log.Printf("Error computing updates")
-              continue BLOCKLOOP
+              continue UPDATELOOP
             }
             statements  = append(statements, s...)
           }
-          // TODO: Get updates for cardinal_offsets table and add to statements
-          mut.Lock()
-          start := time.Now()
-          dbtx, err := db.BeginTx(context.Background(), nil)
-          if err != nil { log.Fatalf("Error creating a transaction: %v", err.Error())}
-          if _, err := dbtx.Exec(strings.Join(statements, " ; ")); err != nil {
-            dbtx.Rollback()
-            stats := db.Stats()
-            log.Printf("WARN: Failed to insert logs: %v", err.Error())
-            log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
-            mut.Unlock()
-            continue BLOCKLOOP
-          }
-          // log.Printf("Spent %v on %v inserts", time.Since(istart), len(statements))
-          // cstart := time.Now()
-          if err := dbtx.Commit(); err != nil {
-            stats := db.Stats()
-            log.Printf("WARN: Failed to insert logs: %v", err.Error())
-            log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
-            mut.Unlock()
-            continue BLOCKLOOP
-          }
-          mut.Unlock()
-          processed = true
-          completionFeed.Send(chainEvent.Block.Hash)
-          // log.Printf("Spent %v on commit", time.Since(cstart))
-          log.Printf("Committed Block %v (%#x) in %v (age ??)", uint64(pb.Number.), pb.Hash.Bytes(), time.Since(start)) // TODO: Figure out a simple way to get age
+          lastBatch = pb
         }
+        // TODO: Get updates for cardinal_offsets table and add to statements
+        mut.Lock()
+        start := time.Now()
+        dbtx, err := db.BeginTx(context.Background(), nil)
+        if err != nil { log.Fatalf("Error creating a transaction: %v", err.Error())}
+        if _, err := dbtx.Exec(strings.Join(statements, " ; ")); err != nil {
+          dbtx.Rollback()
+          stats := db.Stats()
+          log.Printf("WARN: Failed to insert logs: %v", err.Error())
+          log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
+          mut.Unlock()
+          continue UPDATELOOP
+        }
+        // log.Printf("Spent %v on %v inserts", time.Since(istart), len(statements))
+        // cstart := time.Now()
+        if err := dbtx.Commit(); err != nil {
+          stats := db.Stats()
+          log.Printf("WARN: Failed to insert logs: %v", err.Error())
+          log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
+          mut.Unlock()
+          continue UPDATELOOP
+        }
+        mut.Unlock()
+        processed = true
+        completionFeed.Send(chainEvent.Block.Hash)
+        // log.Printf("Spent %v on commit", time.Since(cstart))
+        log.Printf("Committed Block %v (%#x) in %v (age ??)", uint64(lastBatch.Number.), lastBatch.Hash.Bytes(), time.Since(start)) // TODO: Figure out a simple way to get age
       }
     case chainEvent := <- ch:
       start := time.Now()
