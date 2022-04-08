@@ -49,6 +49,8 @@ Parameters:
       - "--goerli"
       - "--ropsten"
       - "--rinkeby"
+      - "--kiln"
+      - "--sepolia"
     Default: "--mainnet"
     Description: The Flume network flag
   FlumeClusterVersion:
