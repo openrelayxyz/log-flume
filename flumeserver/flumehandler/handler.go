@@ -259,6 +259,9 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
     addressClause = append(addressClause, "address = ?")
     params = append(params, trimPrefix(address.Bytes()))
   }
+  if len(crit.Addresses) == 1 && crit.Addresses[0] == (common.Address{}) {
+    indexClause = "INDEXED BY address_compound"
+  }
   if len(addressClause) > 0 {
     whereClause = append(whereClause, fmt.Sprintf("(%v)", strings.Join(addressClause, " OR ")))
   }
