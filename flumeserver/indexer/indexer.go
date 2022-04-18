@@ -119,7 +119,7 @@ func applyParameters(query string, params ...interface{}) string {
     case types.BlockNonce:
       preparedParams[i] = fmt.Sprintf("%v", int64(value.Uint64()))
     default:
-      log.Printf("WARNING: Unknown type passed to applyParameters: %v", value)
+      // log.Printf("WARNING: Unknown type passed to applyParameters: %v", value)
       preparedParams[i] = fmt.Sprintf("%v", value)
     }
   }
