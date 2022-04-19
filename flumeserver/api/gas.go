@@ -23,13 +23,6 @@ func NewGasAPI(db *sql.DB, network uint64) *GasAPI {
 	}
 }
 
-// case "eth_gasPrice":
-// 	gasPrice(r.Context(), w, call, db, chainid)
-// case "eth_feeHistory":
-// 	feeHistory(r.Context(), w, call, db, chainid)
-// case "eth_maxPriorityFeePerGas":
-// 	maxPriorityFeePerGas(r.Context(), w, call, db, chainid)
-
 func (api *GasAPI) gasTip(ctx context.Context) (*big.Int, error) {
 	latestBlock, err := getLatestBlock(ctx, api.db)
 	if err != nil {
@@ -49,8 +42,6 @@ func (api *GasAPI) gasTip(ctx context.Context) (*big.Int, error) {
 		}
 		tip := new(big.Int).Sub(big.NewInt(gasPrice), new(big.Int).SetBytes(baseFeeBytes))
 		if tip.Cmp(new(big.Int)) > 0 {
-			// Leave out transactions without tips, as these tend to be MEV
-			// transactions
 			tips = append(tips, tip)
 		}
 	}
@@ -61,8 +52,6 @@ func (api *GasAPI) gasTip(ctx context.Context) (*big.Int, error) {
 		sort.Sort(tips)
 		return tips[(len(tips)*6)/10], nil
 	}
-	// If there are no transactions in the last 20 blocks, just look at the
-	// latest transaction.
 	var gasPrice int64
 	var baseFeeBytes []byte
 	err = api.db.QueryRowContext(ctx, "SELECT gasPrice, baseFee from transactions.transactions INNER JOIN blocks.blocks ON transactions.block = blocks.number WHERE 1 ORDER BY id DESC LIMIT 1;").Scan(&gasPrice, &baseFeeBytes)
@@ -115,9 +104,6 @@ func (api *GasAPI) MaxPriorityFeePerGas(ctx context.Context) (res string, err er
 }
 
 func (api *GasAPI) FeeHistory(ctx context.Context, blockCount rpc.DecimalOrHex, lastBlock rpc.BlockNumber, rewardPercentiles []float64) (res *feeHistoryResult, err error) {
-	// var blockCount rpc.DecimalOrHex
-	// var lastBlock rpc.BlockNumber
-	// var rewardPercentiles []float64
 	defer eh.HandleErr(&err)
 
 	if blockCount > 128 {
