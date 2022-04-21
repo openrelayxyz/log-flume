@@ -269,7 +269,7 @@ func getLogs(ctx context.Context, w http.ResponseWriter, call *rpcCall, db *sql.
   for i, topics := range crit.Topics {
     topicClause := []string{}
     for _, topic := range topics {
-      topicClause = append(topicClause, fmt.Sprintf("topic%v = ?", i))
+      topicClause = append(topicClause, fmt.Sprintf("%vtopic%v = ?", badTopicValues[topic], i))
       params = append(params, trimPrefix(topic.Bytes()))
     }
     if len(topicClause) > 0 {
