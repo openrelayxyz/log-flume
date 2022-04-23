@@ -119,23 +119,19 @@ func applyParameters(query string, params ...interface{}) string {
     case types.BlockNonce:
       preparedParams[i] = fmt.Sprintf("%v", int64(value.Uint64()))
     default:
+      // log.Printf("WARNING: Unknown type passed to applyParameters: %v", value)
       preparedParams[i] = fmt.Sprintf("%v", value)
     }
   }
   return fmt.Sprintf(query, preparedParams...)
 }
-
-func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, csConsumer transports.Consumer, txFeed *txfeed.TxFeed, db *sql.DB, quit <-chan struct{}, eip155Block, homesteadBlock uint64, mut *sync.RWMutex, mempoolSlots int, indexers []Indexer) {
+// eip155block and homesteadBlock and contingent logic are probably unnecessary and can be eliminated
+func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *txfeed.TxFeed, db *sql.DB, quit <-chan struct{}, eip155Block, homesteadBlock uint64, mut *sync.RWMutex, mempoolSlots int) {
   log.Printf("Processing data feed")
   txCh := make(chan *types.Transaction, 200)
   txSub := txFeed.Subscribe(txCh)
   ch := make(chan *datafeed.ChainEvent, 10)
   sub := feed.Subscribe(ch)
-  csCh := make(chan *delivery.ChainUpdate, 10)
-  if csConsumer != nil {
-    csSub := csConsumer.Subscribe(csCh)
-    defer csSub.Unsubscribe()
-  }
   processed := false
   pruneTicker := time.NewTicker(5 * time.Second)
   txCount := 0
@@ -231,50 +227,6 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, csConsum
         log.Printf("Error on insert: %v - '%v'", err.Error(), strings.Join(statements, " ; ") )
       }
       txCount++
-    case chainUpdate := <-csCh:
-      UPDATELOOP:
-      var lastBatch *delivery.PendingBatch
-      for {
-        statements := []strings{}
-        for _, pb := chainUpdate.Added() {
-          for _, indexer := range indexers {
-            s, err := indexer.Index(pb)
-            if err != nil {
-              log.Printf("Error computing updates")
-              continue UPDATELOOP
-            }
-            statements  = append(statements, s...)
-          }
-          lastBatch = pb
-        }
-        // TODO: Get updates for cardinal_offsets table and add to statements
-        mut.Lock()
-        start := time.Now()
-        dbtx, err := db.BeginTx(context.Background(), nil)
-        if err != nil { log.Fatalf("Error creating a transaction: %v", err.Error())}
-        if _, err := dbtx.Exec(strings.Join(statements, " ; ")); err != nil {
-          dbtx.Rollback()
-          stats := db.Stats()
-          log.Printf("WARN: Failed to insert logs: %v", err.Error())
-          log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
-          mut.Unlock()
-          continue UPDATELOOP
-        }
-        // log.Printf("Spent %v on %v inserts", time.Since(istart), len(statements))
-        // cstart := time.Now()
-        if err := dbtx.Commit(); err != nil {
-          stats := db.Stats()
-          log.Printf("WARN: Failed to insert logs: %v", err.Error())
-          log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
-          mut.Unlock()
-          continue UPDATELOOP
-        }
-        mut.Unlock()
-        processed = true
-        completionFeed.Send(chainEvent.Block.Hash)
-        // log.Printf("Spent %v on commit", time.Since(cstart))
-        log.Printf("Committed Block %v (%#x) in %v (age ??)", uint64(lastBatch.Number.), lastBatch.Hash.Bytes(), time.Since(start)) // TODO: Figure out a simple way to get age
-      }
     case chainEvent := <- ch:
       start := time.Now()
       BLOCKLOOP:
@@ -289,7 +241,9 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, csConsum
           continue BLOCKLOOP
         }
         // dstart := time.Now()
-        deleteRes, err := dbtx.Exec("DELETE FROM blocks WHERE number >= ?;", chainEvent.Block.Number.ToInt().Int64())
+
+        // Post refactor, we will need to do event_logs, transactions, and any other tables
+        deleteRes, err := dbtx.Exec("DELETE FROM blocks WHERE number >= ?; DELETE FROM transactions WHERE block >= ?; DELETE FROM event_logs WHERE block >= ?; ", chainEvent.Block.Number.ToInt().Int64(), chainEvent.Block.Number.ToInt().Int64(), chainEvent.Block.Number.ToInt().Int64())
         if err != nil {
           dbtx.Rollback()
           stats := db.Stats()

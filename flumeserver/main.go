@@ -26,11 +26,11 @@ import (
 
 func main() {
 
-  // shutdownSync := flag.Bool("shutdownSync", false, "Shutdown server once sync is completed")
+  shutdownSync := flag.Bool("shutdownSync", false, "Shutdown server once sync is completed")
   port := flag.Int64("port", 8000, "Serving port")
   pprofPort := flag.Int("pprof-port", 6969, "pprof port")
   minSafeBlock := flag.Int("min-safe-block", 1000000, "Do not start serving if the smallest block exceeds this value")
-  shutdownSync := flag.Bool("shutdown.sync", false, "Sync after shutdown")
+  // shutdownSync := flag.Bool("shutdown.sync", false, "Sync after shutdown")
   mainnet := flag.Bool("mainnet", false, "Ethereum Mainnet")
   classic := flag.Bool("classic", false, "Ethereum Classic")
   goerli := flag.Bool("goerli", false, "Goerli Testnet")
@@ -47,7 +47,10 @@ func main() {
   kafkaRollback := flag.Int64("kafka-rollback", 5000, "A number of Kafka offsets to roll back before resumption")
   reorgThreshold := flag.Int64("reorg-threshold", 128, "Minimum number of blocks to keep in memory to handle reorgs.")
   mempoolDb := flag.String("mempool-db", "", "A location for the mempool database (default: same dir as main db)")
-  mempoolSlots := flag.Int("mempool-size", 4096, "Number of mempool entries before low priced entries get dropped")
+	blocksDb := flag.String("blocks-db", "", "A location for the mempool database (default: same dir as main db)")
+	txDb := flag.String("transactions-db", "", "A location for the mempool database (default: same dir as main db)")
+	logsDb := flag.String("logs-db", "", "A location for the mempool database (default: same dir as main db)")
+	mempoolSlots := flag.Int("mempool-size", 4096, "Number of mempool entries before low priced entries get dropped")
   resumptionTimestampMs := flag.Int64("resumption.ts", -1, "Timestamp (in ms) to resume from instead of database timestamp (requires Cardinal source)")
 	concurrency :=flag.Int("concurrency", 16, "Number of concurrent requests to handle")
 
@@ -61,6 +64,8 @@ func main() {
   }
   glogger.Vmodule("")
   gethLog.Root().SetHandler(glogger)
+
+	// var chainid uint64
 
   var homesteadBlock, eip155Block, chainid uint64
 
@@ -90,26 +95,40 @@ func main() {
     chainid = 0
   }
 
-
   sqlitePath := flag.CommandLine.Args()[0]
   feedURL := flag.CommandLine.Args()[1]
 
-  *mempoolDb = filepath.Join(filepath.Dir(sqlitePath), "mempool.sqlite")
+	if mempoolDb == nil {
+		*mempoolDb = filepath.Join(filepath.Dir(sqlitePath), "mempool.sqlite")
+		log.Printf("the location of mempool is %v",*mempoolDb)
+	}
+	if blocksDb == nil {
+		*blocksDb = filepath.Join(filepath.Dir(sqlitePath), "blocks.sqlite")
+	}
+	if txDb == nil {
+		*txDb = filepath.Join(filepath.Dir(sqlitePath), "transactions.sqlite")
+	}
+	if logsDb == nil {
+		*logsDb = filepath.Join(filepath.Dir(sqlitePath), "logs.sqlite")
+	}
 
   sql.Register("sqlite3_hooked",
     &sqlite3.SQLiteDriver{
       ConnectHook: func(conn *sqlite3.SQLiteConn) error {
-        conn.Exec(fmt.Sprintf("ATTACH DATABASE '%v' AS 'mempool'; PRAGMA mempool.journal_mode = WAL ; PRAGMA mempool.synchronous = OFF ;", *mempoolDb), nil)
-        return nil
+				conn.Exec(fmt.Sprintf("ATTACH DATABASE '%v' AS 'blocks'; PRAGMA block.journal_mode = WAL ; PRAGMA block.synchronous = OFF ;", *blocksDb), nil)
+				conn.Exec(fmt.Sprintf("ATTACH DATABASE '%v' AS 'transactions'; PRAGMA transactions.journal_mode = WAL ; PRAGMA transactions.synchronous = OFF ;", *txDb), nil)
+				conn.Exec(fmt.Sprintf("ATTACH DATABASE '%v' AS 'logs'; PRAGMA logs.journal_mode = WAL ; PRAGMA logs.synchronous = OFF ;", *logsDb), nil)
+				conn.Exec(fmt.Sprintf("ATTACH DATABASE '%v' AS 'mempool'; PRAGMA mempool.journal_mode = WAL ; PRAGMA mempool.synchronous = OFF ;", *mempoolDb), nil)
+
+				return nil
       },
   })
-
-  logsdb, err := sql.Open("sqlite3_hooked", fmt.Sprintf("file:%v?_sync=0&_journal_mode=WAL&_foreign_keys=on", sqlitePath))
+  logsdb, err := sql.Open("sqlite3_hooked", fmt.Sprintf("file:%v?_sync=0&_journal_mode=WAL&_foreign_keys=off", sqlitePath))
   if err != nil { log.Fatalf(err.Error()) }
   logsdb.Exec(fmt.Sprintf("pragma mmap_size=%v", *mmap))
   logsdb.Exec(fmt.Sprintf("pragma cache_size=%v", *cacheSize))
-  logsdb.Exec(fmt.Sprintf("pragma temp_store_directory = '%v'", filepath.Dir(sqlitePath)))
-  if *memstore {
+  logsdb.Exec(fmt.Sprintf("pragma temp_store_directory = '%v'", filepath.Dir(*txDb)))
+	if *memstore {
     logsdb.Exec("pragma temp_store = memory")
   }
   logsdb.SetConnMaxLifetime(0)
@@ -135,9 +154,19 @@ func main() {
     go p.ListenAndServe()
   }
 
-  if err := migrations.Migrate(logsdb, chainid); err != nil {
-    log.Fatalf(err.Error())
-  }
+	if err := migrations.MigrateBlocks(logsdb, chainid); err != nil {
+		log.Fatalf(err.Error())
+	}
+	if err := migrations.MigrateTransactions(logsdb, chainid); err != nil {
+		log.Fatalf(err.Error())
+	}
+	if err := migrations.MigrateLogs(logsdb, chainid); err != nil {
+		log.Fatalf(err.Error())
+	}
+	if err := migrations.MigrateMempool(logsdb, chainid); err != nil {
+		log.Fatalf(err.Error())
+	}
+
   var completionFeed event.Feed
   feed, err := datafeed.ResolveFeed(feedURL, logsdb, *kafkaRollback, *reorgThreshold, chainid, *resumptionTimestampMs)
   if err != nil { log.Fatalf(err.Error()) }
