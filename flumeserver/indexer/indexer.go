@@ -114,8 +114,16 @@ func applyParameters(query string, params ...interface{}) string {
       } else {
         preparedParams[i] = fmt.Sprintf("X'%x'", trimPrefix(value.ToInt().Bytes()))
       }
+    case *big.Int:
+      if value == nil {
+        preparedParams[i] = "NULL"
+      } else {
+        preparedParams[i] = fmt.Sprintf("X'%x'", trimPrefix(value.Bytes()))
+      }
     case hexutil.Uint64:
       preparedParams[i] = fmt.Sprintf("%v", uint64(value))
+    case int64, uint64:
+      preparedParams[i] = fmt.Sprintf("%v", value)
     case types.BlockNonce:
       preparedParams[i] = fmt.Sprintf("%v", int64(value.Uint64()))
     default:
