@@ -1,0 +1,88 @@
+package indexer
+
+import (
+	// "encoding/binary"
+	// "fmt"
+	// "io"
+	"github.com/openrelayxyz/cardinal-streams/delivery"
+	// "github.com/openrelayxyz/cardinal-evm/crypto"
+	"github.com/ethereum/go-ethereum/common"
+	gtypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/openrelayxyz/cardinal-evm/rlp"
+	ctypes "github.com/openrelayxyz/cardinal-types"
+	// "golang.org/x/crypto/sha3"
+	// "math/big"
+	"regexp"
+	// "sync"
+	"strconv"
+)
+
+var (
+	logRegexp = regexp.MustCompile("c/[0-9a-z]+/b/([0-9a-z]+)/l/([0-9a-z]+)/([0-9a-z]+)")
+)
+
+type LogIndexer struct {
+	chainid uint64
+}
+
+func getTopicIndex(topics []common.Hash, idx int) []byte {
+  if len(topics) > idx {
+    return trimPrefix(topics[idx].Bytes())
+  }
+  return []byte{}
+}
+
+func (indexer *LogIndexer) Index(pb *delivery.PendingBatch) ([]string, error) {
+
+	//get logs and tx lists, use cardinal datafeed to get regex combinations.
+	//the tx hash is going to be the complex part, if everything but that, ok.
+	//try for everything but tx hash first. corelate tx hashes to log indexes.
+
+	logData := make(map[int64]*gtypes.Log)
+	txData := make(map[uint]ctypes.Hash)
+
+	for k, v := range pb.Values {
+		switch {
+		case logRegexp.MatchString(k):
+			parts := logRegexp.FindSubmatch([]byte(k))
+			txIndex, _ := strconv.ParseInt(string(parts[2]), 16, 64)
+			logIndex, _ := strconv.ParseInt(string(parts[3]), 16, 64)
+
+			logRecord := &gtypes.Log{}
+			rlp.DecodeBytes(v, logRecord)
+			logRecord.BlockNumber = uint64(pb.Number)
+			logRecord.TxIndex = uint(txIndex)
+			logRecord.BlockHash = common.Hash(pb.Hash)
+			logRecord.Index = uint(logIndex)
+			logData[int64(logIndex)] = logRecord
+		case txRegexp.MatchString(k):
+			parts := txRegexp.FindSubmatch([]byte(k))
+			txIndex, _ := strconv.ParseInt(string(parts[2]), 16, 64)
+			txData[uint(txIndex)] =  hash(v)
+		default:
+		}
+	}
+
+	statements := make([]string, 0, len(logData) +1)
+
+	statements = append(statements, applyParameters("DELETE FROM event_logs WHERE block >= %v", pb.Number))
+
+	for i := 0; i < len(logData); i++ {
+		logRecord := logData[int64(i)]
+		statements = append(statements, applyParameters(
+			"INSERT INTO event_logs(address,  topic0, topic1, topic2, topic3, data, block, logIndex, transactionHash, transactionIndex, blockHash) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
+			logRecord.Address,
+			getTopicIndex(logRecord.Topics, 0),
+			getTopicIndex(logRecord.Topics, 1),
+			getTopicIndex(logRecord.Topics, 2),
+			getTopicIndex(logRecord.Topics, 3),
+			compress(logRecord.Data),
+			pb.Number,
+			logRecord.Index,
+			txData[logRecord.TxIndex],
+			logRecord.TxIndex,
+			pb.Hash,
+			))
+	}
+		return statements, nil
+	}

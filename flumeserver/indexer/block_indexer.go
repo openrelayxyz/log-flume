@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"github.com/openrelayxyz/cardinal-streams/delivery"
-	"github.com/openrelayxyz/cardinal-evm/crypto"
-	"github.com/openrelayxyz/cardinal-evm/types"
+	// "github.com/openrelayxyz/cardinal-evm/crypto"
+  "github.com/ethereum/go-ethereum/crypto"
+	// "github.com/openrelayxyz/cardinal-evm/types"
+  "github.com/ethereum/go-ethereum/core/types"
 	"github.com/openrelayxyz/cardinal-evm/rlp"
 	ctypes "github.com/openrelayxyz/cardinal-types"
 	"golang.org/x/crypto/sha3"
@@ -51,6 +53,7 @@ type extblock struct {
 }
 
 func (indexer *BlockIndexer) Index(pb *delivery.PendingBatch) ([]string, error) {
+	//when is indexer chainid ever set?
 	headerBytes := pb.Values[fmt.Sprintf("c/%x/b/%x/h", indexer.chainid, pb.Hash.Bytes())]
 	tdBytes := pb.Values[fmt.Sprintf("c/%x/b/%x/d", indexer.chainid, pb.Hash.Bytes())]
 	td := new(big.Int).SetBytes(tdBytes)

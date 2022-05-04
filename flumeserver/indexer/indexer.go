@@ -34,13 +34,6 @@ func trimPrefix(data []byte) ([]byte) {
   return v
 }
 
-func getTopicIndex(topics []common.Hash, idx int) []byte {
-  if len(topics) > idx {
-    return trimPrefix(topics[idx].Bytes())
-  }
-  return []byte{}
-}
-
 var compressor *zlib.Writer
 var compressionBuffer = bytes.NewBuffer(make([]byte, 0, 5 * 1024 * 1024))
 
