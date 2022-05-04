@@ -97,7 +97,7 @@ func (indexer *TxIndexer) Index(pb *delivery.PendingBatch) ([]string, error) {
 				}
 				sender, err := gtypes.Sender(signer, transaction)
 				if err != nil {
-					log.Printf("WARN: Failed to derive sender: %v", err.Error())
+					log.Panic(err.Error())
 				}
 				ch <- sender
 			// }//(transaction, ch) //unclear on syntax here
@@ -111,7 +111,7 @@ func (indexer *TxIndexer) Index(pb *delivery.PendingBatch) ([]string, error) {
 			getCopy(compress(transaction.Data())),
 			transaction.Nonce(),
 			trimPrefix(transaction.To().Bytes()),
-			int(i), //TODO: check type
+			uint(i), //TODO: check type
 			trimPrefix(transaction.Value().Bytes()),
 			v.Int64(),
 			r,
