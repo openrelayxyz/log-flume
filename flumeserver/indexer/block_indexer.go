@@ -52,8 +52,11 @@ type extblock struct {
 	Uncles []rlpData
 }
 
+func NewBlockIndexer(chainid uint64) Indexer {
+	return &BlockIndexer{chainid: chainid}
+}
+
 func (indexer *BlockIndexer) Index(pb *delivery.PendingBatch) ([]string, error) {
-	//when is indexer chainid ever set?
 	headerBytes := pb.Values[fmt.Sprintf("c/%x/b/%x/h", indexer.chainid, pb.Hash.Bytes())]
 	tdBytes := pb.Values[fmt.Sprintf("c/%x/b/%x/d", indexer.chainid, pb.Hash.Bytes())]
 	td := new(big.Int).SetBytes(tdBytes)

@@ -32,11 +32,9 @@ func getTopicIndex(topics []common.Hash, idx int) []byte {
   return []byte{}
 }
 
-func (indexer *LogIndexer) Index(pb *delivery.PendingBatch) ([]string, error) {
 
-	//get logs and tx lists, use cardinal datafeed to get regex combinations.
-	//the tx hash is going to be the complex part, if everything but that, ok.
-	//try for everything but tx hash first. corelate tx hashes to log indexes.
+
+func (indexer *LogIndexer) Index(pb *delivery.PendingBatch) ([]string, error) {
 
 	logData := make(map[int64]*gtypes.Log)
 	txData := make(map[uint]ctypes.Hash)
@@ -63,9 +61,9 @@ func (indexer *LogIndexer) Index(pb *delivery.PendingBatch) ([]string, error) {
 		}
 	}
 
-	statements := make([]string, 0, len(logData) +1)
+			statements := make([]string, 0, len(logData) +1)
 
-	statements = append(statements, applyParameters("DELETE FROM event_logs WHERE block >= %v", pb.Number))
+			statements = append(statements, applyParameters("DELETE FROM event_logs WHERE block >= %v", pb.Number))
 
 	for i := 0; i < len(logData); i++ {
 		logRecord := logData[int64(i)]

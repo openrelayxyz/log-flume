@@ -34,6 +34,8 @@ func trimPrefix(data []byte) ([]byte) {
   return v
 }
 
+
+
 var compressor *zlib.Writer
 var compressionBuffer = bytes.NewBuffer(make([]byte, 0, 5 * 1024 * 1024))
 
