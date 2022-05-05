@@ -65,6 +65,8 @@ func main() {
   glogger.Vmodule("")
   gethLog.Root().SetHandler(glogger)
 
+	//we will revist logging in the project
+
 	// var chainid uint64
 
   var homesteadBlock, eip155Block, chainid uint64
@@ -131,6 +133,9 @@ func main() {
 	if *memstore {
     logsdb.Exec("pragma temp_store = memory")
   }
+	// these pragmas only get applied to the first open database connection. not being applied across entire connection Pool
+	//need (probably) to be Deleted
+	//sqlite is using default values for pramas and are acceptable
   logsdb.SetConnMaxLifetime(0)
   logsdb.SetMaxIdleConns(32)
   go func() {
@@ -142,7 +147,8 @@ func main() {
       logsdb.QueryRow("SELECT max(number) FROM blocks;").Scan(&block)
       log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v Head Block: %v", stats.OpenConnections, stats.InUse, stats.Idle, block)
     }
-  }()
+//evetnually will ve replaced by a metrics library
+	}()
   if *pprofPort > 0 {
     p := &http.Server{
       Addr: fmt.Sprintf(":%v", *pprofPort),
@@ -170,15 +176,15 @@ func main() {
   var completionFeed event.Feed
   feed, err := datafeed.ResolveFeed(feedURL, logsdb, *kafkaRollback, *reorgThreshold, chainid, *resumptionTimestampMs)
   if err != nil { log.Fatalf(err.Error()) }
-
+//genereic feed blocks logs tx receipts
   txFeed, err := txfeed.ResolveTransactionFeed(feedURL, *txTopic)
   if err != nil { log.Fatalf(err.Error()) }
-
+//mempool transactions
   quit := make(chan struct{})
   // go indexer.ProcessFeed(feed, logsdb, quit)
   mut := &sync.RWMutex{}
   go indexer.ProcessDataFeed(feed, completionFeed, txFeed, logsdb, quit, eip155Block, homesteadBlock, mut, *mempoolSlots)
-
+//completion feed not really used intended to give info about when flume finished processing a block, need to strip, there may be a case for flume to offer subscritions and so may need a completion type of object (post refactor)
 	tm := transports.NewTransportManager(*concurrency)
 	tm.AddHTTPServer(*port)
 	tm.Register("eth", api.NewLogsAPI(logsdb, chainid))
@@ -191,11 +197,12 @@ func main() {
 
 
   <-feed.Ready()
+	//datafeed will fire message on ready channel when caught up on latest message, t manager was set up above byt not running yet
   if *completionTopic != "" {
     notify.SendKafkaNotifications(completionFeed, *completionTopic)
-  }
+  } //will be stripped
   var minBlock int
-  logsdb.QueryRowContext(context.Background(), "SELECT min(blockNumber) FROM event_logs;").Scan(&minBlock)
+  logsdb.QueryRowContext(context.Background(), "SELECT min(block) FROM event_logs;").Scan(&minBlock)
   if minBlock > *minSafeBlock {
     log.Fatalf("Earliest log found on block %v. Should be less than or equal to %v", minBlock, *minSafeBlock)
   }
@@ -208,7 +215,7 @@ func main() {
 		}
 
   }
-  quit <- struct{}{}
+  quit <- struct{}{} 
   logsdb.Close()
   time.Sleep(time.Second)
 }

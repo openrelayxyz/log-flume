@@ -40,6 +40,8 @@ type cardinalDataFeed struct{
 func NewCardinalDataFeed(brokerURL string, rollback, reorgThreshold, chainid, resumptionTime int64, db *sql.DB, whitelist map[uint64]ctypes.Hash) (DataFeed, error) {
 	if whitelist == nil { whitelist = make(map[uint64]ctypes.Hash) }
 	var tableName string
+	//needs to be revisited in terms of what db this table goes into
+	//this need to changed to look into blocks db, on a seperate commit.
 	db.QueryRowContext(context.Background(), "SELECT name FROM sqlite_master WHERE type='table' and name='cardinal_offsets';").Scan(&tableName)
 	if tableName != "cardinal_offsets" {
 		if _, err := db.Exec("CREATE TABLE cardinal_offsets (partition INT, offset BIGINT, topic STRING, PRIMARY KEY (topic, partition));"); err != nil {
@@ -49,6 +51,7 @@ func NewCardinalDataFeed(brokerURL string, rollback, reorgThreshold, chainid, re
 	parts := strings.Split(brokerURL, ";")
 	topics := strings.Split(parts[1], ",")
 	startOffsets := []string{}
+	//will likely go away in the refactor
 	for _, topic := range topics {
 		var partition int32
 		var offset int64
@@ -107,6 +110,8 @@ func (d *cardinalDataFeed) subscribe() {
 	}
 	ch := make(chan *delivery.ChainUpdate)
 	d.sub = d.consumer.Subscribe(ch)
+	//take consumer, pass that into indexer in place of the data feed, leave both inplace for a BeginTx
+//within process datafeed iterate over chainupdates, interate over consumer and call pending batch 
 	go func() {
 		for {
 			select {
