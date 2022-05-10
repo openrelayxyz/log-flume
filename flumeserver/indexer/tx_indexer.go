@@ -53,14 +53,14 @@ func (indexer *TxIndexer) Index(pb *delivery.PendingBatch) ([]string, error) {
 			var signer gtypes.Signer
 			ch := make(chan common.Address, 1)
 			senderMap[tx.Hash()] = ch
-			go func(transaction *gtypes.Transaction, ch chan<- common.Address) {
+			go func(tx *gtypes.Transaction, ch chan<- common.Address) {
 				switch {
-				case transaction.Type() == gtypes.AccessListTxType:
-					signer = gtypes.NewEIP2930Signer(transaction.ChainId())
-				case transaction.Type() == gtypes.DynamicFeeTxType:
-					signer = gtypes.NewLondonSigner(transaction.ChainId())
+				case tx.Type() == gtypes.AccessListTxType:
+					signer = gtypes.NewEIP2930Signer(tx.ChainId())
+				case tx.Type() == gtypes.DynamicFeeTxType:
+					signer = gtypes.NewLondonSigner(tx.ChainId())
 				case uint64(pb.Number) > indexer.eip155Block:
-					signer = gtypes.NewEIP155Signer(transaction.ChainId())
+					signer = gtypes.NewEIP155Signer(tx.ChainId())
 				case uint64(pb.Number) > indexer.homesteadBlock:
 					signer = gtypes.HomesteadSigner{}
 				default:
@@ -92,7 +92,6 @@ func (indexer *TxIndexer) Index(pb *delivery.PendingBatch) ([]string, error) {
 		transaction := txData[int(i)]
 		receipt := receiptData[int(i)]
 		sender := <-senderMap[transaction.Hash()]
-		//do we need further error handling here a la indexer 313?
 		v, r, s := transaction.RawSignatureValues()
 
 		statements = append(statements, applyParameters(

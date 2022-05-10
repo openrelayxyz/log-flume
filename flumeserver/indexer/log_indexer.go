@@ -22,7 +22,6 @@ var (
 )
 
 type LogIndexer struct {
-	chainid uint64
 }
 
 func getTopicIndex(topics []common.Hash, idx int) []byte {
@@ -32,6 +31,9 @@ func getTopicIndex(topics []common.Hash, idx int) []byte {
   return []byte{}
 }
 
+func NewLogIndexer() Indexer {
+	return &LogIndexer{}
+}
 
 
 func (indexer *LogIndexer) Index(pb *delivery.PendingBatch) ([]string, error) {
