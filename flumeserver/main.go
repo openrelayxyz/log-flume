@@ -3,26 +3,95 @@ package main
 import (
   "context"
   "os"
-	"github.com/openrelayxyz/cardinal-rpc/transports"
+	"strings"
+	// "regexp"
+	rpcTransports "github.com/openrelayxyz/cardinal-rpc/transports"
   "github.com/openrelayxyz/flume/flumeserver/txfeed"
   "github.com/openrelayxyz/flume/flumeserver/datafeed"
   "github.com/openrelayxyz/flume/flumeserver/indexer"
   "github.com/openrelayxyz/flume/flumeserver/migrations"
-  "github.com/openrelayxyz/flume/flumeserver/notify"
+	streamsTransports "github.com/openrelayxyz/cardinal-streams/transports"
+  // "github.com/openrelayxyz/flume/flumeserver/notify"
 	"github.com/openrelayxyz/flume/flumeserver/api"
-  gethLog "github.com/ethereum/go-ethereum/log"
-  "github.com/ethereum/go-ethereum/event"
+  // gethLog "github.com/ethereum/go-ethereum/log"
+	ctypes "github.com/openrelayxyz/cardinal-types"
+	log "github.com/inconshreveable/log15"
+  // "github.com/ethereum/go-ethereum/event"
+	"math/big"
   "net/http"
   "path/filepath"
   "flag"
   "fmt"
   "time"
-  "log"
+  // "log"
   "github.com/mattn/go-sqlite3"
   _ "net/http/pprof"
   "database/sql"
   "sync"
+	"regexp"
 )
+
+func aquire_consumer(db *sql.DB, brokerURL string, rollback, reorgThreshold, chainid, resumptionTime int64) (streamsTransports.Consumer, error) {
+	var err error
+	// if whitelist == nil { whitelist = make(map[uint64]ctypes.Hash) }
+	var tableName string
+	//needs to be revisited in terms of what db this table goes into
+	//this need to changed to look into blocks db, on a seperate commit.
+	db.QueryRowContext(context.Background(), "SELECT name FROM sqlite_master WHERE type='table' and name='cardinal_offsets';").Scan(&tableName)
+	if tableName != "cardinal_offsets" {
+		if _, err = db.Exec("CREATE TABLE cardinal_offsets (partition INT, offset BIGINT, topic STRING, PRIMARY KEY (topic, partition));"); err != nil {
+			return nil, err
+		}
+	}
+	parts := strings.Split(brokerURL, ";")
+	topics := strings.Split(parts[1], ",")
+	startOffsets := []string{}
+	//will likely go away in the refactor
+	for _, topic := range topics {
+		var partition int32
+		var offset int64
+		rows, err := db.QueryContext(context.Background(), "SELECT partition, offset FROM cardinal_offsets WHERE topic = ?;", topic)
+		if err != nil {
+		 	return nil, err}
+		for rows.Next() {
+			if err := rows.Scan(&partition, &offset); err != nil { return nil, err }
+			startOffsets = append(startOffsets, fmt.Sprintf("%v:%v=%v", topic, partition, offset))
+		}
+	}
+	resumption := strings.Join(startOffsets, ";")
+	var lastHash, lastWeight []byte
+	var lastNumber int64
+	db.QueryRowContext(context.Background(), "SELECT max(number), hash, td FROM blocks;").Scan(&lastNumber, &lastHash, &lastWeight)
+
+	trackedPrefixes := []*regexp.Regexp{
+		regexp.MustCompile("c/[0-9a-z]+/b/[0-9a-z]+/h"),
+		regexp.MustCompile("c/[0-9a-z]+/b/[0-9a-z]+/d"),
+		regexp.MustCompile("c/[0-9a-z]+/b/[0-9a-z]+/u"),
+		regexp.MustCompile("c/[0-9a-z]+/b/[0-9a-z]+/t/"),
+		regexp.MustCompile("c/[0-9a-z]+/b/[0-9a-z]+/r/"),
+		regexp.MustCompile("c/[0-9a-z]+/b/[0-9a-z]+/l/"),
+	}
+	var consumer streamsTransports.Consumer
+	log.Info("Resuming to block", "number", lastNumber)
+	if strings.HasPrefix(parts[0], "kafka://") {
+		rt := []byte(resumption)
+		if resumptionTime > 0 {
+			r, err := streamsTransports.ResumptionForTimestamp([]streamsTransports.BrokerParams{
+				{URL: brokerURL, Topics: topics},
+				}, resumptionTime)
+			if err != nil {
+				log.Warn("Could not load resumption from timestamp:", "error", err.Error())
+			} else {
+				rt = r
+			}
+		}
+		consumer, err = streamsTransports.NewKafkaConsumer(parts[0], topics[0], topics, rt, rollback, lastNumber, ctypes.BytesToHash(lastHash), new(big.Int).SetBytes(lastWeight), reorgThreshold, trackedPrefixes, nil)
+	} else if strings.HasPrefix(parts[0], "null://") {
+		consumer = streamsTransports.NewNullConsumer()
+	}
+	return consumer, nil
+}
+
 
 func main() {
 
@@ -38,11 +107,12 @@ func main() {
   rinkeby := flag.Bool("rinkeby", false, "Rinkeby Testnet")
   homesteadBlockFlag := flag.Int("homestead", 0, "Block of the homestead hardfork")
   eip155BlockFlag := flag.Int("eip155", 0, "Block of the eip155 hardfork")
-  verbosity := flag.Bool("verbose", false, "Increase verbosity")
-  mmap := flag.Int("mmap-size", 1073741824, "Set mmap size")
-  cacheSize := flag.Int("cache-size", 2000, "Set cache size (in 4 kb pages")
-  memstore := flag.Bool("memstore", false, "Store temporary tables in memory")
-  completionTopic := flag.String("completion-topic", "", "A kafka topic to broadcast newly indexed blocks")
+	//TODO: do we need to address the verbosity flagging with log15?
+	// verbosity := flag.Bool("verbose", false, "Increase verbosity")
+  // mmap := flag.Int("mmap-size", 1073741824, "Set mmap size")
+  // cacheSize := flag.Int("cache-size", 2000, "Set cache size (in 4 kb pages")
+  // memstore := flag.Bool("memstore", false, "Store temporary tables in memory")
+  // completionTopic := flag.String("completion-topic", "", "A kafka topic to broadcast newly indexed blocks")
   txTopic := flag.String("mempool-topic", "", "A kafka topic for receiving pending transactions")
   kafkaRollback := flag.Int64("kafka-rollback", 5000, "A number of Kafka offsets to roll back before resumption")
   reorgThreshold := flag.Int64("reorg-threshold", 128, "Minimum number of blocks to keep in memory to handle reorgs.")
@@ -56,14 +126,14 @@ func main() {
 
   flag.CommandLine.Parse(os.Args[1:])
 
-  glogger := gethLog.NewGlogHandler(gethLog.StreamHandler(os.Stderr, gethLog.TerminalFormat(false)))
-  if *verbosity {
-    glogger.Verbosity(gethLog.LvlDebug)
-  } else {
-    glogger.Verbosity(gethLog.LvlInfo)
-  }
-  glogger.Vmodule("")
-  gethLog.Root().SetHandler(glogger)
+  // glogger := gethLog.NewGlogHandler(gethLog.StreamHandler(os.Stderr, gethLog.TerminalFormat(false)))
+  // if *verbosity {
+  //   glogger.Verbosity(gethLog.LvlDebug)
+  // } else {
+  //   glogger.Verbosity(gethLog.LvlInfo)
+  // }
+  // glogger.Vmodule("")
+  // gethLog.Root().SetHandler(glogger)
 
 	//we will revist logging in the project
 
@@ -102,7 +172,7 @@ func main() {
 
 	if mempoolDb == nil {
 		*mempoolDb = filepath.Join(filepath.Dir(sqlitePath), "mempool.sqlite")
-		log.Printf("the location of mempool is %v",*mempoolDb)
+		log.Info("the location of mempool is:", "mempoolDB", *mempoolDb)
 	}
 	if blocksDb == nil {
 		*blocksDb = filepath.Join(filepath.Dir(sqlitePath), "blocks.sqlite")
@@ -126,16 +196,8 @@ func main() {
       },
   })
   logsdb, err := sql.Open("sqlite3_hooked", fmt.Sprintf("file:%v?_sync=0&_journal_mode=WAL&_foreign_keys=off", sqlitePath))
-  if err != nil { log.Fatalf(err.Error()) }
-  logsdb.Exec(fmt.Sprintf("pragma mmap_size=%v", *mmap))
-  logsdb.Exec(fmt.Sprintf("pragma cache_size=%v", *cacheSize))
-  logsdb.Exec(fmt.Sprintf("pragma temp_store_directory = '%v'", filepath.Dir(*txDb)))
-	if *memstore {
-    logsdb.Exec("pragma temp_store = memory")
-  }
-	// these pragmas only get applied to the first open database connection. not being applied across entire connection Pool
-	//need (probably) to be Deleted
-	//sqlite is using default values for pramas and are acceptable
+  if err != nil { log.Error(err.Error()) }
+
   logsdb.SetConnMaxLifetime(0)
   logsdb.SetMaxIdleConns(32)
   go func() {
@@ -145,7 +207,7 @@ func main() {
       stats := logsdb.Stats()
       var block uint
       logsdb.QueryRow("SELECT max(number) FROM blocks;").Scan(&block)
-      log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v Head Block: %v", stats.OpenConnections, stats.InUse, stats.Idle, block)
+      log.Info("SQLite Pool", "Open:", stats.OpenConnections, "InUse:",  stats.InUse, "Idle:", stats.Idle, "Head Block:", block)
     }
 //evetnually will ve replaced by a metrics library
 	}()
@@ -161,31 +223,42 @@ func main() {
   }
 
 	if err := migrations.MigrateBlocks(logsdb, chainid); err != nil {
-		log.Fatalf(err.Error())
+		log.Error(err.Error())
 	}
 	if err := migrations.MigrateTransactions(logsdb, chainid); err != nil {
-		log.Fatalf(err.Error())
+		log.Error(err.Error())
 	}
 	if err := migrations.MigrateLogs(logsdb, chainid); err != nil {
-		log.Fatalf(err.Error())
+		log.Error(err.Error())
 	}
 	if err := migrations.MigrateMempool(logsdb, chainid); err != nil {
-		log.Fatalf(err.Error())
+		log.Error(err.Error())
 	}
 
-  var completionFeed event.Feed
   feed, err := datafeed.ResolveFeed(feedURL, logsdb, *kafkaRollback, *reorgThreshold, chainid, *resumptionTimestampMs)
-  if err != nil { log.Fatalf(err.Error()) }
+  if err != nil { log.Error(err.Error()) }
 //genereic feed blocks logs tx receipts
   txFeed, err := txfeed.ResolveTransactionFeed(feedURL, *txTopic)
-  if err != nil { log.Fatalf(err.Error()) }
+  if err != nil { log.Error(err.Error()) }
 //mempool transactions
   quit := make(chan struct{})
   // go indexer.ProcessFeed(feed, logsdb, quit)
   mut := &sync.RWMutex{}
-  go indexer.ProcessDataFeed(feed, completionFeed, txFeed, logsdb, quit, eip155Block, homesteadBlock, mut, *mempoolSlots)
+
+	var rollback, resumptionTime int64
+	//TODO: the above is not ok. We need to set those variables, as flags I am assuming.
+	consumer, _ := aquire_consumer(logsdb, feedURL, rollback, *reorgThreshold, int64(chainid), resumptionTime)
+
+
+	//copy paste from cardinal newcardinal datafeed to get down to consumer to pass into process datafeed (see above)
+	indexes := []indexer.Indexer{}
+	bi := indexer.NewBlockIndexer(chainid)
+	ti := indexer.NewTxIndexer(eip155Block, homesteadBlock)
+	li := indexer.NewLogIndexer()
+	indexes = append(indexes, bi, ti, li)
+  go indexer.ProcessDataFeed(feed, consumer, txFeed, logsdb, quit, eip155Block, homesteadBlock, mut, *mempoolSlots, indexes) //[]indexer
 //completion feed not really used intended to give info about when flume finished processing a block, need to strip, there may be a case for flume to offer subscritions and so may need a completion type of object (post refactor)
-	tm := transports.NewTransportManager(*concurrency)
+	tm := rpcTransports.NewTransportManager(*concurrency)
 	tm.AddHTTPServer(*port)
 	tm.Register("eth", api.NewLogsAPI(logsdb, chainid))
 	tm.Register("eth", api.NewBlockAPI(logsdb, chainid))
@@ -198,13 +271,13 @@ func main() {
 
   <-feed.Ready()
 	//datafeed will fire message on ready channel when caught up on latest message, t manager was set up above byt not running yet
-  if *completionTopic != "" {
-    notify.SendKafkaNotifications(completionFeed, *completionTopic)
-  } //will be stripped
+  // if *completionTopic != "" {
+  //   notify.SendKafkaNotifications(completionFeed, *completionTopic)
+  // } //will be stripped
   var minBlock int
   logsdb.QueryRowContext(context.Background(), "SELECT min(block) FROM event_logs;").Scan(&minBlock)
   if minBlock > *minSafeBlock {
-    log.Fatalf("Earliest log found on block %v. Should be less than or equal to %v", minBlock, *minSafeBlock)
+    log.Error("Minimum block error", "Earliest log found on block:", minBlock, "Should be less than or equal to:", *minSafeBlock)
   }
   if !*shutdownSync {
 		if err := tm.Run(9999); err != nil {
@@ -215,7 +288,7 @@ func main() {
 		}
 
   }
-  quit <- struct{}{} 
+  quit <- struct{}{}
   logsdb.Close()
   time.Sleep(time.Second)
 }
