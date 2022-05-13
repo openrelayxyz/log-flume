@@ -22,6 +22,7 @@ var (
 )
 
 type LogIndexer struct {
+	chainid uint64
 }
 
 func getTopicIndex(topics []common.Hash, idx int) []byte {
@@ -70,7 +71,7 @@ func (indexer *LogIndexer) Index(pb *delivery.PendingBatch) ([]string, error) {
 	for i := 0; i < len(logData); i++ {
 		logRecord := logData[int64(i)]
 		statements = append(statements, applyParameters(
-			"INSERT INTO event_logs(address,  topic0, topic1, topic2, topic3, data, block, logIndex, transactionHash, transactionIndex, blockHash) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
+			"INSERT or IGNORE INTO event_logs(address,  topic0, topic1, topic2, topic3, data, block, logIndex, transactionHash, transactionIndex, blockHash) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
 			logRecord.Address,
 			getTopicIndex(logRecord.Topics, 0),
 			getTopicIndex(logRecord.Topics, 1),

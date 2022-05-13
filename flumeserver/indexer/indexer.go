@@ -5,6 +5,7 @@ import (
   "strings"
   "bytes"
   "context"
+	"math/big"
   "github.com/openrelayxyz/flume/flumeserver/datafeed"
   "github.com/openrelayxyz/flume/flumeserver/txfeed"
   "database/sql"
@@ -85,7 +86,33 @@ func applyParameters(query string, params ...interface{}) string {
       } else {
         preparedParams[i] = fmt.Sprintf("X'%x'", value)
       }
+		case *common.Address:
+			if value == nil {
+				preparedParams[i] = "NULL"
+				continue
+			}
+			b := trimPrefix(value.Bytes())
+			if len(b) == 0 {
+				preparedParams[i] = "NULL"
+			} else {
+				preparedParams[i] = fmt.Sprintf("X'%x'", b)
+			}
+		case *big.Int:
+			if value == nil {
+				preparedParams[i] = "NULL"
+				continue
+			}
+      b := trimPrefix(value.Bytes())
+      if len(b) == 0 {
+        preparedParams[i] = "NULL"
+      } else {
+        preparedParams[i] = fmt.Sprintf("X'%x'", b)
+      }
     case bytesable:
+			if value == nil {
+				preparedParams[i] = "NULL"
+				continue
+			}
       b := trimPrefix(value.Bytes())
       if len(b) == 0 {
         preparedParams[i] = "NULL"

@@ -1,7 +1,7 @@
 package indexer
 
 import (
-	"encoding/binary"
+	// "encoding/binary"
 	"fmt"
 	"io"
 	"github.com/openrelayxyz/cardinal-streams/delivery"
@@ -48,7 +48,7 @@ type BlockIndexer struct {
 
 type extblock struct {
 	Header *types.Header
-	Txs    []rlpData
+	Txs    []types.Transaction
 	Uncles []rlpData
 }
 
@@ -67,12 +67,12 @@ func (indexer *BlockIndexer) Index(pb *delivery.PendingBatch) ([]string, error) 
 
 	eblock := &extblock{
 		Header: header,
-		Txs: []rlpData{},
+		Txs: []types.Transaction{},
 		Uncles: []rlpData{},
 	}
 
 	uncleHashes := make(map[int64]ctypes.Hash)
-	txData := make(map[int64]rlpData)
+	txData := make(map[int64]types.Transaction)
 	uncleData := make(map[int64]rlpData)
 
 	for k, v := range pb.Values {
@@ -83,13 +83,15 @@ func (indexer *BlockIndexer) Index(pb *delivery.PendingBatch) ([]string, error) 
 			uncleHashes[int64(uncleIndex)] = hash(v)
 			uncleData[int64(uncleIndex)] = rlpData(v)
 		case txRegexp.MatchString(k):
-			parts := uncleRegexp.FindSubmatch([]byte(k))
+			parts := txRegexp.FindSubmatch([]byte(k))
 			txIndex, _ := strconv.ParseInt(string(parts[2]), 16, 64)
-			txData[int64(txIndex)] = rlpData(v)
+			var tx types.Transaction
+			tx.UnmarshalBinary(v)
+			txData[int64(txIndex)] = tx
 		default:
 		}
 	}
-	eblock.Txs = make([]rlpData, len(txData))
+	eblock.Txs = make([]types.Transaction, len(txData))
 	for i, v := range txData {
 		eblock.Txs[int(i)] = v
 	}
@@ -124,8 +126,9 @@ func (indexer *BlockIndexer) Index(pb *delivery.PendingBatch) ([]string, error) 
 		header.Time,
 		header.Extra,
 		header.MixDigest,
-		header.Nonce,
-		binary.BigEndian.Uint64(header.Nonce[:]),
+		header.Nonce, //type mis-allignment means that we may not get accurate statements from .dumps on old test data.
+		//Nonce was appearing twice, which do we want to keep?
+		// binary.BigEndian.Uint64(header.Nonce[:]),
 		uncleRLP,
 		size,
 		td.Bytes(),

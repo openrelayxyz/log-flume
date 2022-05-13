@@ -1,8 +1,11 @@
 package indexer
 
 import (
+	"math/big"
+	"fmt"
 	"log"
 	"github.com/openrelayxyz/cardinal-streams/delivery"
+	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/common"
 	gtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/openrelayxyz/cardinal-evm/rlp"
@@ -25,18 +28,25 @@ type cardinalReceiptMeta struct {
 }
 
 type TxIndexer struct {
+	chainid  uint64
 	eip155Block uint64
 	homesteadBlock uint64
 }
 
-func NewTxIndexer(eip155block, homesteadblock uint64) Indexer {
+func NewTxIndexer(chainid, eip155block, homesteadblock uint64) Indexer {
 	return &TxIndexer{
+		chainid: chainid,
 		eip155Block: eip155block,
 		homesteadBlock: homesteadblock,
 	}
 }
 
 func (indexer *TxIndexer) Index(pb *delivery.PendingBatch) ([]string, error) {
+	headerBytes := pb.Values[fmt.Sprintf("c/%x/b/%x/h", indexer.chainid, pb.Hash.Bytes())]
+	header := &gtypes.Header{}
+	if err := rlp.DecodeBytes(headerBytes, &header); err != nil {
+		panic(err.Error())
+	}
 
 	receiptData := make(map[int]*cardinalReceiptMeta)
 	txData := make(map[int]*gtypes.Transaction)
@@ -94,15 +104,24 @@ func (indexer *TxIndexer) Index(pb *delivery.PendingBatch) ([]string, error) {
 		sender := <-senderMap[transaction.Hash()]
 		v, r, s := transaction.RawSignatureValues()
 
+    var accessListRLP []byte
+		gasPrice := transaction.GasPrice().Uint64()
+    switch transaction.Type() {
+    case gtypes.AccessListTxType:
+        accessListRLP, _ = rlp.EncodeToBytes(transaction.AccessList())
+    case gtypes.DynamicFeeTxType:
+        accessListRLP, _ = rlp.EncodeToBytes(transaction.AccessList())
+        gasPrice = math.BigMin(new(big.Int).Add(transaction.GasTipCap(), header.BaseFee), transaction.GasFeeCap()).Uint64()
+    }
 		statements = append(statements, applyParameters(
 			"INSERT INTO transactions(block, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, `value`, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, `status`, `type`, access_list, gasFeeCap, gasTipCap) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
 			pb.Number,
 			transaction.Gas(),
-			transaction.GasPrice().Uint64(),
+			gasPrice,
 			transaction.Hash(),
 			getCopy(compress(transaction.Data())),
 			transaction.Nonce(),
-			trimPrefix(transaction.To().Bytes()),
+			transaction.To(),
 			uint(i),
 			trimPrefix(transaction.Value().Bytes()),
 			v.Int64(),
@@ -116,7 +135,7 @@ func (indexer *TxIndexer) Index(pb *delivery.PendingBatch) ([]string, error) {
 			getCopy(compress(receipt.LogsBloom)),
 			receipt.Status,
 			transaction.Type(),
-			transaction.AccessList(),
+			accessListRLP,
 			trimPrefix(transaction.GasFeeCap().Bytes()),
 			trimPrefix(transaction.GasTipCap().Bytes()),
 			))
