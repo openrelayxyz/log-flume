@@ -134,7 +134,7 @@ func MigrateLogs(db *sql.DB, chainid uint64) error {
 		      transactionHash varchar(32),
 		      transactionIndex varchar(32),
 		      blockHash varchar(32),
-		      PRIMARY KEY (transactionHash)
+		      PRIMARY KEY (block, logIndex)
 		    )`)
 		if _, err := db.Exec(`CREATE INDEX logs.address_compound ON event_logs(address, block)`); err != nil {
 			panic(err)
