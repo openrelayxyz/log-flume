@@ -93,34 +93,32 @@ func TestBlockIndexer(t *testing.T) {
 		statements = append(statements, group...)
 	}
 
+
+	//check indexer and allign variable names to megaStatement
 	megaStatement := strings.Join(statements, ";")
 	_, err = controlDB.Exec(megaStatement)
 	if err != nil {t.Fatalf(err.Error())}
 
-	// for i, statement := range statements {
-	// 	_, err := controlDB.Exec(statement) //TODO: need to come  back here, make mega string exec mega
-	// 	if err != nil {t.Fatalf("error: %v, statement: %v, index: %v",err.Error(), statement, i) }
-	// }
+	query := "SELECT b.number = blocks.number FROM blocks INNER JOIN control.blocks as b on blocks.number = b.number"
 
-	query := "SELECT b.number = blocks.number, b.hash = blocks.hash, b.parentHash = blocks.parentHash, b.uncleHash = blocks.uncleHash, b.coinbase = blocks.coinbase, b.root = blocks.root, b.txRoot = blocks.txRoot, b.receiptRoot = blocks.receiptRoot, b.bloom = blocks.bloom, b.difficulty = blocks.difficulty, b.gasLimit = blocks.gasLimit, b.gasUsed = blocks.gasUsed, b.time = blocks.time, b.extra = blocks.extra, b.mixDigest = blocks.mixDigest, b.nonce = blocks.Nonce, b.uncles = blocks.uncles, b.size =  blocks.size, b.td = blocks.td, b.baseFee = blocks.baseFee FROM blocks INNER JOIN control.blocks as b on blocks.number = b.number"
-	rows, err := controlDB.Query(query)
-	if err != nil{
-		t.Fatalf(err.Error())
-	}
-	defer rows.Close()
-	for rows.Next() {
-	var result bool
-	err = rows.Scan(&result)
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-	if !result {
-		t.Fatalf("nope")
-	}
-}
-err = rows.Err()
-if err != nil {
-	t.Fatalf(err.Error())
-}
 
+// query := "SELECT b.number = blocks.number, b.hash = blocks.hash, b.parentHash = blocks.parentHash, b.uncleHash = blocks.uncleHash, b.coinbase = blocks.coinbase, b.root = blocks.root, b.txRoot = blocks.txRoot, b.receiptRoot = blocks.receiptRoot, b.bloom = blocks.bloom, b.difficulty = blocks.difficulty, b.gasLimit = blocks.gasLimit, b.gasUsed = blocks.gasUsed, b.time = blocks.time, b.extra = blocks.extra, b.mixDigest = blocks.mixDigest, b.nonce = blocks.Nonce, b.uncles = blocks.uncles, b.size =  blocks.size, b.td = blocks.td, b.baseFee = blocks.baseFee FROM blocks INNER JOIN control.blocks as b on blocks.number = b.number"
+
+results := make([]any, 1)
+for i := 0; i < len(results); i++ {
+	var x bool
+	results[i] = &x
+}
+rows, err := controlDB.Query(query)
+if err != nil{t.Fatalf(err.Error())}
+defer rows.Close()
+
+for rows.Next() {
+	rows.Scan(results...)
+		for i, item := range results {
+			if v, ok := item.(*bool); !*v || !ok {
+				t.Errorf("failed on index %v, %v, %v", i, v, ok)
+			}
+		}
+	}
 }

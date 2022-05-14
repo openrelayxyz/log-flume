@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"testing"
+	// "strings"
 
 	// log "github.com/inconshreveable/log15"
 	_ "github.com/mattn/go-sqlite3"
@@ -23,7 +24,7 @@ func TestLogIndexer(t *testing.T) {
 				transactionHash varchar(32),
 				transactionIndex varchar(32),
 				blockHash varchar(32),
-				PRIMARY KEY (transactionHash)
+				PRIMARY KEY (block, logIndex)
 			)`)
 	if err != nil {t.Fatalf(err.Error())}
 
@@ -39,22 +40,34 @@ func TestLogIndexer(t *testing.T) {
 		statements = append(statements, group...)
 	}
 
+	// megaStatement := strings.Join(statements, ";")
+	// _, err = controlDB.Exec(megaStatement)
+	// if err != nil {t.Fatalf(err.Error())}
+
 	for i, statement := range statements {
 		_, err := controlDB.Exec(statement)
 		// log.Info("statement", "st", statement)
 		if err != nil {t.Fatalf("error: %v, statement: %v, index: %v",err.Error(), statement, i) }
 	}
 
-	// query := "SELECT max(block) from event_logs;"
-	var expected int64
-	if err := controlDB.QueryRow("SELECT max(block) from control.event_logs").Scan(&expected); err != nil{
-		t.Fatalf(err.Error())
+	// query := "SELECT l.block = event_logs.block FROM event_logs INNER JOIN control.event_logs as l on event_logs.block AND event_logs.logIndex = l.block AND l.logIndex"
+
+	query := "SELECT l.address = event_logs.address, l.topic0 = event_logs.topic0, l.topic1 = event_logs.topic1, l.topic2 = event_logs.topic2, l.topic3 = event_logs.topic3, l.data = event_logs.data, l.block = event_logs.block, l.logIndex = event_logs.logIndex, l.transactionHash = event_logs.transactionHash, l.transactionIndex = event_logs.transactionIndex, l.blockHash = event_logs.blockHash FROM event_logs INNER JOIN control.event_logs as l on event_logs.block AND event_logs.logIndex = l.block AND l.logIndex"
+	results := make([]any, 11)
+	for i := 0; i < len(results); i++ {
+		var x bool
+		results[i] = &x
 	}
-	var test int64
-	if err := controlDB.QueryRow("SELECT max(block) from event_logs").Scan(&test); err != nil{
-		t.Fatalf("error: %v, expected: %v, test: %v", err.Error(), expected, test)
-	}
-	if expected != test {
-		t.Fatalf("expected: %v, test: %v", expected, test)
+	rows, err := controlDB.Query(query)
+	if err != nil{t.Fatalf(err.Error())}
+	defer rows.Close()
+
+	for rows.Next() {
+		rows.Scan(results...)
+		for i, item := range results {
+			if v, ok := item.(*bool); !*v || !ok {
+				t.Errorf("failed on index %v, %v, %v", i, v, ok)
+			}
+		}
 	}
 }

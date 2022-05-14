@@ -60,24 +60,25 @@ func TestTransacitonIndexer(t *testing.T) {
 		if err != nil {t.Fatalf("error: %v, statement: %v, index: %v, previous %v",err.Error(), statement, i, statements[i - 1]) }
 	}
 
-	// query := "SELECT count(*) from transactions;"
-	// query := "SELECT t.block = transactions.block FROM transactions INNER JOIN control.transactions as t on transactions.id = t.id"
-	// var expected bool
-	// if err := controlDB.QueryRow(query).Scan(&expected); err != nil{
-	// 	t.Fatalf(err.Error())
-	// }
-	// if !expected {
-	// 	t.Fatalf("expected: %v", expected)
-	// }
-	var expected int64
-	if err := controlDB.QueryRow("SELECT count(*) from control.transactions;").Scan(&expected); err != nil{
-		t.Fatalf(err.Error())
+	query := "SELECT t.block = transactions.block FROM transactions INNER JOIN control.transactions as t on transactions.hash = t.hash"
+
+	// query := "SELECT t.block = transactions.block, t.gas = transactions.gas, t.gasPrice = transactions.gasPrice, t.hash = transactions.hash, t.input = transactions.input, t.nonce = transactions.nonce, t.recipient = transactions.recipient, t.transactionIndex = transactions.transactionIndex, t.value = transactions.value, t.v = transactions.v, t.r = transactions.r, t.s = transactions.s, t.sender = transactions.sender, t.func = transactions.func, t.contractAddress = transactions.contractAddress, t.cumulativeGasUsed = transactions.cumulativeGasUsed, t.gasUsed = transactions.gasUsed, t.logsBloom = transactions.logsBloom, t.status = transactions.status, t.type = transactions.type, t.access_list = transactions.access_list, t.gasFeeCap = transactions.gasFeeCap, t.gasTipCap = transactions.gasTipCap FROM transactions INNER JOIN control.transactions as t on transactions.hash = t.hash"
+
+	results := make([]any, 1)
+	for i := 0; i < len(results); i++ {
+		var x bool
+		results[i] = &x
 	}
-	var test int64
-	if err := controlDB.QueryRow("SELECT count(*) from transactions;").Scan(&test); err != nil{
-		t.Fatalf("error: %v, expected: %v, test: %v", err.Error(), expected, test)
-	}
-	if expected != test {
-		t.Fatalf("expected: %v, test: %v", expected, test)
+	rows, err := controlDB.Query(query)
+	if err != nil{t.Fatalf(err.Error())}
+	defer rows.Close()
+
+	for rows.Next() {
+		rows.Scan(results...)
+		for i, item := range results {
+			if v, ok := item.(*bool); !*v || !ok {
+				t.Errorf("failed on index %v, %v, %v", i, v, ok)
+			}
+		}
 	}
 }
