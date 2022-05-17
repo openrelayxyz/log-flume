@@ -2,11 +2,31 @@ package indexer
 
 import (
 	"testing"
-	// "strings"
-
+	"fmt"
+	"reflect"
+	"bytes"
 	_ "github.com/mattn/go-sqlite3"
 	log "github.com/inconshreveable/log15"
+	"github.com/klauspost/compress/zlib"
+	"io"
+	"io/ioutil"
 )
+
+	func decompress(data []byte) ([]byte, error) {
+		if len(data) == 0 {
+			return data, nil
+		}
+		r, err := zlib.NewReader(bytes.NewBuffer(data))
+		if err != nil {
+			return []byte{}, err
+		}
+		raw, err := ioutil.ReadAll(r)
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			return raw, nil
+		}
+		return raw, err
+	}
+
 
 func TestTransacitonIndexer(t *testing.T) {
 	controlDB, err := openControlDatabase("tx", "../../transactions.sqlite")
@@ -47,12 +67,11 @@ func TestTransacitonIndexer(t *testing.T) {
 
 	statements := []string{}
 	for _, pb := range batches {
-		// log.Info("number", "number", pb.Number)
 		group, err := ti.Index(pb)
 		if err != nil {t.Fatalf(err.Error())}
 		statements = append(statements, group...)
 	}
-
+	//megaStatement adds significant time to test. TODO: investigate why
 	// megaStatement := strings.Join(statements, ";")
 	// _, err = controlDB.Exec(megaStatement)
 	// if err != nil {t.Fatalf(err.Error())}
@@ -62,51 +81,61 @@ func TestTransacitonIndexer(t *testing.T) {
 		if err != nil {t.Fatalf("error: %v, statement: %v, index: %v, previous %v",err.Error(), statement, i, statements[i - 1]) }
 	}
 
+	fields := []string{"block", "gas", "gasPrice", "hash", "input", "nonce", "recipient", "transactionIndex", "value", "v", "r", "s", "sender", "func", "contractAddress", "cumulativeGasUsed", "gasUsed", "logsBloom", "status", "type", "access_list", "gasFeeCap", "gasTipCap"}
 
-	// query := "SELECT t.block, t.input, transactions.input, t.input = transactions.input FROM transactions INNER JOIN control.transactions as t on transactions.hash = t.hash WHERE t.input != transactions.input"
-		// query2 := "SELECT t.block, t.transactionIndex, transactions.transactionIndex, t.transactionIndex = transactions.transactionIndex FROM transactions INNER JOIN control.transactions as t on transactions.hash = t.hash"
-	// 	query3 := "SELECT t.block, t.sender, transactions.sender, t.sender = transactions.sender FROM transactions INNER JOIN control.transactions as t on transactions.hash = t.hash WHERE t.sender != transactions.sender"
-	//
-	// rows, err := controlDB.Query(query3)
-	// if err != nil {t.Fatalf(err.Error())}
-	//
-	//
-	// defer rows.Close()
-	//
-	// for rows.Next() {
-	//
-	// 	var number, control, test, compare interface{}
-	// 	rows.Scan(&number, &control, &test, &compare)
-	//
-	// 	log.Info("results", "numnber", number, "control", control, "test", test, "compare", compare)
-	//
-	// }
-
-	//input, nonce, recipient, transactionIndex, `value`, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, `status`, `type`, access_list, gasFeeCap, gasTipCap
-
-	//input and logs bloom are compressed will qrite seperate test
-
-	query := "SELECT t.block = transactions.block, t.gas = transactions.gas, t.gasPrice = transactions.gasPrice, t.hash = transactions.hash, t.nonce = transactions.nonce, t.recipient = transactions.recipient, t.transactionIndex = transactions.transactionIndex, t.value = transactions.value, t.v = transactions.v, t.r = transactions.r, t.s = transactions.s, t.sender = transactions.sender, t.func = transactions.func, t.contractAddress = transactions.contractAddress, t.cumulativeGasUsed = transactions.cumulativeGasUsed, t.gasUsed = transactions.gasUsed, t.status = transactions.status, t.type = transactions.type, t.access_list = transactions.access_list, t.gasFeeCap = transactions.gasFeeCap, t.gasTipCap = transactions.gasTipCap FROM transactions INNER JOIN control.transactions as t on transactions.hash = t.hash"
-
-	results := make([]any, 21)
-	for i := 0; i < len(results); i++ {
-		var x bool
-		results[i] = &x
-	}
-	rows, err := controlDB.Query(query)
-	if err != nil{t.Fatalf(err.Error())}
-	defer rows.Close()
-
-	for rows.Next() {
-		rows.Scan(results...)
-		for i, item := range results {
-
-			if i == 12 || i == 14 || i == 15 || i == 16 || i == 17 || i == 18 || i == 19 || i == 20 || i == 21 || i == 22 {
-					continue
-			}
-			if v, ok := item.(*bool); !*v || !ok {
-				t.Errorf("failed on index %v, %v, %v", i, *v, ok)
+	for _, item := range fields {
+		query := fmt.Sprintf("SELECT t.block, t.transactionIndex, t.type, t.%v, transactions.%v  FROM transactions INNER JOIN control.transactions as t on transactions.hash = t.hash", item, item)
+		rows, err := controlDB.Query(query)
+		if err != nil {t.Fatalf(err.Error())}
+		defer rows.Close()
+		for rows.Next() {
+			var block, txDx, typ int64
+			var control, test interface{}
+			rows.Scan(&block, &txDx, &typ, &control, &test)
+			cs := reflect.TypeOf(control)
+			ts := reflect.TypeOf(test)
+			// log.Info("results", "field", item, "block", block, "txDx", txDx, "control type:", cs, "test type:", ts, "control value:", control, "test value:", test)
+			switch v := test.(type) {
+			default:
+				t.Errorf("unknown type: item:%v, block:%v, txDx:%v, control type:%v, test type:%v, switch type:%v", item, block, txDx, cs, ts, v)
+			case nil:
+				ctl, _ := control.([]uint8)
+				if len(ctl) != 0 {
+					t.Fatalf("deivergent values on field %v: block %v : transaction %v:", item, block, txDx)
+				}
+			case int64:
+				x, _ := control.(int64)
+				if x != v {
+					t.Fatalf("divergent values on field %v: block %v : transaction %v:", item, block, txDx)
+				}
+			case []uint8:
+				var cntrl, tst []uint8
+				switch item {
+				default:
+					cntrl, _ = control.([]uint8)
+					tst = v
+				case "gasTipCap", "gasFeeCap":
+					if typ < 2 {
+						continue
+					}
+					cntrl, _ = control.([]uint8)
+					tst = v
+				case "input", "logsBloom", "access_list":
+					var err error
+					tst, err = decompress(v)
+					if err != nil {t.Fatalf(err.Error())}
+					cntrl, err = decompress(control.([]uint8))
+					if err != nil {t.Fatalf(err.Error())}
+				}
+					if len(cntrl) != len(tst) {
+						t.Fatalf("divergent lengths on field %v: block %v : transaction %v:", item, block, txDx)
+				}
+				for i, item := range cntrl {
+					if tst[i] != item {
+						t.Fatalf("divergent values on field %v: block %v : transaction %v:", item, block, txDx)
+						}
+					}
+				}
 			}
 		}
 	}
-}
