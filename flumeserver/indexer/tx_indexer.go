@@ -113,13 +113,14 @@ func (indexer *TxIndexer) Index(pb *delivery.PendingBatch) ([]string, error) {
         accessListRLP, _ = rlp.EncodeToBytes(transaction.AccessList())
         gasPrice = math.BigMin(new(big.Int).Add(transaction.GasTipCap(), header.BaseFee), transaction.GasFeeCap()).Uint64()
     }
+		input := getCopy(compress(transaction.Data()))
 		statements = append(statements, applyParameters(
 			"INSERT INTO transactions(block, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, `value`, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, `status`, `type`, access_list, gasFeeCap, gasTipCap) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
 			pb.Number,
 			transaction.Gas(),
 			gasPrice,
 			transaction.Hash(),
-			getCopy(compress(transaction.Data())),
+			input,
 			transaction.Nonce(),
 			transaction.To(),
 			uint(i),
@@ -135,7 +136,7 @@ func (indexer *TxIndexer) Index(pb *delivery.PendingBatch) ([]string, error) {
 			getCopy(compress(receipt.LogsBloom)),
 			receipt.Status,
 			transaction.Type(),
-			accessListRLP,
+			compress(accessListRLP),
 			trimPrefix(transaction.GasFeeCap().Bytes()),
 			trimPrefix(transaction.GasTipCap().Bytes()),
 			))

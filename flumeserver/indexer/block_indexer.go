@@ -1,16 +1,13 @@
 package indexer
 
 import (
-	// "encoding/binary"
 	"fmt"
 	"io"
 	"github.com/openrelayxyz/cardinal-streams/delivery"
-	// "github.com/openrelayxyz/cardinal-evm/crypto"
   "github.com/ethereum/go-ethereum/crypto"
-	// "github.com/openrelayxyz/cardinal-evm/types"
   "github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/openrelayxyz/cardinal-evm/rlp"
-	ctypes "github.com/openrelayxyz/cardinal-types"
 	"golang.org/x/crypto/sha3"
 	"math/big"
 	"regexp"
@@ -32,14 +29,6 @@ func (d rlpData) EncodeRLP(w io.Writer) error {
 
 var hasherPool = sync.Pool{
 	New: func() interface{} { return sha3.NewLegacyKeccak256() },
-}
-
-// rlpHash encodes x and hashes the encoded bytes.
-func hash(x []byte) (ctypes.Hash) {
-	sha := hasherPool.Get().(crypto.KeccakState)
-	defer hasherPool.Put(sha)
-	sha.Reset()
-	return ctypes.BytesToHash(sha.Sum(x))
 }
 
 type BlockIndexer struct {
@@ -71,7 +60,7 @@ func (indexer *BlockIndexer) Index(pb *delivery.PendingBatch) ([]string, error) 
 		Uncles: []rlpData{},
 	}
 
-	uncleHashes := make(map[int64]ctypes.Hash)
+	uncleHashes := make(map[int64]common.Hash)
 	txData := make(map[int64]types.Transaction)
 	uncleData := make(map[int64]rlpData)
 
@@ -80,7 +69,7 @@ func (indexer *BlockIndexer) Index(pb *delivery.PendingBatch) ([]string, error) 
 		case uncleRegexp.MatchString(k):
 			parts := uncleRegexp.FindSubmatch([]byte(k))
 			uncleIndex, _ := strconv.ParseInt(string(parts[2]), 16, 64)
-			uncleHashes[int64(uncleIndex)] = hash(v)
+			uncleHashes[int64(uncleIndex)] = crypto.Keccak256Hash(v)
 			uncleData[int64(uncleIndex)] = rlpData(v)
 		case txRegexp.MatchString(k):
 			parts := txRegexp.FindSubmatch([]byte(k))
@@ -101,7 +90,7 @@ func (indexer *BlockIndexer) Index(pb *delivery.PendingBatch) ([]string, error) 
 	}
 	ebd, _ := rlp.EncodeToBytes(eblock)
 	size := len(ebd)
-	uncles := make([]ctypes.Hash, len(uncleHashes))
+	uncles := make([]common.Hash, len(uncleHashes))
 	for i, v := range uncleHashes {
 		uncles[int(i)] = v
 	}
@@ -126,9 +115,7 @@ func (indexer *BlockIndexer) Index(pb *delivery.PendingBatch) ([]string, error) 
 		header.Time,
 		header.Extra,
 		header.MixDigest,
-		header.Nonce, //type mis-allignment means that we may not get accurate statements from .dumps on old test data.
-		//Nonce was appearing twice, which do we want to keep?
-		// binary.BigEndian.Uint64(header.Nonce[:]),
+		header.Nonce,
 		uncleRLP,
 		size,
 		td.Bytes(),

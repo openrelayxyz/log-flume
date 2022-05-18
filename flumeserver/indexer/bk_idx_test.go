@@ -46,7 +46,6 @@ func pendingBatchDecompress() ([]*delivery.PendingBatch, error) {
   }
   var transportsObjectSlice []*transports.TransportBatch
   json.Unmarshal(raw, &transportsObjectSlice)
-  //use make to set length of secondary list
   pbSlice := []*delivery.PendingBatch{}
   for _, item := range transportsObjectSlice {
     pb := item.ToPendingBatch()
@@ -84,7 +83,7 @@ func TestBlockIndexer(t *testing.T) {
 
 	batches, err := pendingBatchDecompress()
 	if err != nil {t.Fatalf(err.Error())}
-
+	// below is a stem of a log statement left here for future debugging
 	// log.Info("information", "test", len(batches))
 	b := NewBlockIndexer(1)
 
@@ -95,29 +94,9 @@ func TestBlockIndexer(t *testing.T) {
 		statements = append(statements, group...)
 	}
 
-
-	//check indexer and allign variable names to megaStatement
 	megaStatement := strings.Join(statements, ";")
 	_, err = controlDB.Exec(megaStatement)
 	if err != nil {t.Fatalf(err.Error())}
-
-// query := "SELECT blocks.number, b.logsBloom, blocks.logsBloom, b.logsBloom = blocks.logsBloom FROM blocks INNER JOIN control.blocks as b on blocks.number = b.number"
-//
-// rows, err := controlDB.Query(query)
-// if err != nil {t.Fatalf(err.Error())}
-//
-//
-// defer rows.Close()
-//
-// for rows.Next() {
-//
-// 	var number, control, test, compare interface{}
-// 	rows.Scan(&number, &control, &test, &compare)
-//
-// 	log.Info("results", "numnber", number, "control", control, "test", test, "compare", compare)
-//
-// }
-// logsBloom, uncles
 
 query := "SELECT b.number = blocks.number, b.hash = blocks.hash, b.parentHash = blocks.parentHash, b.uncleHash = blocks.uncleHash, b.coinbase = blocks.coinbase, b.root = blocks.root, b.txRoot = blocks.txRoot, b.receiptRoot = blocks.receiptRoot, b.bloom IS blocks.bloom, b.difficulty = blocks.difficulty, b.gasLimit = blocks.gasLimit, b.gasUsed = blocks.gasUsed, b.time = blocks.time, b.extra = blocks.extra, b.mixDigest = blocks.mixDigest, b.nonce = blocks.Nonce, b.uncles = blocks.uncles, b.size =  blocks.size, b.td = blocks.td, b.baseFee IS blocks.baseFee FROM blocks INNER JOIN control.blocks as b on blocks.number = b.number"
 
@@ -130,7 +109,6 @@ rows, err := controlDB.Query(query)
 if err != nil{t.Fatalf(err.Error())}
 defer rows.Close()
 
-// log.Info()
 
 for rows.Next() {
 	rows.Scan(results...)
@@ -141,9 +119,6 @@ for rows.Next() {
 			if v, ok := item.(*bool); !*v || !ok {
 				t.Errorf("failed on index %v, %v, %v", i, *v, ok)
 			}
-			// if i == 19 {
-			// 	t.Errorf("failed on index %v, %v", i, item)
-			// }
 		}
 	}
 }

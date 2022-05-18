@@ -180,7 +180,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, csConsumer transports.Consumer, txF
       //UPDATELOOP:
       var lastBatch *delivery.PendingBatch
       for {
-        statements := []string{}
+        megaStatement := []string{}
         for _, pb := range chainUpdate.Added() {
           for _, indexer := range indexers {
             s, err := indexer.Index(pb)
@@ -188,7 +188,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, csConsumer transports.Consumer, txF
               log.Printf("Error computing updates")
               continue
             }
-            statements  = append(statements, s...)
+            megaStatement = append(megaStatement, s...)
           }
           lastBatch = pb
 
@@ -210,7 +210,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, csConsumer transports.Consumer, txF
 							continue
 						}
 
-						statements = append(statements, applyParameters(
+						megaStatement = append(megaStatement, applyParameters(
 		          ("INSERT OR REPLACE INTO cardinal_offsets(offset, partition, topic) VALUES (?, ?, ?)"),
 		          offset, partition, topic,
 		        ))
@@ -221,7 +221,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, csConsumer transports.Consumer, txF
         dbtx, err := db.BeginTx(context.Background(), nil)
 
         if err != nil { log.Fatalf("Error creating a transaction: %v", err.Error())}
-        if _, err := dbtx.Exec(strings.Join(statements, " ; ")); err != nil {
+        if _, err := dbtx.Exec(strings.Join(megaStatement, " ; ")); err != nil {
           dbtx.Rollback()
           stats := db.Stats()
           log.Printf("WARN: Failed to insert logs: %v", err.Error())
@@ -243,9 +243,9 @@ func ProcessDataFeed(feed datafeed.DataFeed, csConsumer transports.Consumer, txF
         // completionFeed.Send(chainEvent.Block.Hash)
         // log.Printf("Spent %v on commit", time.Since(cstart))
         log.Printf("Committed Block %v (%#x) in %v (age ??)", uint64(lastBatch.Number), lastBatch.Hash.Bytes(), time.Since(start)) // TODO: Figure out a simple way to get age
-      }
+      	}
 		//TODO: checkhere for processed
-}
-}
-}
+			}
+		}
+	}
 }

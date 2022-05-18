@@ -2,7 +2,6 @@ package indexer
 
 import (
 	"testing"
-	// "strings"
 
 	// log "github.com/inconshreveable/log15"
 	_ "github.com/mattn/go-sqlite3"
@@ -30,7 +29,8 @@ func TestLogIndexer(t *testing.T) {
 
 	batches, err := pendingBatchDecompress()
 	if err != nil {t.Fatalf(err.Error())}
-
+	// below is a stem of a log statement left here for future debugging
+	// log.Info("information", "test", len(batches))
 	l := NewLogIndexer()
 
 	statements := []string{}
@@ -39,18 +39,15 @@ func TestLogIndexer(t *testing.T) {
 		if err != nil {t.Fatalf(err.Error())}
 		statements = append(statements, group...)
 	}
-
+	//megaStatement adds significant time to test. TODO: investigate why
 	// megaStatement := strings.Join(statements, ";")
 	// _, err = controlDB.Exec(megaStatement)
 	// if err != nil {t.Fatalf(err.Error())}
 
 	for i, statement := range statements {
 		_, err := controlDB.Exec(statement)
-		// log.Info("statement", "st", statement)
 		if err != nil {t.Fatalf("error: %v, statement: %v, index: %v",err.Error(), statement, i) }
 	}
-
-	// query := "SELECT l.block = event_logs.block FROM event_logs INNER JOIN control.event_logs as l on event_logs.block AND event_logs.logIndex = l.block AND l.logIndex"
 
 	query := "SELECT l.address = event_logs.address, l.topic0 = event_logs.topic0, l.topic1 = event_logs.topic1, l.topic2 = event_logs.topic2, l.topic3 = event_logs.topic3, l.data = event_logs.data, l.block = event_logs.block, l.logIndex = event_logs.logIndex, l.transactionHash = event_logs.transactionHash, l.transactionIndex = event_logs.transactionIndex, l.blockHash = event_logs.blockHash FROM event_logs INNER JOIN control.event_logs as l on event_logs.block AND event_logs.logIndex = l.block AND l.logIndex"
 	results := make([]any, 11)

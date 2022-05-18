@@ -1,19 +1,12 @@
 package indexer
 
 import (
-	// "encoding/binary"
-	// "fmt"
-	// "io"
 	"github.com/openrelayxyz/cardinal-streams/delivery"
-	// "github.com/openrelayxyz/cardinal-evm/crypto"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	gtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/openrelayxyz/cardinal-evm/rlp"
-	ctypes "github.com/openrelayxyz/cardinal-types"
-	// "golang.org/x/crypto/sha3"
-	// "math/big"
 	"regexp"
-	// "sync"
 	"strconv"
 )
 
@@ -40,7 +33,7 @@ func NewLogIndexer() Indexer {
 func (indexer *LogIndexer) Index(pb *delivery.PendingBatch) ([]string, error) {
 
 	logData := make(map[int64]*gtypes.Log)
-	txData := make(map[uint]ctypes.Hash)
+	txData := make(map[uint]common.Hash)
 
 	for k, v := range pb.Values {
 		switch {
@@ -59,7 +52,7 @@ func (indexer *LogIndexer) Index(pb *delivery.PendingBatch) ([]string, error) {
 		case txRegexp.MatchString(k):
 			parts := txRegexp.FindSubmatch([]byte(k))
 			txIndex, _ := strconv.ParseInt(string(parts[2]), 16, 64)
-			txData[uint(txIndex)] =  hash(v)
+			txData[uint(txIndex)] =  crypto.Keccak256Hash(v)
 		default:
 		}
 	}
@@ -71,7 +64,7 @@ func (indexer *LogIndexer) Index(pb *delivery.PendingBatch) ([]string, error) {
 	for i := 0; i < len(logData); i++ {
 		logRecord := logData[int64(i)]
 		statements = append(statements, applyParameters(
-			"INSERT or IGNORE INTO event_logs(address,  topic0, topic1, topic2, topic3, data, block, logIndex, transactionHash, transactionIndex, blockHash) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
+			"INSERT INTO event_logs(address,  topic0, topic1, topic2, topic3, data, block, logIndex, transactionHash, transactionIndex, blockHash) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
 			logRecord.Address,
 			getTopicIndex(logRecord.Topics, 0),
 			getTopicIndex(logRecord.Topics, 1),

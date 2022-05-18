@@ -60,9 +60,8 @@ func TestTransacitonIndexer(t *testing.T) {
 
 	batches, err := pendingBatchDecompress()
 	if err != nil {t.Fatalf(err.Error())}
-
-	log.Info("info", "batches", len(batches))
-
+	// below is a stem of a log statement left here for future debugging
+	// log.Info("information", "test", len(batches))
 	ti := NewTxIndexer(1, 2675000, 1150000)
 
 	statements := []string{}
