@@ -119,12 +119,13 @@ func applyParameters(query string, params ...interface{}) string {
     case types.BlockNonce:
       preparedParams[i] = fmt.Sprintf("%v", int64(value.Uint64()))
     default:
+      // log.Printf("WARNING: Unknown type passed to applyParameters: %v", value)
       preparedParams[i] = fmt.Sprintf("%v", value)
     }
   }
   return fmt.Sprintf(query, preparedParams...)
 }
-
+// eip155block and homesteadBlock and contingent logic are probably unnecessary and can be eliminated
 func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *txfeed.TxFeed, db *sql.DB, quit <-chan struct{}, eip155Block, homesteadBlock uint64, mut *sync.RWMutex, mempoolSlots int) {
   log.Printf("Processing data feed")
   txCh := make(chan *types.Transaction, 200)
@@ -240,6 +241,8 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *
           continue BLOCKLOOP
         }
         // dstart := time.Now()
+
+        // Post refactor, we will need to do event_logs, transactions, and any other tables
         deleteRes, err := dbtx.Exec("DELETE FROM blocks WHERE number >= ?;", chainEvent.Block.Number.ToInt().Int64())
         if err != nil {
           dbtx.Rollback()
