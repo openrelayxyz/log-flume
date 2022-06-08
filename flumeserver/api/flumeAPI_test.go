@@ -165,7 +165,9 @@ func TestFumeAPI(t *testing.T) {
 		t.Fatalf("sender transactions list of incorrect length expected 47 got %v", len(senderTxns))
 	}
 	t.Run(fmt.Sprintf("GetTransactionsBySender"), func(t *testing.T) {
-		actual, _ := f.GetTransactionsBySender(context.Background(), sender, 0)
+		os := new(int)
+		*os = 0
+		actual, _ := f.GetTransactionsBySender(context.Background(), sender, os)
 		if len(actual.Items) != len(senderTxns) {
 			t.Fatalf("getTransactionsBySender result of incorrect length expected %v got %v", len(actual.Items), len(senderTxns))
 		}
@@ -186,7 +188,9 @@ func TestFumeAPI(t *testing.T) {
 		t.Fatalf("sender transactions list of incorrect length expected 47 got %v", len(senderReceipts))
 	}
 	t.Run(fmt.Sprintf("GetTransactionReceiptsBySender"), func(t *testing.T) {
-		actual, _ := f.GetTransactionReceiptsBySender(context.Background(), sender, 0)
+		os := new(int)
+		*os = 0
+		actual, _ := f.GetTransactionReceiptsBySender(context.Background(), sender, os)
 		if len(actual.Items) != len(senderReceipts) {
 			t.Fatalf("getTransactionReceiptsBySender result of incorrect length expected %v got %v", len(actual.Items), len(senderReceipts))
 		}
@@ -208,7 +212,9 @@ func TestFumeAPI(t *testing.T) {
 		t.Fatalf("recipient transactions list of incorrect length expected 107 got %v", len(recipientTxns))
 	}
 	t.Run(fmt.Sprintf("GetTransactionsByRecipient"), func(t *testing.T) {
-		actual, _ := f.GetTransactionsByRecipient(context.Background(), recipient, 0)
+		os := new(int)
+		*os = 0
+		actual, _ := f.GetTransactionsByRecipient(context.Background(), recipient, os)
 		if len(actual.Items) != len(recipientTxns) {
 			t.Fatalf("getTransactionsByRecipient result of incorrect length expected %v got %v", len(actual.Items), len(recipientTxns))
 		}
@@ -230,7 +236,9 @@ func TestFumeAPI(t *testing.T) {
 		t.Fatalf("recipient transactions list of incorrect length expected 107 got %v", len(recipientReceipts))
 	}
 	t.Run(fmt.Sprintf("GetTransactionsReceiptsByRecipient"), func(t *testing.T) {
-		actual, _ := f.GetTransactionReceiptsByRecipient(context.Background(), recipient, 0)
+		os := new(int)
+		*os = 0
+		actual, _ := f.GetTransactionReceiptsByRecipient(context.Background(), recipient, os)
 		if len(actual.Items) != len(recipientReceipts) {
 			t.Fatalf("getTransactionReceiptsByRecipient result of incorrect length expected %v got %v", len(actual.Items), len(recipientReceipts))
 		}
@@ -249,7 +257,9 @@ func TestFumeAPI(t *testing.T) {
 	participantTxns := getParticipantTransactionList(blockObject, genericAddr, "to", "from")
 	participant := common.HexToAddress(genericAddr)
 	t.Run(fmt.Sprintf("GetTransactionsByParicipant"), func(t *testing.T) {
-		actual, _ := f.GetTransactionsByParticipant(context.Background(), participant, 0)
+		os := new(int)
+		*os = 0
+		actual, _ := f.GetTransactionsByParticipant(context.Background(), participant, os)
 		if len(actual.Items) != len(participantTxns) {
 			t.Fatalf("getTransactionsByParticipant result of incorrect length expected %v got %v", len(actual.Items), len(participantTxns))
 		}
@@ -268,7 +278,9 @@ func TestFumeAPI(t *testing.T) {
 	})
 	participantReceipts := getParticipantReceiptList(receiptObject, genericAddr, "to", "from")
 	t.Run(fmt.Sprintf("GetTransactionsReceiptsByParticipant"), func(t *testing.T) {
-		actual, _ := f.GetTransactionReceiptsByParticipant(context.Background(), participant, 0)
+		os := new(int)
+		*os = 0
+		actual, _ := f.GetTransactionReceiptsByParticipant(context.Background(), participant, os)
 		if len(actual.Items) != len(participantReceipts) {
 			t.Fatalf("getTransactionReceiptsByParticipant result of incorrect length expected %v got %v", len(actual.Items), len(participantReceipts))
 		}
