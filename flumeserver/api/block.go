@@ -83,8 +83,18 @@ func (api *BlockAPI) GetBlockTransactionCountByNumber(ctx context.Context, block
 
 func (api *BlockAPI) GetBlockTransactionCountByHash(ctx context.Context, blockHash common.Hash) (hexutil.Uint64, error) {
 	var count hexutil.Uint64
+	block, err := getBlocks(ctx, api.db, false, api.network, "hash = ?", trimPrefix(blockHash.Bytes()))
+	if err != nil {
+		return 0, err
+	}
+	var blockVal map[string]interface{}
+	if len(block) > 0 {
+		blockVal = block[0]
+	}
+	blockNumber := int64(blockVal["number"].(hexutil.Uint64))
 
-	if err := api.db.QueryRowContext(ctx, "SELECT count(*) FROM v_transactions WHERE blockHash = ?", trimPrefix(blockHash.Bytes())).Scan(&count); err != nil {
+	count, err = txCount(ctx, api.db, "block = ?", rpc.BlockNumber(blockNumber))
+	if err != nil {
 		return 0, err
 	}
 	return count, nil

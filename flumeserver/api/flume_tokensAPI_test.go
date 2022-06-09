@@ -29,7 +29,7 @@ func tokenDataDecompress() ([][]common.Address, error) {
 	return tokenData, nil
 }
 
-func TestERCHolders(t *testing.T) {
+func TestERCMethods(t *testing.T) {
 	db, err := connectToDatabase()
 	if err != nil {
 		t.Fatal(err.Error())

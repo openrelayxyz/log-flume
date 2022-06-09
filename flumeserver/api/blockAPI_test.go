@@ -9,36 +9,59 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/rpc"
-	"encoding/json"
-	"path/filepath"
+	"github.com/openrelayxyz/flume/flumeserver/migrations"
+
 	"compress/gzip"
 	"database/sql"
+	"encoding/json"
 	"github.com/mattn/go-sqlite3"
 	"io"
 	"io/ioutil"
 	_ "net/http/pprof"
+	"path/filepath"
 	"sync"
 )
 
 var register sync.Once
 
 func connectToDatabase() (*sql.DB, error) {
-	sqlitePath := "../../testdata.sqlite"
+	sqlitePath := "../../main.sqlite"
 
 	mempoolDb := filepath.Join(filepath.Dir(sqlitePath), "mempool.sqlite")
+	blocksDb := filepath.Join(filepath.Dir(sqlitePath), "blocks.sqlite")
+	txDb := filepath.Join(filepath.Dir(sqlitePath), "transactions.sqlite")
+	logsDb := filepath.Join(filepath.Dir(sqlitePath), "logs.sqlite")
 
 	register.Do(func() {
 		sql.Register("sqlite3_hooked",
 			&sqlite3.SQLiteDriver{
 				ConnectHook: func(conn *sqlite3.SQLiteConn) error {
 					conn.Exec(fmt.Sprintf("ATTACH DATABASE '%v' AS 'mempool'; PRAGMA mempool.journal_mode = WAL ; PRAGMA mempool.synchronous = OFF ;", mempoolDb), nil)
+					conn.Exec(fmt.Sprintf("ATTACH DATABASE '%v' AS 'blocks'; PRAGMA block.journal_mode = WAL ; PRAGMA block.synchronous = OFF ;", blocksDb), nil)
+					conn.Exec(fmt.Sprintf("ATTACH DATABASE '%v' AS 'transactions'; PRAGMA transactions.journal_mode = WAL ; PRAGMA transactions.synchronous = OFF ;", txDb), nil)
+					conn.Exec(fmt.Sprintf("ATTACH DATABASE '%v' AS 'logs'; PRAGMA logs.journal_mode = WAL ; PRAGMA logs.synchronous = OFF ;", logsDb), nil)
 					return nil
 				},
 			})
 	})
 
-	logsdb, err := sql.Open("sqlite3_hooked", fmt.Sprintf("file:%v?_sync=0&_journal_mode=WAL&_foreign_keys=on", sqlitePath))
-	//we should add migrations process
+	logsdb, err := sql.Open("sqlite3_hooked", fmt.Sprintf("file:%v?_sync=0&_journal_mode=WAL&_foreign_keys=off", sqlitePath))
+
+	chainid := uint64(1)
+
+	if err := migrations.MigrateBlocks(logsdb, chainid); err != nil {
+		return nil, err
+	}
+	if err := migrations.MigrateTransactions(logsdb, chainid); err != nil {
+		return nil, err
+	}
+	if err := migrations.MigrateLogs(logsdb, chainid); err != nil {
+		return nil, err
+	}
+	if err := migrations.MigrateMempool(logsdb, chainid); err != nil {
+		return nil, err
+	}
+
 	if err != nil {
 		return nil, err
 	}
