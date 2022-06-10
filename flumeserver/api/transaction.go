@@ -22,14 +22,12 @@ func NewTransactionAPI(db *sql.DB, network uint64) *TransactionAPI {
 
 func (api *TransactionAPI) GetTransactionByHash(ctx context.Context, txHash common.Hash) (map[string]interface{}, error) {
 	var err error
-	offset := new(int)
-	*offset = 0
-	txs, err := getTransactionsBlock(ctx, api.db, *offset, 1, api.network, "transactions.hash = ?", trimPrefix(txHash.Bytes()))
+	txs, err := getTransactionsBlock(ctx, api.db, 0, 1, api.network, "transactions.hash = ?", trimPrefix(txHash.Bytes()))
 	if err != nil {
 		return nil, err
 	}
 	if len(txs) == 0 {
-		txs, err = getPendingTransactions(ctx, api.db, *offset, 1, api.network, "transactions.hash = ?", trimPrefix(txHash.Bytes()))
+		txs, err = getPendingTransactions(ctx, api.db, 0, 1, api.network, "transactions.hash = ?", trimPrefix(txHash.Bytes()))
 	}
 	if err != nil {
 		return nil, err
@@ -42,10 +40,7 @@ func (api *TransactionAPI) GetTransactionByHash(ctx context.Context, txHash comm
 
 func (api *TransactionAPI) GetTransactionByBlockHashAndIndex(ctx context.Context, blockHash common.Hash, index hexutil.Uint64) (map[string]interface{}, error) {
 	var err error
-	var offset *int
-	v := 0
-	offset = &v
-	txs, err := getTransactionsBlock(ctx, api.db, *offset, 1, api.network, "blocks.hash = ? AND transactionIndex = ?", trimPrefix(blockHash.Bytes()), uint64(index))
+	txs, err := getTransactionsBlock(ctx, api.db, 0, 1, api.network, "blocks.hash = ? AND transactionIndex = ?", trimPrefix(blockHash.Bytes()), uint64(index))
 	if err != nil {
 		return nil, err
 	}
@@ -55,9 +50,6 @@ func (api *TransactionAPI) GetTransactionByBlockHashAndIndex(ctx context.Context
 }
 
 func (api *TransactionAPI) GetTransactionByBlockNumberAndIndex(ctx context.Context, blockNumber rpc.BlockNumber, index hexutil.Uint64) (map[string]interface{}, error) {
-	var offset *int
-	v := 0
-	offset = &v
 	if blockNumber.Int64() < 0 {
 		latestBlock, err := getLatestBlock(ctx, api.db)
 		if err != nil {
@@ -66,7 +58,7 @@ func (api *TransactionAPI) GetTransactionByBlockNumberAndIndex(ctx context.Conte
 		blockNumber = rpc.BlockNumber(latestBlock)
 	}
 
-	txs, err := getTransactionsBlock(ctx, api.db, *offset, 1, api.network, "block = ? AND transactionIndex = ?", uint64(blockNumber), uint64(index))
+	txs, err := getTransactionsBlock(ctx, api.db, 0, 1, api.network, "block = ? AND transactionIndex = ?", uint64(blockNumber), uint64(index))
 	if err != nil {
 		return nil, err
 	}
@@ -78,10 +70,7 @@ func (api *TransactionAPI) GetTransactionByBlockNumberAndIndex(ctx context.Conte
 
 func (api *TransactionAPI) GetTransactionReceipt(ctx context.Context, txHash common.Hash) (map[string]interface{}, error) {
 	var err error
-	var offset *int
-	v := 0
-	offset = &v
-	receipts, err := getTransactionReceiptsBlock(ctx, api.db, *offset, 1, api.network, "transactions.hash = ?", trimPrefix(txHash.Bytes()))
+	receipts, err := getTransactionReceiptsBlock(ctx, api.db, 0, 1, api.network, "transactions.hash = ?", trimPrefix(txHash.Bytes()))
 	if err != nil {
 		return nil, err
 	}

@@ -24,7 +24,6 @@ func (api *FlumeAPI) GetTransactionsBySender(ctx context.Context, address common
 
 	if offset == nil {
 		offset = new(int)
-		*offset = 0
 	}
 	txs, err := getPendingTransactions(ctx, api.db, *offset, 1000, api.network, "sender = ?", trimPrefix(address.Bytes()))
 	if err != nil {
@@ -48,7 +47,6 @@ func (api *FlumeAPI) GetTransactionReceiptsBySender(ctx context.Context, address
 
 	if offset == nil {
 		offset = new(int)
-		*offset = 0
 	}
 	receipts, err := getTransactionReceipts(ctx, api.db, *offset, 1000, api.network, "sender = ?", trimPrefix(address.Bytes()))
 	if err != nil {
@@ -67,7 +65,6 @@ func (api *FlumeAPI) GetTransactionsByRecipient(ctx context.Context, address com
 
 	if offset == nil {
 		offset = new(int)
-		*offset = 0
 	}
 	txs, err := getPendingTransactions(ctx, api.db, *offset, 1000, api.network, "recipient = ?", trimPrefix(address.Bytes()))
 	if err != nil {
@@ -91,7 +88,6 @@ func (api *FlumeAPI) GetTransactionReceiptsByRecipient(ctx context.Context, addr
 
 	if offset == nil {
 		offset = new(int)
-		*offset = 0
 	}
 	receipts, err := getTransactionReceipts(ctx, api.db, *offset, 1000, api.network, "recipient = ?", trimPrefix(address.Bytes()))
 	if err != nil {
@@ -109,7 +105,6 @@ func (api *FlumeAPI) GetTransactionsByParticipant(ctx context.Context, address c
 
 	if offset == nil {
 		offset = new(int)
-		*offset = 0
 	}
 	txs, err := getPendingTransactions(ctx, api.db, *offset, 1000, api.network, "sender = ? OR recipient = ?", trimPrefix(address.Bytes()), trimPrefix(address.Bytes()))
 	if err != nil {
@@ -134,7 +129,6 @@ func (api *FlumeAPI) GetTransactionReceiptsByParticipant(ctx context.Context, ad
 
 	if offset == nil {
 		offset = new(int)
-		*offset = 0
 	}
 	receipts, err := getTransactionReceipts(ctx, api.db, *offset, 1000, api.network, "sender = ? OR recipient = ?", trimPrefix(address.Bytes()), trimPrefix(address.Bytes()))
 	if err != nil {
