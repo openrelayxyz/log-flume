@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"testing"
 
-	"encoding/json"
 	"compress/gzip"
+	"encoding/json"
 	"github.com/ethereum/go-ethereum/rpc"
 	"io"
 	"io/ioutil"
@@ -111,5 +111,4 @@ func TestGasAPI(t *testing.T) {
 			}
 		}
 	})
-
 }
