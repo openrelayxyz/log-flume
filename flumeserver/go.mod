@@ -5,12 +5,14 @@ go 1.18
 require (
 	github.com/Shopify/sarama v1.29.0
 	github.com/ethereum/go-ethereum v1.10.4
+	github.com/inconshreveable/log15 v0.0.0-20201112154412-8562bdadbbac
 	github.com/klauspost/compress v1.12.3
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible
 	github.com/openrelayxyz/cardinal-evm v0.0.0-20211007195410-cf1ee1556687
-	github.com/openrelayxyz/cardinal-rpc v0.0.16
-	github.com/openrelayxyz/cardinal-streams v0.0.26
-	github.com/openrelayxyz/cardinal-types v0.0.5
+	github.com/openrelayxyz/cardinal-rpc v1.0.0
+	github.com/openrelayxyz/cardinal-streams v1.0.0
+	github.com/openrelayxyz/cardinal-types v1.0.0
+	golang.org/x/crypto v0.0.0-20210322153248-0c34fe9e7dc2
 )
 
 require (
@@ -35,23 +37,22 @@ require (
 	github.com/google/go-cmp v0.5.7 // indirect
 	github.com/google/uuid v1.1.5 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
-	github.com/hamba/avro v1.5.6 // indirect
+	github.com/hamba/avro v1.6.6 // indirect
 	github.com/hashicorp/go-uuid v1.0.2 // indirect
 	github.com/hashicorp/golang-lru v0.5.5-0.20210104140557-80c98217689d // indirect
 	github.com/holiman/bloomfilter/v2 v2.0.3 // indirect
 	github.com/holiman/uint256 v1.2.0 // indirect
 	github.com/huin/goupnp v1.0.2 // indirect
-	github.com/inconshreveable/log15 v0.0.0-20201112154412-8562bdadbbac // indirect
 	github.com/jackpal/go-nat-pmp v1.0.2-0.20160603034137-1fa385a6f458 // indirect
 	github.com/jcmturner/gofork v1.0.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
-	github.com/json-iterator/go v1.1.11 // indirect
+	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/karalabe/usb v0.0.0-20190919080040-51dc0efba356 // indirect
 	github.com/mattn/go-colorable v0.1.8 // indirect
 	github.com/mattn/go-isatty v0.0.12 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
-	github.com/modern-go/reflect2 v1.0.1 // indirect
+	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/openrelayxyz/drumline v0.4.0 // indirect
 	github.com/pborman/uuid v1.2.1 // indirect
@@ -69,7 +70,6 @@ require (
 	github.com/tyler-smith/go-bip39 v1.0.1-0.20181017060643-dbb3b84ba2ef // indirect
 	github.com/xdg/scram v1.0.3 // indirect
 	github.com/xdg/stringprep v1.0.3 // indirect
-	golang.org/x/crypto v0.0.0-20210322153248-0c34fe9e7dc2 // indirect
 	golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	golang.org/x/sys v0.0.0-20210816183151-1e6c022a8912 // indirect
