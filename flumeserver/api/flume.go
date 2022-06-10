@@ -23,9 +23,9 @@ func NewFlumeAPI(db *sql.DB, network uint64) *FlumeAPI {
 func (api *FlumeAPI) GetTransactionsBySender(ctx context.Context, address common.Address, offset *int) (*paginator[map[string]interface{}], error) {
 
 	if offset == nil {
+		offset = new(int)
 		*offset = 0
 	}
-
 	txs, err := getPendingTransactions(ctx, api.db, *offset, 1000, api.network, "sender = ?", trimPrefix(address.Bytes()))
 	if err != nil {
 		log.Printf("Error getting pending txs: %v", err.Error())
@@ -47,9 +47,9 @@ func (api *FlumeAPI) GetTransactionsBySender(ctx context.Context, address common
 func (api *FlumeAPI) GetTransactionReceiptsBySender(ctx context.Context, address common.Address, offset *int) (*paginator[map[string]interface{}], error) {
 
 	if offset == nil {
+		offset = new(int)
 		*offset = 0
 	}
-
 	receipts, err := getTransactionReceipts(ctx, api.db, *offset, 1000, api.network, "sender = ?", trimPrefix(address.Bytes()))
 	if err != nil {
 		log.Printf("Error getting receipts: %v", err.Error())
@@ -66,9 +66,9 @@ func (api *FlumeAPI) GetTransactionReceiptsBySender(ctx context.Context, address
 func (api *FlumeAPI) GetTransactionsByRecipient(ctx context.Context, address common.Address, offset *int) (*paginator[map[string]interface{}], error) {
 
 	if offset == nil {
+		offset = new(int)
 		*offset = 0
 	}
-
 	txs, err := getPendingTransactions(ctx, api.db, *offset, 1000, api.network, "recipient = ?", trimPrefix(address.Bytes()))
 	if err != nil {
 		log.Printf("Error getting pending txs: %v", err.Error())
@@ -90,9 +90,9 @@ func (api *FlumeAPI) GetTransactionsByRecipient(ctx context.Context, address com
 func (api *FlumeAPI) GetTransactionReceiptsByRecipient(ctx context.Context, address common.Address, offset *int) (*paginator[map[string]interface{}], error) {
 
 	if offset == nil {
+		offset = new(int)
 		*offset = 0
 	}
-
 	receipts, err := getTransactionReceipts(ctx, api.db, *offset, 1000, api.network, "recipient = ?", trimPrefix(address.Bytes()))
 	if err != nil {
 		log.Printf("Error getting receipts: %v", err.Error())
@@ -108,9 +108,9 @@ func (api *FlumeAPI) GetTransactionReceiptsByRecipient(ctx context.Context, addr
 func (api *FlumeAPI) GetTransactionsByParticipant(ctx context.Context, address common.Address, offset *int) (*paginator[map[string]interface{}], error) {
 
 	if offset == nil {
+		offset = new(int)
 		*offset = 0
 	}
-
 	txs, err := getPendingTransactions(ctx, api.db, *offset, 1000, api.network, "sender = ? OR recipient = ?", trimPrefix(address.Bytes()), trimPrefix(address.Bytes()))
 	if err != nil {
 		log.Printf("Error getting pending txs: %v", err.Error())
@@ -133,9 +133,9 @@ func (api *FlumeAPI) GetTransactionsByParticipant(ctx context.Context, address c
 func (api *FlumeAPI) GetTransactionReceiptsByParticipant(ctx context.Context, address common.Address, offset *int) (*paginator[map[string]interface{}], error) {
 
 	if offset == nil {
+		offset = new(int)
 		*offset = 0
 	}
-
 	receipts, err := getTransactionReceipts(ctx, api.db, *offset, 1000, api.network, "sender = ? OR recipient = ?", trimPrefix(address.Bytes()), trimPrefix(address.Bytes()))
 	if err != nil {
 		log.Printf("Error getting receipts: %v", err.Error())

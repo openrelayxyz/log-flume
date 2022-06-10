@@ -24,10 +24,6 @@ func NewLogsAPI(db *sql.DB, network uint64) *LogsAPI {
 	}
 }
 
-func (api *LogsAPI) Logs() string {
-	return "goodbuy horses"
-}
-
 func (api *LogsAPI) GetLogs(ctx context.Context, crit filters.FilterCriteria) ([]*types.Log, error) {
 	latestBlock, err := getLatestBlock(ctx, api.db)
 	if err != nil {
