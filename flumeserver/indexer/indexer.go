@@ -172,9 +172,9 @@ func ProcessDataFeed(feed datafeed.DataFeed, csConsumer transports.Consumer, txF
 			log.Printf("Shutting down index process")
 			return
 		case <-pruneTicker.C:
-			mempool_indexer1(db, mempoolSlots, processed, txCount, txDedup)
+			mempool_dropLowestPrice(db, mempoolSlots, processed, txCount, txDedup)
 		case tx := <-txCh:
-			mempool_indexer2(db, mempoolSlots, processed, txCount, txDedup, tx)
+			mempool_indexer(db, mempoolSlots, processed, txCount, txDedup, tx)
 		case chainUpdate := <-csCh:
 			//UPDATELOOP:
 			var lastBatch *delivery.PendingBatch
