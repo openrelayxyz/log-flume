@@ -118,9 +118,6 @@ func TestFlumeAPI(t *testing.T) {
 	defer db.Close()
 	f := NewFlumeAPI(db, 1)
 
-	offset := new(int)
-	*offset = 0
-
 	blockObject, _ := blocksDecompress()
 	receiptObject, _ := receiptsDecompress()
 
@@ -168,7 +165,7 @@ func TestFlumeAPI(t *testing.T) {
 		t.Fatalf("sender transactions list of incorrect length expected 47 got %v", len(senderTxns))
 	}
 	t.Run(fmt.Sprintf("GetTransactionsBySender"), func(t *testing.T) {
-		actual, _ := f.GetTransactionsBySender(context.Background(), sender, offset)
+		actual, _ := f.GetTransactionsBySender(context.Background(), sender, nil)
 		if len(actual.Items) != len(senderTxns) {
 			t.Fatalf("getTransactionsBySender result of incorrect length expected %v got %v", len(actual.Items), len(senderTxns))
 		}
@@ -189,7 +186,7 @@ func TestFlumeAPI(t *testing.T) {
 		t.Fatalf("sender transactions list of incorrect length expected 47 got %v", len(senderReceipts))
 	}
 	t.Run(fmt.Sprintf("GetTransactionReceiptsBySender"), func(t *testing.T) {
-		actual, _ := f.GetTransactionReceiptsBySender(context.Background(), sender, offset)
+		actual, _ := f.GetTransactionReceiptsBySender(context.Background(), sender, nil)
 		if len(actual.Items) != len(senderReceipts) {
 			t.Fatalf("getTransactionReceiptsBySender result of incorrect length expected %v got %v", len(actual.Items), len(senderReceipts))
 		}
@@ -211,7 +208,7 @@ func TestFlumeAPI(t *testing.T) {
 		t.Fatalf("recipient transactions list of incorrect length expected 107 got %v", len(recipientTxns))
 	}
 	t.Run(fmt.Sprintf("GetTransactionsByRecipient"), func(t *testing.T) {
-		actual, _ := f.GetTransactionsByRecipient(context.Background(), recipient, offset)
+		actual, _ := f.GetTransactionsByRecipient(context.Background(), recipient, nil)
 		if len(actual.Items) != len(recipientTxns) {
 			t.Fatalf("getTransactionsByRecipient result of incorrect length expected %v got %v", len(actual.Items), len(recipientTxns))
 		}
@@ -233,7 +230,7 @@ func TestFlumeAPI(t *testing.T) {
 		t.Fatalf("recipient transactions list of incorrect length expected 107 got %v", len(recipientReceipts))
 	}
 	t.Run(fmt.Sprintf("GetTransactionsReceiptsByRecipient"), func(t *testing.T) {
-		actual, _ := f.GetTransactionReceiptsByRecipient(context.Background(), recipient, offset)
+		actual, _ := f.GetTransactionReceiptsByRecipient(context.Background(), recipient, nil)
 		if len(actual.Items) != len(recipientReceipts) {
 			t.Fatalf("getTransactionReceiptsByRecipient result of incorrect length expected %v got %v", len(actual.Items), len(recipientReceipts))
 		}
@@ -252,7 +249,7 @@ func TestFlumeAPI(t *testing.T) {
 	participantTxns := getParticipantTransactionList(blockObject, genericAddr, "to", "from")
 	participant := common.HexToAddress(genericAddr)
 	t.Run(fmt.Sprintf("GetTransactionsByParicipant"), func(t *testing.T) {
-		actual, _ := f.GetTransactionsByParticipant(context.Background(), participant, offset)
+		actual, _ := f.GetTransactionsByParticipant(context.Background(), participant, nil)
 		if len(actual.Items) != len(participantTxns) {
 			t.Fatalf("getTransactionsByParticipant result of incorrect length expected %v got %v", len(actual.Items), len(participantTxns))
 		}
@@ -271,7 +268,7 @@ func TestFlumeAPI(t *testing.T) {
 	})
 	participantReceipts := getParticipantReceiptList(receiptObject, genericAddr, "to", "from")
 	t.Run(fmt.Sprintf("GetTransactionsReceiptsByParticipant"), func(t *testing.T) {
-		actual, _ := f.GetTransactionReceiptsByParticipant(context.Background(), participant, offset)
+		actual, _ := f.GetTransactionReceiptsByParticipant(context.Background(), participant, nil)
 		if len(actual.Items) != len(participantReceipts) {
 			t.Fatalf("getTransactionReceiptsByParticipant result of incorrect length expected %v got %v", len(actual.Items), len(participantReceipts))
 		}

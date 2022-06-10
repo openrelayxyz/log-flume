@@ -240,9 +240,7 @@ func getBlocks(ctx context.Context, db *sql.DB, includeTxs bool, chainid uint64,
 			"uncles":           unclesList,
 		}
 		if includeTxs {
-			offset := new(int)
-			*offset = 0
-			fields["transactions"], err = getTransactionsBlock(ctx, db, *offset, 100000, chainid, "transactions.block = ?", number)
+			fields["transactions"], err = getTransactionsBlock(ctx, db, 0, 100000, chainid, "transactions.block = ?", number)
 			if err != nil {
 				return nil, err
 			}
