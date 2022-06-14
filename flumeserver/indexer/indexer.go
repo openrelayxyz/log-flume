@@ -11,7 +11,6 @@ import (
 	"github.com/klauspost/compress/zlib"
 	"github.com/openrelayxyz/cardinal-streams/delivery"
 	"github.com/openrelayxyz/cardinal-streams/transports"
-	"github.com/openrelayxyz/flume/flumeserver/datafeed"
 	"github.com/openrelayxyz/flume/flumeserver/txfeed"
 	"log"
 	"math/big"
@@ -144,12 +143,10 @@ func applyParameters(query string, params ...interface{}) string {
 	return fmt.Sprintf(query, preparedParams...)
 }
 
-func ProcessDataFeed(feed datafeed.DataFeed, csConsumer transports.Consumer, txFeed *txfeed.TxFeed, db *sql.DB, quit <-chan struct{}, eip155Block, homesteadBlock uint64, mut *sync.RWMutex, mempoolSlots int, indexers []Indexer) {
+func ProcessDataFeed(csConsumer transports.Consumer, txFeed *txfeed.TxFeed, db *sql.DB, quit <-chan struct{}, eip155Block, homesteadBlock uint64, mut *sync.RWMutex, mempoolSlots int, indexers []Indexer) {
 	log.Printf("Processing data feed")
 	txCh := make(chan *types.Transaction, 200)
 	txSub := txFeed.Subscribe(txCh)
-	ch := make(chan *datafeed.ChainEvent, 10)
-	sub := feed.Subscribe(ch)
 	csCh := make(chan *delivery.ChainUpdate, 10)
 	if csConsumer != nil {
 		csSub := csConsumer.Subscribe(csCh)
@@ -159,7 +156,6 @@ func ProcessDataFeed(feed datafeed.DataFeed, csConsumer transports.Consumer, txF
 	pruneTicker := time.NewTicker(5 * time.Second)
 	txCount := 0
 	txDedup := make(map[common.Hash]struct{})
-	defer sub.Unsubscribe()
 	defer txSub.Unsubscribe()
 	db.Exec("DELETE FROM mempool.transactions WHERE 1;")
 	for {

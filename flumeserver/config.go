@@ -5,7 +5,19 @@ import (
 	"gopkg.in/yaml.v2"
 	log "github.com/inconshreveable/log15"
 	"io/ioutil"
+	"github.com/openrelayxyz/cardinal-streams/transports"
+	"fmt"
 )
+
+type broker struct {
+	URL string `yaml:"url"`
+	DefaultTopic string `yaml:"default.topic"`
+	BlockTopic string `yaml:"block.topic"`
+	TransactionsTopic string `yaml:"transactions.topic"`
+	LogsTopic string `yaml:"logs.topic"`
+	ReceiptTopic string `yaml:"receipts.topic"`
+	Rollback int64 `yaml:"rollback"`
+}
 
 type Config struct {
 	Port int64 `yaml:"port"`
@@ -25,6 +37,8 @@ type Config struct {
 	MempoolSlots int `yaml:"mempoolSize"`
 	Concurrency int `yaml:"concurrency"`
 	LogLevel string `yaml:"loggingLevel"`
+	Brokers []broker
+	brokers []transports.BrokerParams
 }
 
 func LoadConfig(fname string) (*Config, error) {
@@ -58,15 +72,15 @@ func LoadConfig(fname string) (*Config, error) {
 			cfg.HomesteadBlock = 0
 	    cfg.Eip155Block = 0
 	    cfg.Chainid = 5
+		case "sepolia":
+			cfg.Chainid = 11155111
+		case "kiln":
+			cfg.Chainid = 1337802
 		case "":
 			if cfg.Chainid == 0 {
 				err := errors.New("Network name, eipp155Block, and homestead Block values must be set in configuration file")
 				return nil, err
 			} //if chainid is not zero we assume the other fields are valid
-		case "sepolia":
-	    cfg.Chainid = 11155111
-	  case "kiln":
-	    cfg.Chainid = 1337802
 		default:
 			err := errors.New("Unrecognized network name")
 			return nil, err
@@ -106,6 +120,47 @@ func LoadConfig(fname string) (*Config, error) {
 
 	if cfg.ReorgThreshold == 0 {
 		cfg.ReorgThreshold = 128
+	}
+	if cfg.Concurrency == 0 {
+		cfg.Concurrency = 16
+	}
+
+	if len(cfg.Brokers) == 0 {
+	return nil, errors.New("Config must specify at least one broker")
+}
+cfg.brokers = make([]transports.BrokerParams, len(cfg.Brokers))
+for i := range cfg.Brokers {
+	if cfg.Brokers[i].DefaultTopic == "" {
+		cfg.Brokers[i].DefaultTopic = fmt.Sprintf("cardinal-%v", cfg.Chainid)
+	}
+	if cfg.Brokers[i].BlockTopic == "" {
+		cfg.Brokers[i].BlockTopic = fmt.Sprintf("%v-block", cfg.Brokers[i].DefaultTopic)
+	}
+	if cfg.Brokers[i].LogsTopic == "" {
+		cfg.Brokers[i].LogsTopic = fmt.Sprintf("%v-logs", cfg.Brokers[i].DefaultTopic)
+	}
+	if cfg.Brokers[i].TransactionsTopic == "" {
+		cfg.Brokers[i].TransactionsTopic = fmt.Sprintf("%v-tx", cfg.Brokers[i].DefaultTopic)
+	}
+	if cfg.Brokers[i].ReceiptTopic == "" {
+		cfg.Brokers[i].ReceiptTopic = fmt.Sprintf("%v-receipt", cfg.Brokers[i].DefaultTopic)
+	}
+	if cfg.Brokers[i].Rollback == 0 {
+		cfg.Brokers[i].Rollback = 5000
+	}
+	cfg.brokers[i] = transports.BrokerParams{
+		URL: cfg.Brokers[i].URL,
+		DefaultTopic: cfg.Brokers[i].DefaultTopic,
+		Topics: []string{
+			cfg.Brokers[i].DefaultTopic,
+			cfg.Brokers[i].BlockTopic,
+			cfg.Brokers[i].LogsTopic,
+			cfg.Brokers[i].TransactionsTopic,
+			cfg.Brokers[i].ReceiptTopic,
+		},
+		Rollback: cfg.Brokers[i].Rollback,
+	}
+
 	}
 	return &cfg, nil
 }
