@@ -97,20 +97,20 @@ func main() {
   pprofPort := flag.Int("pprof-port", 6969, "pprof port")
   minSafeBlock := flag.Int("min-safe-block", 1000000, "Do not start serving if the smallest block exceeds this value")
 
-	homesteadBlockFlag := flag.Int("homestead", 0, "Block of the homestead hardfork")
-  eip155BlockFlag := flag.Int("eip155", 0, "Block of the eip155 hardfork")
+	// homesteadBlockFlag := flag.Int("homestead", 0, "Block of the homestead hardfork")
+  // eip155BlockFlag := flag.Int("eip155", 0, "Block of the eip155 hardfork")
 
-	txTopic := flag.String("mempool-topic", "", "A kafka topic for receiving pending transactions")
+	// txTopic := flag.String("mempool-topic", "", "A kafka topic for receiving pending transactions")
 
-	kafkaRollback := flag.Int64("kafka-rollback", 5000, "A number of Kafka offsets to roll back before resumption")
-  reorgThreshold := flag.Int64("reorg-threshold", 128, "Minimum number of blocks to keep in memory to handle reorgs.")
+	// kafkaRollback := flag.Int64("kafka-rollback", 5000, "A number of Kafka offsets to roll back before resumption")
+  //reorgThreshold := flag.Int64("reorg-threshold", 128, "Minimum number of blocks to keep in memory to handle reorgs.")
 
-	mempoolDb := flag.String("mempool-db", "", "A location for the mempool database (default: same dir as main db)")
-	blocksDb := flag.String("blocks-db", "", "A location for the mempool database (default: same dir as main db)")
-	txDb := flag.String("transactions-db", "", "A location for the mempool database (default: same dir as main db)")
-	logsDb := flag.String("logs-db", "", "A location for the mempool database (default: same dir as main db)")
+	// mempoolDb := flag.String("mempool-db", "", "A location for the mempool database (default: same dir as main db)")
+	// blocksDb := flag.String("blocks-db", "", "A location for the mempool database (default: same dir as main db)")
+	// txDb := flag.String("transactions-db", "", "A location for the mempool database (default: same dir as main db)")
+	// logsDb := flag.String("logs-db", "", "A location for the mempool database (default: same dir as main db)")
 
-	mempoolSlots := flag.Int("mempool-size", 4096, "Number of mempool entries before low priced entries get dropped")
+	// mempoolSlots := flag.Int("mempool-size", 4096, "Number of mempool entries before low priced entries get dropped")
 
 
 	concurrency :=flag.Int("concurrency", 16, "Number of concurrent requests to handle")
@@ -126,30 +126,30 @@ func main() {
   sqlitePath := flag.CommandLine.Args()[1]
   feedURL := flag.CommandLine.Args()[2]
 
-	if cfg.mempoolDb == "" {
-		mempoolDb = filepath.Join(filepath.Dir(sqlitePath), "mempool.sqlite")
-		log.Debug("the location of mempool is:", "mempoolDB", cfg.mempoolDb)
+	if cfg.MempoolDb == "" {
+		cfg.MempoolDb = filepath.Join(filepath.Dir(sqlitePath), "mempool.sqlite")
+		log.Debug("the location of mempool is:", "mempoolDB", cfg.MempoolDb)
 	}
-	if cfg.blocksDb == "" {
-		blocksDb = filepath.Join(filepath.Dir(sqlitePath), "blocks.sqlapproriateite")
-		log.Debug("the location of blocksDB is:", "blocksDB", cfg.blocksDb)
+	if cfg.BlocksDb == "" {
+		cfg.BlocksDb = filepath.Join(filepath.Dir(sqlitePath), "blocks.sqlapproriateite")
+		log.Debug("the location of blocksDB is:", "blocksDB", cfg.BlocksDb)
 	}
-	if cfg.txDb == "" {
-		txDb = filepath.Join(filepath.Dir(sqlitePath), "transactions.sqlite")
-		log.Debug("the location of transactionsDB is:", "txDB", cfg.txDb)
+	if cfg.TxDb == "" {
+		cfg.TxDb = filepath.Join(filepath.Dir(sqlitePath), "transactions.sqlite")
+		log.Debug("the location of transactionsDB is:", "txDB", cfg.TxDb)
 	}
-	if cfg.logsDb == "" {
-		logsDb = filepath.Join(filepath.Dir(sqlitePath), "logs.sqlite")
-		log.Debug("the location of logsDB is:", "logsDB", cfg.logsDb)
+	if cfg.LogsDb == "" {
+		cfg.LogsDb = filepath.Join(filepath.Dir(sqlitePath), "logs.sqlite")
+		log.Debug("the location of logsDB is:", "logsDB", cfg.LogsDb)
 	}
 
   sql.Register("sqlite3_hooked",
     &sqlite3.SQLiteDriver{
       ConnectHook: func(conn *sqlite3.SQLiteConn) error {
-				conn.Exec(fmt.Sprintf("ATTACH DATABASE '%v' AS 'blocks'; PRAGMA block.journal_mode = WAL ; PRAGMA block.synchronous = OFF ;", cfg.blocksDb), nil)
-				conn.Exec(fmt.Sprintf("ATTACH DATABASE '%v' AS 'transactions'; PRAGMA transactions.journal_mode = WAL ; PRAGMA transactions.synchronous = OFF ;", cfg.txDb), nil)
-				conn.Exec(fmt.Sprintf("ATTACH DATABASE '%v' AS 'logs'; PRAGMA logs.journal_mode = WAL ; PRAGMA logs.synchronous = OFF ;", cfg.logsDb), nil)
-				conn.Exec(fmt.Sprintf("ATTACH DATABASE '%v' AS 'mempool'; PRAGMA mempool.journal_mode = WAL ; PRAGMA mempool.synchronous = OFF ;", cfg.mempoolDb), nil)
+				conn.Exec(fmt.Sprintf("ATTACH DATABASE '%v' AS 'blocks'; PRAGMA block.journal_mode = WAL ; PRAGMA block.synchronous = OFF ;", cfg.BlocksDb), nil)
+				conn.Exec(fmt.Sprintf("ATTACH DATABASE '%v' AS 'transactions'; PRAGMA transactions.journal_mode = WAL ; PRAGMA transactions.synchronous = OFF ;", cfg.TxDb), nil)
+				conn.Exec(fmt.Sprintf("ATTACH DATABASE '%v' AS 'logs'; PRAGMA logs.journal_mode = WAL ; PRAGMA logs.synchronous = OFF ;", cfg.LogsDb), nil)
+				conn.Exec(fmt.Sprintf("ATTACH DATABASE '%v' AS 'mempool'; PRAGMA mempool.journal_mode = WAL ; PRAGMA mempool.synchronous = OFF ;", cfg.MempoolDb), nil)
 
 				return nil
       },
@@ -181,23 +181,23 @@ func main() {
     go p.ListenAndServe()
   }
 
-	if err := migrations.MigrateBlocks(logsdb, cfg.chainid); err != nil {
+	if err := migrations.MigrateBlocks(logsdb, cfg.Chainid); err != nil {
 		log.Error(err.Error())
 	}
-	if err := migrations.MigrateTransactions(logsdb, cfg.chainid); err != nil {
+	if err := migrations.MigrateTransactions(logsdb, cfg.Chainid); err != nil {
 		log.Error(err.Error())
 	}
-	if err := migrations.MigrateLogs(logsdb, cfg.chainid); err != nil {
+	if err := migrations.MigrateLogs(logsdb, cfg.Chainid); err != nil {
 		log.Error(err.Error())
 	}
-	if err := migrations.MigrateMempool(logsdb, cfg.chainid); err != nil {
+	if err := migrations.MigrateMempool(logsdb, cfg.Chainid); err != nil {
 		log.Error(err.Error())
 	}
 
-  feed, err := datafeed.ResolveFeed(feedURL, logsdb, cfg.kafkaRollback, cfg.reorgThreshold, cfg.chainid, *resumptionTimestampMs)
+  feed, err := datafeed.ResolveFeed(feedURL, logsdb, cfg.KafkaRollback, cfg.ReorgThreshold, cfg.Chainid, *resumptionTimestampMs)
   if err != nil { log.Error(err.Error()) }
 //genereic feed blocks logs tx receipts
-  txFeed, err := txfeed.ResolveTransactionFeed(feedURL, cfg.txTopic) //does txTopic need to be addressed?
+  txFeed, err := txfeed.ResolveTransactionFeed(feedURL, cfg.TxTopic) //does txTopic need to be addressed?
   if err != nil { log.Error(err.Error()) }
 //mempool transactions
   quit := make(chan struct{})
@@ -206,25 +206,25 @@ func main() {
 
 	var rollback, resumptionTime int64
 	//TODO: the above is not ok. We need to set those variables, as flags I am assuming.
-	consumer, _ := aquire_consumer(logsdb, feedURL, rollback, *reorgThreshold, int64(chainid), resumptionTime)
+	consumer, _ := aquire_consumer(logsdb, feedURL, rollback, cfg.ReorgThreshold, int64(cfg.Chainid), resumptionTime)
 
 
 	//copy paste from cardinal newcardinal datafeed to get down to consumer to pass into process datafeed (see above)
 	indexes := []indexer.Indexer{}
-	bi := indexer.NewBlockIndexer(cfg.chainid)
-	ti := indexer.NewTxIndexer(cfg.chainid, cfg.eip155Block, cfg.homesteadBlock)
+	bi := indexer.NewBlockIndexer(cfg.Chainid)
+	ti := indexer.NewTxIndexer(cfg.Chainid, cfg.Eip155Block, cfg.HomesteadBlock)
 	li := indexer.NewLogIndexer()
 	indexes = append(indexes, bi, ti, li)
-  go indexer.ProcessDataFeed(feed, consumer, txFeed, logsdb, quit, cfg.eip155Block, cfg.homesteadBlock, mut, *mempoolSlots, indexes) //[]indexer
+  go indexer.ProcessDataFeed(feed, consumer, txFeed, logsdb, quit, cfg.Eip155Block, cfg.HomesteadBlock, mut, cfg.MempoolSlots, indexes) //[]indexer
 //completion feed not really used intended to give info about when flume finished processing a block, need to strip, there may be a case for flume to offer subscritions and so may need a completion type of object (post refactor)
 	tm := rpcTransports.NewTransportManager(*concurrency)
 	tm.AddHTTPServer(*port)
-	tm.Register("eth", api.NewLogsAPI(logsdb, cfg.chainid))
-	tm.Register("eth", api.NewBlockAPI(logsdb, cfg.chainid))
-	tm.Register("eth", api.NewGasAPI(logsdb, cfg.chainid))
-	tm.Register("eth", api.NewTransactionAPI(logsdb, cfg.chainid))
-	tm.Register("flume", api.NewFlumeTokensAPI(logsdb, cfg.chainid))
-	tm.Register("flume", api.NewFlumeAPI(logsdb, cfg.chainid))
+	tm.Register("eth", api.NewLogsAPI(logsdb, cfg.Chainid))
+	tm.Register("eth", api.NewBlockAPI(logsdb, cfg.Chainid))
+	tm.Register("eth", api.NewGasAPI(logsdb, cfg.Chainid))
+	tm.Register("eth", api.NewTransactionAPI(logsdb, cfg.Chainid))
+	tm.Register("flume", api.NewFlumeTokensAPI(logsdb, cfg.Chainid))
+	tm.Register("flume", api.NewFlumeAPI(logsdb, cfg.Chainid))
 
 
 
@@ -238,7 +238,7 @@ func main() {
   if minBlock > *minSafeBlock {
     log.Error("Minimum block error", "Earliest log found on block:", minBlock, "Should be less than or equal to:", *minSafeBlock)
   }
-  if !*shutdownSync {
+  if !*exitWhenSynced {
 		if err := tm.Run(9999); err != nil {
 			quit <- struct{}{}
 		  logsdb.Close()

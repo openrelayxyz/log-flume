@@ -1,30 +1,25 @@
 package main
 
 import (
-	"fmt"
-	"runtime"
-	"path"
-	"strconv"
 	"errors"
 	"gopkg.in/yaml.v2"
-	"github.com/openrelayxyz/cardinal-types"
-	"github.com/openrelayxyz/cardinal-rpc"
-	"github.com/openrelayxyz/cardinal-streams/transports"
+	log "github.com/inconshreveable/log15"
 	"io/ioutil"
-	"os"
 )
 
 type Config struct {
-	Port *int64 `yaml:port`
-  PprofPort *int `yaml:"pprofPort"`
-  MinSafeBlock *int `yaml:"minSafeBlock"`
-	Network string `yaml:networkName`
-	Chainid int `yaml:chainid`
+	Port int64 `yaml:"port"`
+  PprofPort int `yaml:"pprofPort"`
+  MinSafeBlock int `yaml:"minSafeBlock"`
+	Network string `yaml:"networkName"`
+	Chainid uint64 `yaml:"chainid"`
+	HomesteadBlock uint64 `yaml:"homesteadBlock"`
+	Eip155Block uint64 `yaml:"eip155Block"`
   TxTopic string `yaml:"mempoolTopic"`
   KafkaRollback int64 `yaml:"kafkaRollback"`
   ReorgThreshold int64 `yaml:"reorgThreshold"`
   MempoolDb string `yaml:"mempoolDB"`
-	BlocksDb string `yaml"blocksDB"`
+	BlocksDb string `yaml:"blocksDB"`
 	TxDb string `yaml:"transactionsDB"`
 	LogsDb string `yaml:"logsDB"`
 	MempoolSlots int `yaml:"mempoolSize"`
@@ -64,14 +59,14 @@ func LoadConfig(fname string) (*Config, error) {
 	    cfg.Eip155Block = 0
 	    cfg.Chainid = 5
 		case "":
-			if cfg.chainid == 0 {
+			if cfg.Chainid == 0 {
 				err := errors.New("Network name, eipp155Block, and homestead Block values must be set in configuration file")
 				return nil, err
 			} //if chainid is not zero we assume the other fields are valid
 		case "sepolia":
-	    cfg.chainid = 11155111
+	    cfg.Chainid = 11155111
 	  case "kiln":
-	    cfg.chainid = 1337802
+	    cfg.Chainid = 1337802
 		default:
 			err := errors.New("Unrecognized network name")
 			return nil, err
@@ -98,15 +93,19 @@ func LoadConfig(fname string) (*Config, error) {
 	}
 
 	if cfg.PprofPort == 0 {
-		cnf.PprofPort = 6969
+		cfg.PprofPort = 6969
 	}
 
 	if cfg.MinSafeBlock == 0 {
 		cfg.MinSafeBlock = 1000000
 	}
 
-	if cfg.kafkaRollback == 0 {
-		cfg.kafkaRollback = 5000
+	if cfg.KafkaRollback == 0 {
+		cfg.KafkaRollback = 5000
+	}
+
+	if cfg.ReorgThreshold == 0 {
+		cfg.ReorgThreshold = 128
 	}
 	return &cfg, nil
 }
