@@ -14,6 +14,7 @@ import (
 	"github.com/openrelayxyz/flume/flumeserver/txfeed"
 	"log"
 	"math/big"
+	"errors"
 	"strconv"
 	"strings"
 	"sync"
@@ -162,15 +163,13 @@ func ProcessDataFeed(csConsumer transports.Consumer, txFeed *txfeed.TxFeed, db *
 		select {
 		case <-quit:
 			if !processed {
-				panic("Shutting down without processing any blocks")
-				//try not to panic, pass back into main and do proper cleanup
+					fmt.Errorf("Shutting down without processing any blocks")
+					return
 			}
-			log.Printf("Shutting down index process")
-			return
 		case <-pruneTicker.C:
-			mempool_dropLowestPrice(db, mempoolSlots, processed, txCount, txDedup)
+			mempool_dropLowestPrice(db, mempoolSlots, txCount, txDedup)
 		case tx := <-txCh:
-			mempool_indexer(db, mempoolSlots, processed, txCount, txDedup, tx)
+			mempool_indexer(db, mempoolSlots, txCount, txDedup, tx)
 		case chainUpdate := <-csCh:
 			//UPDATELOOP:
 			var lastBatch *delivery.PendingBatch
@@ -206,15 +205,12 @@ func ProcessDataFeed(csConsumer transports.Consumer, txFeed *txfeed.TxFeed, db *
 						}
 
 						megaStatement = append(megaStatement, applyParameters(
-							("INSERT OR REPLACE INTO cardinal_offsets(offset, partition, topic) VALUES (?, ?, ?)"),
-							offset, partition, topic,
-						))
+							("INSERT OR REPLACE INTO cardinal_offsets(offset, partition, topic) VALUES (?, ?, ?)"), offset, partition, topic))
 					}
 
 					mut.Lock()
 					start := time.Now()
 					dbtx, err := db.BeginTx(context.Background(), nil)
-
 					if err != nil {
 						log.Fatalf("Error creating a transaction: %v", err.Error())
 					}
@@ -241,7 +237,10 @@ func ProcessDataFeed(csConsumer transports.Consumer, txFeed *txfeed.TxFeed, db *
 					// log.Printf("Spent %v on commit", time.Since(cstart))
 					log.Printf("Committed Block %v (%#x) in %v (age ??)", uint64(lastBatch.Number), lastBatch.Hash.Bytes(), time.Since(start)) // TODO: Figure out a simple way to get age
 				}
-				//TODO: checkhere for processed
+				if processed == false {
+					fmt.Errorf("Shutting down without processing any blocks")
+					return
+				}
 			}
 		}
 	}

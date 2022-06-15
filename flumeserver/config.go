@@ -51,6 +51,19 @@ func LoadConfig(fname string) (*Config, error) {
 		return nil, err
 	}
 
+	if cfg.MempoolDb == "" {
+			return nil, errors.New("No mempool database specified")
+	}
+	if cfg.BlocksDb == "" {
+			return nil, errors.New("No blocks database specified")
+	}
+	if cfg.TxDb == "" {
+			return nil, errors.New("No transactions database specified")
+	}
+	if cfg.LogsDb == "" {
+			return nil, errors.New("No logs database specified")
+	}
+
 	switch cfg.Network {
 	case "mainnet":
 	    cfg.HomesteadBlock = 1150000

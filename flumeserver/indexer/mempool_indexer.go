@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func mempool_dropLowestPrice(db *sql.DB, mempoolSlots int, processed bool, txCount int, txDedup map[common.Hash]struct{}) {
+func mempool_dropLowestPrice(db *sql.DB, mempoolSlots int, txCount int, txDedup map[common.Hash]struct{}) {
 	db.QueryRow("SELECT count(*) FROM mempool.transactions;").Scan(&txCount)
 	if txCount > mempoolSlots {
 		pstart := time.Now()
@@ -22,7 +22,7 @@ func mempool_dropLowestPrice(db *sql.DB, mempoolSlots int, processed bool, txCou
 	}
 }
 
-func mempool_indexer(db *sql.DB, mempoolSlots int, processed bool, txCount int, txDedup map[common.Hash]struct{}, tx *types.Transaction) []string {
+func mempool_indexer(db *sql.DB, mempoolSlots int, txCount int, txDedup map[common.Hash]struct{}, tx *types.Transaction) []string {
 	txHash := tx.Hash()
 	if _, ok := txDedup[txHash]; !ok {
 		log15.Warn("Failed to dedup transaction", "transaction", tx)
