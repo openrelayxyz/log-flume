@@ -1,9 +1,11 @@
 package indexer
 
 import (
+	"os"
 	"bytes"
 	"context"
 	"database/sql"
+	"math/big"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -11,10 +13,8 @@ import (
 	"github.com/klauspost/compress/zlib"
 	"github.com/openrelayxyz/cardinal-streams/delivery"
 	"github.com/openrelayxyz/cardinal-streams/transports"
-	"github.com/openrelayxyz/flume/flumeserver/datafeed"
 	"github.com/openrelayxyz/flume/flumeserver/txfeed"
 	"log"
-	"math/big"
 	"strconv"
 	"strings"
 	"sync"
@@ -144,12 +144,10 @@ func applyParameters(query string, params ...interface{}) string {
 	return fmt.Sprintf(query, preparedParams...)
 }
 
-func ProcessDataFeed(feed datafeed.DataFeed, csConsumer transports.Consumer, txFeed *txfeed.TxFeed, db *sql.DB, quit <-chan struct{}, eip155Block, homesteadBlock uint64, mut *sync.RWMutex, mempoolSlots int, indexers []Indexer) {
+func ProcessDataFeed(csConsumer transports.Consumer, txFeed *txfeed.TxFeed, db *sql.DB, quit <-chan struct{}, eip155Block, homesteadBlock uint64, mut *sync.RWMutex, mempoolSlots int, indexers []Indexer) {
 	log.Printf("Processing data feed")
 	txCh := make(chan *types.Transaction, 200)
 	txSub := txFeed.Subscribe(txCh)
-	ch := make(chan *datafeed.ChainEvent, 10)
-	sub := feed.Subscribe(ch)
 	csCh := make(chan *delivery.ChainUpdate, 10)
 	if csConsumer != nil {
 		csSub := csConsumer.Subscribe(csCh)
@@ -159,22 +157,22 @@ func ProcessDataFeed(feed datafeed.DataFeed, csConsumer transports.Consumer, txF
 	pruneTicker := time.NewTicker(5 * time.Second)
 	txCount := 0
 	txDedup := make(map[common.Hash]struct{})
-	defer sub.Unsubscribe()
 	defer txSub.Unsubscribe()
 	db.Exec("DELETE FROM mempool.transactions WHERE 1;")
 	for {
 		select {
 		case <-quit:
 			if !processed {
-				panic("Shutting down without processing any blocks")
-				//try not to panic, pass back into main and do proper cleanup
+				fmt.Errorf("Shutting down without processing any blocks")
+				os.Exit(1)
+			} else {
+				log.Printf("Shutting down index process")
+				return
 			}
-			log.Printf("Shutting down index process")
-			return
 		case <-pruneTicker.C:
-			mempool_dropLowestPrice(db, mempoolSlots, processed, txCount, txDedup)
+			mempool_dropLowestPrice(db, mempoolSlots, txCount, txDedup)
 		case tx := <-txCh:
-			mempool_indexer(db, mempoolSlots, processed, txCount, txDedup, tx)
+			mempool_indexer(db, mempoolSlots, txCount, txDedup, tx)
 		case chainUpdate := <-csCh:
 			//UPDATELOOP:
 			var lastBatch *delivery.PendingBatch
@@ -210,15 +208,12 @@ func ProcessDataFeed(feed datafeed.DataFeed, csConsumer transports.Consumer, txF
 						}
 
 						megaStatement = append(megaStatement, applyParameters(
-							("INSERT OR REPLACE INTO cardinal_offsets(offset, partition, topic) VALUES (?, ?, ?)"),
-							offset, partition, topic,
-						))
+							("INSERT OR REPLACE INTO cardinal_offsets(offset, partition, topic) VALUES (?, ?, ?)"), offset, partition, topic))
 					}
 
 					mut.Lock()
 					start := time.Now()
 					dbtx, err := db.BeginTx(context.Background(), nil)
-
 					if err != nil {
 						log.Fatalf("Error creating a transaction: %v", err.Error())
 					}
@@ -245,7 +240,9 @@ func ProcessDataFeed(feed datafeed.DataFeed, csConsumer transports.Consumer, txF
 					// log.Printf("Spent %v on commit", time.Since(cstart))
 					log.Printf("Committed Block %v (%#x) in %v (age ??)", uint64(lastBatch.Number), lastBatch.Hash.Bytes(), time.Since(start)) // TODO: Figure out a simple way to get age
 				}
-				//TODO: checkhere for processed
+				if processed {
+					break
+				}
 			}
 		}
 	}
