@@ -13,6 +13,7 @@ import (
 	"github.com/openrelayxyz/cardinal-streams/transports"
 	"github.com/openrelayxyz/flume/flumeserver/datafeed"
 	"github.com/openrelayxyz/flume/flumeserver/txfeed"
+	"github.com/openrelayxyz/cardinal-types/metrics"
 	"log"
 	"math/big"
 	"strconv"
@@ -145,6 +146,7 @@ func applyParameters(query string, params ...interface{}) string {
 }
 
 func ProcessDataFeed(feed datafeed.DataFeed, csConsumer transports.Consumer, txFeed *txfeed.TxFeed, db *sql.DB, quit <-chan struct{}, eip155Block, homesteadBlock uint64, mut *sync.RWMutex, mempoolSlots int, indexers []Indexer) {
+	heightGauge := metrics.NewMajorGauge("/flume/height")
 	log.Printf("Processing data feed")
 	txCh := make(chan *types.Transaction, 200)
 	txSub := txFeed.Subscribe(txCh)
@@ -241,6 +243,7 @@ func ProcessDataFeed(feed datafeed.DataFeed, csConsumer transports.Consumer, txF
 					}
 					mut.Unlock()
 					processed = true
+					heightGauge.Update(lastBatch.Number)
 					// completionFeed.Send(chainEvent.Block.Hash)
 					// log.Printf("Spent %v on commit", time.Since(cstart))
 					log.Printf("Committed Block %v (%#x) in %v (age ??)", uint64(lastBatch.Number), lastBatch.Hash.Bytes(), time.Since(start)) // TODO: Figure out a simple way to get age
