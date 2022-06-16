@@ -240,7 +240,7 @@ func ProcessDataFeed(csConsumer transports.Consumer, txFeed *txfeed.TxFeed, db *
 					// log.Printf("Spent %v on commit", time.Since(cstart))
 					log.Printf("Committed Block %v (%#x) in %v (age ??)", uint64(lastBatch.Number), lastBatch.Hash.Bytes(), time.Since(start)) // TODO: Figure out a simple way to get age
 				}
-				if processed == true {
+				if processed {
 					break
 				}
 			}

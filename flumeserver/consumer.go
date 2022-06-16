@@ -1,16 +1,16 @@
 package main
 
 import (
-	"context"
-	"database/sql"
-	"fmt"
-	log "github.com/inconshreveable/log15"
-	"github.com/openrelayxyz/cardinal-streams/transports"
-	streamsTransports "github.com/openrelayxyz/cardinal-streams/transports"
-	ctypes "github.com/openrelayxyz/cardinal-types"
-	"math/big"
-	"regexp"
-	"strings"
+"fmt"
+"context"
+streamsTransports "github.com/openrelayxyz/cardinal-streams/transports"
+ctypes "github.com/openrelayxyz/cardinal-types"
+log "github.com/inconshreveable/log15"
+"math/big"
+"github.com/openrelayxyz/cardinal-streams/transports"
+"database/sql"
+"regexp"
+"strings"
 )
 
 func AquireConsumer(db *sql.DB, brokerParams []transports.BrokerParams, reorgThreshold, chainid, resumptionTime int64) (streamsTransports.Consumer, error) {
@@ -29,12 +29,9 @@ func AquireConsumer(db *sql.DB, brokerParams []transports.BrokerParams, reorgThr
 			var offset int64
 			rows, err := db.QueryContext(context.Background(), "SELECT partition, offset FROM cardinal_offsets WHERE topic = ?;", topic)
 			if err != nil {
-				return nil, err
-			}
-			for rows.Next() {
-				if err := rows.Scan(&partition, &offset); err != nil {
-					return nil, err
-				}
+		 		return nil, err}
+				for rows.Next() {
+					if err := rows.Scan(&partition, &offset); err != nil { return nil, err }
 				startOffsets = append(startOffsets, fmt.Sprintf("%v:%v=%v", topic, partition, offset))
 			}
 		}
@@ -62,5 +59,5 @@ func AquireConsumer(db *sql.DB, brokerParams []transports.BrokerParams, reorgThr
 			rt = r
 		}
 	}
-	return streamsTransports.ResolveMuxConsumer(brokerParams, rt, lastNumber, ctypes.BytesToHash(lastHash), new(big.Int).SetBytes(lastWeight), reorgThreshold, trackedPrefixes, nil)
+  return streamsTransports.ResolveMuxConsumer(brokerParams, rt, lastNumber, ctypes.BytesToHash(lastHash), new(big.Int).SetBytes(lastWeight), reorgThreshold, trackedPrefixes, nil)
 }
