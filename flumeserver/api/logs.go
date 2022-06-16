@@ -1,12 +1,11 @@
 package api
 
 import (
-	"sort"
-	"strings"
-	"database/sql"//
+	"database/sql"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	// "github.com/ethereum/go-ethereum/eth/filters"
+	"sort"
+	"strings"
 	"context"
 	"fmt"
 	"log"
