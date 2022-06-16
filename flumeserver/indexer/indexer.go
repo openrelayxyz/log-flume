@@ -1,9 +1,11 @@
 package indexer
 
 import (
+	"os"
 	"bytes"
 	"context"
 	"database/sql"
+	"math/big"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -13,8 +15,6 @@ import (
 	"github.com/openrelayxyz/cardinal-streams/transports"
 	"github.com/openrelayxyz/flume/flumeserver/txfeed"
 	"log"
-	"math/big"
-	"errors"
 	"strconv"
 	"strings"
 	"sync"
@@ -163,8 +163,11 @@ func ProcessDataFeed(csConsumer transports.Consumer, txFeed *txfeed.TxFeed, db *
 		select {
 		case <-quit:
 			if !processed {
-					fmt.Errorf("Shutting down without processing any blocks")
-					return
+				fmt.Errorf("Shutting down without processing any blocks")
+				os.Exit(1)
+			} else {
+				log.Printf("Shutting down index process")
+				return
 			}
 		case <-pruneTicker.C:
 			mempool_dropLowestPrice(db, mempoolSlots, txCount, txDedup)
@@ -237,9 +240,8 @@ func ProcessDataFeed(csConsumer transports.Consumer, txFeed *txfeed.TxFeed, db *
 					// log.Printf("Spent %v on commit", time.Since(cstart))
 					log.Printf("Committed Block %v (%#x) in %v (age ??)", uint64(lastBatch.Number), lastBatch.Hash.Bytes(), time.Since(start)) // TODO: Figure out a simple way to get age
 				}
-				if processed == false {
-					fmt.Errorf("Shutting down without processing any blocks")
-					return
+				if processed == true {
+					break
 				}
 			}
 		}
