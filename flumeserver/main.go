@@ -88,7 +88,7 @@ func main() {
 		log.Error(err.Error())
 	}
 
-	txFeed, err := txfeed.ResolveTransactionFeed(cfg.brokers[0].URL, cfg.TxTopic) //does txTopic need to be addressed?
+	txFeed, err := txfeed.ResolveTransactionFeed(cfg.brokers[0].URL, cfg.TxTopic)
 	if err != nil {
 		log.Error(err.Error())
 	}
@@ -131,7 +131,7 @@ func main() {
 		publishers.StatsD(cfg.Statsd.Port, cfg.Statsd.Address, time.Duration(cfg.Statsd.Interval), cfg.Statsd.Prefix, cfg.Statsd.Minor)
 	}
 	if cfg.CloudWatch != nil {
-		publishers.CloudWatch(cfg.CloudWatch.Namespace, cfg.CloudWatch.Dimensions, cfg.CloudWatch.Chainid, time.Duration(cfg.CloudWatch.Interval), cfg.CloudWatch.Percentiles, cfg.CloudWatch.Minor)
+		publishers.CloudWatch(cfg.CloudWatch.Namespace, cfg.CloudWatch.Dimensions, int64(cfg.Chainid), time.Duration(cfg.CloudWatch.Interval), cfg.CloudWatch.Percentiles, cfg.CloudWatch.Minor)
 	}
 	quit <- struct{}{}
 	logsdb.Close()
