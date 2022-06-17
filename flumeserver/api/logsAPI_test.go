@@ -152,10 +152,11 @@ func TestLogsAPI(t *testing.T) {
 		lb := big.NewInt(14000021)
 		topic1 := topicOnes[rand.Intn(len(topicOnes))]
 		topicList := []common.Hash{topic1}
+
 		arg := FilterQuery{
 			FromBlock: fb,
 			ToBlock:   lb,
-			Topics:    [][]common.Hash{[]common.Hash, topicList},
+			Topics:    [][]common.Hash{[]common.Hash{}, topicList},
 		}
 		actual, err := l.GetLogs(context.Background(), arg)
 		if err != nil {
@@ -200,7 +201,7 @@ func TestLogsAPI(t *testing.T) {
 		arg := FilterQuery{
 			FromBlock: fb,
 			ToBlock:   lb,
-			Topics:    [][]common.Hash{[]common.Hash, []common.Hash, topicList},
+			Topics:    [][]common.Hash{[]common.Hash{}, []common.Hash{}, topicList},
 		}
 		actual, err := l.GetLogs(context.Background(), arg)
 		if err != nil {
@@ -245,7 +246,7 @@ func TestLogsAPI(t *testing.T) {
 		arg := FilterQuery{
 			FromBlock: fb,
 			ToBlock:   lb,
-			Topics:    [][]common.Hash{[]common.Hash, []common.Hash, []common.Hash, topicList},
+			Topics:    [][]common.Hash{[]common.Hash{}, []common.Hash{}, []common.Hash{}, topicList},
 		}
 		actual, err := l.GetLogs(context.Background(), arg)
 		if err != nil {
