@@ -1,12 +1,11 @@
 package api
 
 import (
-	"sort"
-	"strings"
 	"database/sql"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/eth/filters"
+	"sort"
+	"strings"
 	"context"
 	"fmt"
 	"log"
@@ -24,7 +23,7 @@ func NewLogsAPI(db *sql.DB, network uint64) *LogsAPI {
 	}
 }
 
-func (api *LogsAPI) GetLogs(ctx context.Context, crit filters.FilterCriteria) ([]*types.Log, error) {
+func (api *LogsAPI) GetLogs(ctx context.Context, crit FilterQuery) ([]*types.Log, error) {
 	latestBlock, err := getLatestBlock(ctx, api.db)
 	if err != nil {
 		// handleError(err.Error(), call.ID, 500)
