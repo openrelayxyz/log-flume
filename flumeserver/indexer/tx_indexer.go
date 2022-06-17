@@ -7,7 +7,7 @@ import (
 	gtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/openrelayxyz/cardinal-evm/rlp"
 	"github.com/openrelayxyz/cardinal-streams/delivery"
-	"log"
+	log "github.com/inconshreveable/log15"
 	"math/big"
 	"regexp"
 	"strconv"
@@ -78,7 +78,7 @@ func (indexer *TxIndexer) Index(pb *delivery.PendingBatch) ([]string, error) {
 				}
 				sender, err := gtypes.Sender(signer, tx)
 				if err != nil {
-					log.Panic(err.Error())
+					log.Error("Signer error", "err", err.Error())
 				}
 				ch <- sender
 			}(tx, ch)

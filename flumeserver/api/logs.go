@@ -9,7 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/filters"
 	"context"
 	"fmt"
-	"log"
+	log "github.com/inconshreveable/log15"
 )
 
 type LogsAPI struct {
@@ -83,7 +83,7 @@ func (api *LogsAPI) GetLogs(ctx context.Context, crit filters.FilterCriteria) ([
 	query := fmt.Sprintf("SELECT address, topic0, topic1, topic2, topic3, data, block, transactionHash, transactionIndex, blockHash, logIndex FROM event_logs %v WHERE %v;", indexClause, strings.Join(whereClause, " AND "))
 	rows, err := api.db.QueryContext(ctx, query, params...)
 	if err != nil {
-		log.Printf("Error selecting: %v - '%v'", err.Error(), query)
+		log.Error("Error selecting query", "query", query, "err:", err.Error())
 		return nil, err
 	}
 	defer rows.Close()
@@ -95,7 +95,7 @@ func (api *LogsAPI) GetLogs(ctx context.Context, crit filters.FilterCriteria) ([
 		var transactionIndex, logIndex uint
 		err := rows.Scan(&address, &topic0, &topic1, &topic2, &topic3, &data, &blockNumber, &transactionHash, &transactionIndex, &blockHash, &logIndex)
 		if err != nil {
-			log.Printf("Error scanning: %v", err.Error())
+			log.Error("Error scanning", "err:", err.Error())
 			// handleError("database error", call.ID, 500)
 			return nil, fmt.Errorf("database error")
 		}
@@ -115,7 +115,7 @@ func (api *LogsAPI) GetLogs(ctx context.Context, crit filters.FilterCriteria) ([
 		}
 		input, err := decompress(data)
 		if err != nil {
-			log.Printf("Error decompressing data: %v", err.Error())
+			log.Error("Error decompressing data", "err", err.Error())
 			// handleError("database error", call.ID, 500)
 			return nil, fmt.Errorf("database error")
 		}
@@ -135,7 +135,7 @@ func (api *LogsAPI) GetLogs(ctx context.Context, crit filters.FilterCriteria) ([
 		}
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("Error scanning: %v", err.Error())
+		log.Error("Error scanning", "err", err.Error())
 		// handleError("database error", call.ID, 500)
 		return nil, fmt.Errorf("database error")
 	}

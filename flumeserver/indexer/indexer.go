@@ -15,7 +15,7 @@ import (
 	"github.com/openrelayxyz/cardinal-streams/transports"
 	"github.com/openrelayxyz/flume/flumeserver/txfeed"
 	"github.com/openrelayxyz/cardinal-types/metrics"
-	"log"
+	log "github.com/inconshreveable/log15"
 	"strconv"
 	"strings"
 	"sync"
@@ -147,7 +147,7 @@ func applyParameters(query string, params ...interface{}) string {
 
 func ProcessDataFeed(csConsumer transports.Consumer, txFeed *txfeed.TxFeed, db *sql.DB, quit <-chan struct{}, eip155Block, homesteadBlock uint64, mut *sync.RWMutex, mempoolSlots int, indexers []Indexer) {
 	heightGauge := metrics.NewMajorGauge("/flume/height")
-	log.Printf("Processing data feed")
+	log.Info("Processing data feed")
 	txCh := make(chan *types.Transaction, 200)
 	txSub := txFeed.Subscribe(txCh)
 	csCh := make(chan *delivery.ChainUpdate, 10)
@@ -165,10 +165,10 @@ func ProcessDataFeed(csConsumer transports.Consumer, txFeed *txfeed.TxFeed, db *
 		select {
 		case <-quit:
 			if !processed {
-				fmt.Errorf("Shutting down without processing any blocks")
+				log.Error("Shutting down without processing any blocks")
 				os.Exit(1)
 			} else {
-				log.Printf("Shutting down index process")
+				log.Info("Shutting down index process")
 				return
 			}
 		case <-pruneTicker.C:
@@ -184,7 +184,7 @@ func ProcessDataFeed(csConsumer transports.Consumer, txFeed *txfeed.TxFeed, db *
 					for _, indexer := range indexers {
 						s, err := indexer.Index(pb)
 						if err != nil {
-							log.Printf("Error computing updates")
+							log.Error("Error computing updates", "err:", err.Error())
 							continue
 						}
 						megaStatement = append(megaStatement, s...)
@@ -200,12 +200,12 @@ func ProcessDataFeed(csConsumer transports.Consumer, txFeed *txfeed.TxFeed, db *
 						topic, partitionS := parts[0], parts[1]
 						offset, err := strconv.Atoi(offsetS)
 						if err != nil {
-							log.Printf(err.Error())
+							log.Error("offset error", "err:", err.Error())
 							continue
 						}
 						partition, err := strconv.Atoi(partitionS)
 						if err != nil {
-							log.Printf(err.Error())
+							log.Error("partition error", "err:", err.Error())
 							continue
 						}
 
@@ -217,13 +217,13 @@ func ProcessDataFeed(csConsumer transports.Consumer, txFeed *txfeed.TxFeed, db *
 					start := time.Now()
 					dbtx, err := db.BeginTx(context.Background(), nil)
 					if err != nil {
-						log.Fatalf("Error creating a transaction: %v", err.Error())
+						log.Error("Error creating a transaction", "err:", err.Error())
 					}
 					if _, err := dbtx.Exec(strings.Join(megaStatement, " ; ")); err != nil {
 						dbtx.Rollback()
 						stats := db.Stats()
-						log.Printf("WARN: Failed to insert logs: %v", err.Error())
-						log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
+						log.Warn("Failed to insert logs", "err:", err.Error())
+						log.Info("SQLite Pool - Open:", stats.OpenConnections, "InUse:", stats.InUse, "Idle:", stats.Idle)
 						mut.Unlock()
 						continue
 					}
@@ -231,8 +231,8 @@ func ProcessDataFeed(csConsumer transports.Consumer, txFeed *txfeed.TxFeed, db *
 					// cstart := time.Now()
 					if err := dbtx.Commit(); err != nil {
 						stats := db.Stats()
-						log.Printf("WARN: Failed to insert logs: %v", err.Error())
-						log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
+						log.Warn("Failed to insert logs", "err", err.Error())
+						log.Info("SQLite Pool - Open:", stats.OpenConnections, "InUse:", stats.InUse, "Idle:", stats.Idle)
 						mut.Unlock()
 						continue
 					}
@@ -241,7 +241,7 @@ func ProcessDataFeed(csConsumer transports.Consumer, txFeed *txfeed.TxFeed, db *
 					heightGauge.Update(lastBatch.Number)
 					// completionFeed.Send(chainEvent.Block.Hash)
 					// log.Printf("Spent %v on commit", time.Since(cstart))
-					log.Printf("Committed Block %v (%#x) in %v (age ??)", uint64(lastBatch.Number), lastBatch.Hash.Bytes(), time.Since(start)) // TODO: Figure out a simple way to get age
+					log.Info("Committed Block Number:", uint64(lastBatch.Number), "Hash:", lastBatch.Hash.Bytes(), "in:", time.Since(start)) // TODO: Figure out a simple way to get age
 				}
 				if processed {
 					break
