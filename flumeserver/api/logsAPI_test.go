@@ -152,11 +152,10 @@ func TestLogsAPI(t *testing.T) {
 		lb := big.NewInt(14000021)
 		topic1 := topicOnes[rand.Intn(len(topicOnes))]
 		topicList := []common.Hash{topic1}
-		dummyListZero := []common.Hash{}
 		arg := FilterQuery{
 			FromBlock: fb,
 			ToBlock:   lb,
-			Topics:    [][]common.Hash{dummyListZero, topicList},
+			Topics:    [][]common.Hash{[]common.Hash, topicList},
 		}
 		actual, err := l.GetLogs(context.Background(), arg)
 		if err != nil {
@@ -198,12 +197,10 @@ func TestLogsAPI(t *testing.T) {
 		lb := big.NewInt(14000021)
 		topic2 := topicTwos[rand.Intn(len(topicTwos))]
 		topicList := []common.Hash{topic2}
-		dummyListZero := []common.Hash{}
-		dummyListOne := []common.Hash{}
 		arg := FilterQuery{
 			FromBlock: fb,
 			ToBlock:   lb,
-			Topics:    [][]common.Hash{dummyListZero, dummyListOne, topicList},
+			Topics:    [][]common.Hash{[]common.Hash, []common.Hash, topicList},
 		}
 		actual, err := l.GetLogs(context.Background(), arg)
 		if err != nil {
@@ -245,13 +242,10 @@ func TestLogsAPI(t *testing.T) {
 		lb := big.NewInt(14000021)
 		topic3 := topicThrees[rand.Intn(len(topicThrees))]
 		topicList := []common.Hash{topic3}
-		dummyListZero := []common.Hash{}
-		dummyListOne := []common.Hash{}
-		dummyListTwo := []common.Hash{}
 		arg := FilterQuery{
 			FromBlock: fb,
 			ToBlock:   lb,
-			Topics:    [][]common.Hash{dummyListZero, dummyListOne, dummyListTwo, topicList},
+			Topics:    [][]common.Hash{[]common.Hash, []common.Hash, []common.Hash, topicList},
 		}
 		actual, err := l.GetLogs(context.Background(), arg)
 		if err != nil {
