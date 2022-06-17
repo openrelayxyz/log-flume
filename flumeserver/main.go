@@ -13,7 +13,7 @@ import (
 	"github.com/openrelayxyz/flume/flumeserver/migrations"
 	"github.com/openrelayxyz/flume/flumeserver/txfeed"
 	"github.com/openrelayxyz/cardinal-types/metrics"
-	"github.com/openrelayxyz/cardinal-types/publishers"
+	"github.com/openrelayxyz/cardinal-types/metrics/publishers"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -61,9 +61,9 @@ func main() {
 		defer ticker.Stop()
 		for range ticker.C {
 			stats := logsdb.Stats()
-			connectionsGauge.Update(stats.OpenConnections)
-			inUseGauge.Update(stats.InUse)
-			idletGauge.Update(stats.Idle)
+			connectionsGauge.Update(int64(stats.OpenConnections))
+			inUseGauge.Update(int64(stats.InUse))
+			idleGauge.Update(int64(stats.Idle))
 		}
 	}()
 	if cfg.PprofPort > 0 {
@@ -130,7 +130,7 @@ func main() {
 		}
 	}
 	if cfg.Statsd != nil {
-		publishers.StatsD(cfg.Statsd.Port, cfg.Statsd.Adress, time.Duration(cfg.Statsd.Interval), cfg.Statsd.Prefix, cfg.Statsd.Minor)
+		publishers.StatsD(cfg.Statsd.Port, cfg.Statsd.Address, time.Duration(cfg.Statsd.Interval), cfg.Statsd.Prefix, cfg.Statsd.Minor)
 	}
 	if cfg.CloudWatch != nil {
 		publishers.CloudWatch(cfg.CloudWatch.Namespace, cfg.CloudWatch.Dimensions, cfg.CloudWatch.Chainid, time.Duration(cfg.CloudWatch.Interval), cfg.CloudWatch.Percentiles, cfg.CloudWatch.Minor)
