@@ -12,6 +12,8 @@ import (
 	"github.com/openrelayxyz/flume/flumeserver/indexer"
 	"github.com/openrelayxyz/flume/flumeserver/migrations"
 	"github.com/openrelayxyz/flume/flumeserver/txfeed"
+	"github.com/openrelayxyz/cardinal-types/metrics"
+	"github.com/openrelayxyz/cardinal-types/metrics/publishers"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -50,14 +52,16 @@ func main() {
 	logsdb.SetConnMaxLifetime(0)
 	logsdb.SetMaxIdleConns(32)
 	go func() {
+		connectionsGauge := metrics.NewMajorGauge("/flume/connections")
+		inUseGauge := metrics.NewMajorGauge("/flume/inUse")
+		idleGauge := metrics.NewMajorGauge("/flume/idle")
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
 			stats := logsdb.Stats()
-			var block uint
-			logsdb.QueryRow("SELECT max(number) FROM blocks;").Scan(&block)
-			log.Info("SQLite Pool", "Open:", stats.OpenConnections, "InUse:", stats.InUse, "Idle:", stats.Idle, "Head Block:", block)
-			// info becomes several metric sets, probably gauges
+			connectionsGauge.Update(int64(stats.OpenConnections))
+			inUseGauge.Update(int64(stats.InUse))
+			idleGauge.Update(int64(stats.Idle))
 		}
 	}()
 	if cfg.PprofPort > 0 {
@@ -107,6 +111,7 @@ func main() {
 	tm.Register("eth", api.NewTransactionAPI(logsdb, cfg.Chainid))
 	tm.Register("flume", api.NewFlumeTokensAPI(logsdb, cfg.Chainid))
 	tm.Register("flume", api.NewFlumeAPI(logsdb, cfg.Chainid))
+	tm.Register("debug", &metrics.MetricsAPI{})
 
 	<-consumer.Ready()
 	var minBlock int
@@ -121,9 +126,15 @@ func main() {
 			time.Sleep(time.Second)
 			os.Exit(1)
 		}
-
+	}
+	if cfg.Statsd != nil {
+		publishers.StatsD(cfg.Statsd.Port, cfg.Statsd.Address, time.Duration(cfg.Statsd.Interval), cfg.Statsd.Prefix, cfg.Statsd.Minor)
+	}
+	if cfg.CloudWatch != nil {
+		publishers.CloudWatch(cfg.CloudWatch.Namespace, cfg.CloudWatch.Dimensions, cfg.CloudWatch.Chainid, time.Duration(cfg.CloudWatch.Interval), cfg.CloudWatch.Percentiles, cfg.CloudWatch.Minor)
 	}
 	quit <- struct{}{}
 	logsdb.Close()
+	metrics.Clear()
 	time.Sleep(time.Second)
 }

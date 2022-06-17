@@ -9,6 +9,22 @@ import (
 	"io/ioutil"
 )
 
+type statsdOpts struct {
+	Address  string `yaml:"address"`
+	Port     string `yaml:"port"`
+	Prefix   string `yaml:"prefix"`
+	Interval int64  `yaml:"interval.sec"`
+	Minor    bool   `yaml:"include.minor"`
+}
+
+type cloudwatchOpts struct {
+	Namespace   string            `yaml:"namespace"`
+	Dimensions  map[string]string `yaml:"dimensions"`
+	Interval    int64             `yaml:"interval.sec"`
+	Percentiles []float64         `yaml:"percentiles"`
+	Minor       bool              `yaml:"include.minor"`
+}
+
 type broker struct {
 	URL               string `yaml:"url"`
 	DefaultTopic      string `yaml:"default.topic"`
@@ -39,6 +55,8 @@ type Config struct {
 	LogLevel       string `yaml:"loggingLevel"`
 	Brokers        []broker
 	brokers        []transports.BrokerParams
+	Statsd *statsdOpts `yaml:"statsd"`
+	CloudWatch *cloudwatchOpts `yaml:"cloudwatch"`
 }
 
 func LoadConfig(fname string) (*Config, error) {
@@ -173,7 +191,11 @@ func LoadConfig(fname string) (*Config, error) {
 			},
 			Rollback: cfg.Brokers[i].Rollback,
 		}
-
+	}
+	if cfg.CloudWatch != nil {
+		if cfg.CloudWatch.Namespace == "" {
+			cfg.CloudWatch.Namespace = "Flume"
+		}
 	}
 	return &cfg, nil
 }
