@@ -21,7 +21,6 @@ import (
 	"time"
 )
 
-
 func main() {
 	exitWhenSynced := flag.Bool("shutdownSync", false, "Shutdown server once sync is completed")
 	resumptionTimestampMs := flag.Int64("resumption.ts", -1, "Timestamp (in ms) to resume from instead of database timestamp (requires Cardinal source)")
@@ -52,7 +51,6 @@ func main() {
 
 	logsdb.SetConnMaxLifetime(0)
 	logsdb.SetMaxIdleConns(32)
-
 	go func() {
 		connectionsGauge := metrics.NewMajorGauge("/flume/connections")
 		inUseGauge := metrics.NewMajorGauge("/flume/inUse")
