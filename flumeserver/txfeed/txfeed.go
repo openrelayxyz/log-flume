@@ -50,7 +50,7 @@ func KafkaTxFeed(brokerURL, topic string) (*TxFeed, error) {
 		for msg := range tc.Messages() {
 			transaction := &types.Transaction{}
 			if err := rlp.DecodeBytes(msg.Value, transaction); err != nil {
-				log.Error("Failed to decode message", "err:", err.Error())
+				log.Error("Failed to decode message", "err", err.Error())
 				continue
 			}
 			ch <- transaction

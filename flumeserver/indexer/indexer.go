@@ -184,7 +184,7 @@ func ProcessDataFeed(csConsumer transports.Consumer, txFeed *txfeed.TxFeed, db *
 					for _, indexer := range indexers {
 						s, err := indexer.Index(pb)
 						if err != nil {
-							log.Error("Error computing updates", "err:", err.Error())
+							log.Error("Error computing updates", "err", err.Error())
 							continue
 						}
 						megaStatement = append(megaStatement, s...)
@@ -200,12 +200,12 @@ func ProcessDataFeed(csConsumer transports.Consumer, txFeed *txfeed.TxFeed, db *
 						topic, partitionS := parts[0], parts[1]
 						offset, err := strconv.Atoi(offsetS)
 						if err != nil {
-							log.Error("offset error", "err:", err.Error())
+							log.Error("offset error", "err", err.Error())
 							continue
 						}
 						partition, err := strconv.Atoi(partitionS)
 						if err != nil {
-							log.Error("partition error", "err:", err.Error())
+							log.Error("partition error", "err", err.Error())
 							continue
 						}
 
@@ -217,12 +217,12 @@ func ProcessDataFeed(csConsumer transports.Consumer, txFeed *txfeed.TxFeed, db *
 					start := time.Now()
 					dbtx, err := db.BeginTx(context.Background(), nil)
 					if err != nil {
-						log.Error("Error creating a transaction", "err:", err.Error())
+						log.Error("Error creating a transaction", "err", err.Error())
 					}
 					if _, err := dbtx.Exec(strings.Join(megaStatement, " ; ")); err != nil {
 						dbtx.Rollback()
 						stats := db.Stats()
-						log.Warn("Failed to insert logs", "err:", err.Error())
+						log.Warn("Failed to insert logs", "err", err.Error())
 						log.Info("SQLite Pool - Open:", stats.OpenConnections, "InUse:", stats.InUse, "Idle:", stats.Idle)
 						mut.Unlock()
 						continue

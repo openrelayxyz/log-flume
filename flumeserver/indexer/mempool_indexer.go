@@ -15,7 +15,7 @@ func mempool_dropLowestPrice(db *sql.DB, mempoolSlots int, txCount int, txDedup 
 	if txCount > mempoolSlots {
 		pstart := time.Now()
 		if _, err := db.Exec("DELETE FROM mempool.transactions WHERE gasPrice < (SELECT gasPrice FROM mempool.transactions ORDER BY gasPrice LIMIT 1 OFFSET ?);", mempoolSlots); err != nil {
-			log.Error("Error pruning", "err:", err.Error())
+			log.Error("Error pruning", "err", err.Error())
 		}
 		log.Debug("Pruned transactions from mempool", "transaction count", (txCount - mempoolSlots), "time", time.Since(pstart))
 	}
@@ -88,7 +88,7 @@ func mempool_indexer(db *sql.DB, mempoolSlots int, txCount int, txDedup map[comm
 		txCount = mempoolSlots
 	}
 	if _, err := db.Exec(strings.Join(statements, " ; ") + ";"); err != nil {
-		log.Error("Error on insert:", strings.Join(statements, " ; "), "err:", err.Error())
+		log.Error("Error on insert:", strings.Join(statements, " ; "), "err", err.Error())
 	}
 	txCount++
 	db.QueryRow("SELECT count(*) FROM mempool.transactions;").Scan(&txCount)

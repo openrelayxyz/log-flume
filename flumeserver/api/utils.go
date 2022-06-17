@@ -213,7 +213,7 @@ func getBlocks(ctx context.Context, db *sql.DB, includeTxs bool, chainid uint64,
 		}
 		logsBloom, err := decompress(bloomBytes)
 		if err != nil {
-			log.Error("Error decompressing data", "err:", err.Error())
+			log.Error("Error decompressing data", "err", err.Error())
 			return nil, err
 		}
 		unclesList := []common.Hash{}

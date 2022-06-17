@@ -27,12 +27,12 @@ func (api *FlumeAPI) GetTransactionsBySender(ctx context.Context, address common
 	}
 	txs, err := getPendingTransactions(ctx, api.db, *offset, 1000, api.network, "sender = ?", trimPrefix(address.Bytes()))
 	if err != nil {
-		log.Error("Error getting pending txs", "err:", err.Error())
+		log.Error("Error getting pending txs", "err", err.Error())
 		return nil, err
 	}
 	ctxs, err := getTransactions(ctx, api.db, *offset, 1000, api.network, "sender = ?", trimPrefix(address.Bytes()))
 	if err != nil {
-		log.Error("Error getting txs", "err:", err.Error())
+		log.Error("Error getting txs", "err", err.Error())
 		return nil, err
 	}
 	txs = append(txs, ctxs...)
@@ -50,7 +50,7 @@ func (api *FlumeAPI) GetTransactionReceiptsBySender(ctx context.Context, address
 	}
 	receipts, err := getTransactionReceipts(ctx, api.db, *offset, 1000, api.network, "sender = ?", trimPrefix(address.Bytes()))
 	if err != nil {
-		log.Error("Error getting receipts", "err:", err.Error())
+		log.Error("Error getting receipts", "err", err.Error())
 		return nil, err
 	}
 	result := paginator[map[string]interface{}]{Items: receipts}
@@ -68,12 +68,12 @@ func (api *FlumeAPI) GetTransactionsByRecipient(ctx context.Context, address com
 	}
 	txs, err := getPendingTransactions(ctx, api.db, *offset, 1000, api.network, "recipient = ?", trimPrefix(address.Bytes()))
 	if err != nil {
-		log.Error("Error getting pending txs", "err:", err.Error())
+		log.Error("Error getting pending txs", "err", err.Error())
 		return nil, err
 	}
 	ctxs, err := getTransactions(ctx, api.db, *offset, 1000, api.network, "recipient = ?", trimPrefix(address.Bytes()))
 	if err != nil {
-		log.Error("Error getting txs", "err:", err.Error())
+		log.Error("Error getting txs", "err", err.Error())
 		return nil, err
 	}
 	txs = append(txs, ctxs...)
@@ -91,7 +91,7 @@ func (api *FlumeAPI) GetTransactionReceiptsByRecipient(ctx context.Context, addr
 	}
 	receipts, err := getTransactionReceipts(ctx, api.db, *offset, 1000, api.network, "recipient = ?", trimPrefix(address.Bytes()))
 	if err != nil {
-		log.Error("Error getting receipts", "err:", err.Error())
+		log.Error("Error getting receipts", "err", err.Error())
 		return nil, err
 	}
 	result := paginator[map[string]interface{}]{Items: receipts}
@@ -108,12 +108,12 @@ func (api *FlumeAPI) GetTransactionsByParticipant(ctx context.Context, address c
 	}
 	txs, err := getPendingTransactions(ctx, api.db, *offset, 1000, api.network, "sender = ? OR recipient = ?", trimPrefix(address.Bytes()), trimPrefix(address.Bytes()))
 	if err != nil {
-		log.Error("Error getting pending txs", "err:", err.Error())
+		log.Error("Error getting pending txs", "err", err.Error())
 		return nil, err
 	}
 	ctxs, err := getTransactions(ctx, api.db, *offset, 1000, api.network, "sender = ? OR recipient = ?", trimPrefix(address.Bytes()), trimPrefix(address.Bytes()))
 	if err != nil {
-		log.Error("Error getting txs", "err:", err.Error())
+		log.Error("Error getting txs", "err", err.Error())
 		return nil, err
 	}
 	txs = append(txs, ctxs...)
@@ -132,7 +132,7 @@ func (api *FlumeAPI) GetTransactionReceiptsByParticipant(ctx context.Context, ad
 	}
 	receipts, err := getTransactionReceipts(ctx, api.db, *offset, 1000, api.network, "sender = ? OR recipient = ?", trimPrefix(address.Bytes()), trimPrefix(address.Bytes()))
 	if err != nil {
-		log.Error("Error getting receipts", "err:", err.Error())
+		log.Error("Error getting receipts", "err", err.Error())
 		return nil, err
 	}
 	result := paginator[map[string]interface{}]{Items: receipts}
@@ -148,7 +148,7 @@ func (api *FlumeAPI) GetTransactionReceiptsByBlockHash(ctx context.Context, bloc
 
 	receipts, err := getTransactionReceiptsBlock(ctx, api.db, 0, 100000, api.network, "blocks.hash = ?", trimPrefix(blockHash.Bytes()))
 	if err != nil {
-		log.Error("Error getting receipts", "err:", err.Error())
+		log.Error("Error getting receipts", "err", err.Error())
 		return nil, err
 	}
 	return receipts, nil
@@ -158,7 +158,7 @@ func (api *FlumeAPI) GetTransactionReceiptsByBlockNumber(ctx context.Context, bl
 
 	receipts, err := getTransactionReceiptsBlock(ctx, api.db, 0, 100000, api.network, "block = ?", uint64(blockNumber))
 	if err != nil {
-		log.Error("Error getting receipts", "err:", err.Error())
+		log.Error("Error getting receipts", "err", err.Error())
 		return nil, err
 	}
 	return receipts, nil
