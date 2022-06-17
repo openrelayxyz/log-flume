@@ -6,7 +6,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/event"
-	"log"
+	log "github.com/inconshreveable/log15"
 	"strings"
 )
 
@@ -46,11 +46,11 @@ func KafkaTxFeed(brokerURL, topic string) (*TxFeed, error) {
 	tc, err := utils.NewTopicConsumer(strings.TrimPrefix(brokerURL, "kafka://"), topic, 200)
 	if err != nil { return nil, err }
 	go func() {
-		log.Printf("Starting kafka feed %v - %v", brokerURL, topic)
+		log.Info("Starting kafka feed", "broker:", brokerURL, "topic", topic)
 		for msg := range tc.Messages() {
 			transaction := &types.Transaction{}
 			if err := rlp.DecodeBytes(msg.Value, transaction); err != nil {
-				log.Printf("Failed to decode message: %v", err.Error())
+				log.Error("Failed to decode message", "err", err.Error())
 				continue
 			}
 			ch <- transaction

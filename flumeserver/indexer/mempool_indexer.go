@@ -5,8 +5,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rlp"
-	log15 "github.com/inconshreveable/log15"
-	"log"
+	log "github.com/inconshreveable/log15"
 	"strings"
 	"time"
 )
@@ -16,16 +15,16 @@ func mempool_dropLowestPrice(db *sql.DB, mempoolSlots int, txCount int, txDedup 
 	if txCount > mempoolSlots {
 		pstart := time.Now()
 		if _, err := db.Exec("DELETE FROM mempool.transactions WHERE gasPrice < (SELECT gasPrice FROM mempool.transactions ORDER BY gasPrice LIMIT 1 OFFSET ?);", mempoolSlots); err != nil {
-			log.Printf("Error pruning: %v", err.Error())
+			log.Error("Error pruning", "err", err.Error())
 		}
-		log15.Debug("Pruned transactions from mempool", "transaction count", (txCount - mempoolSlots), "time", time.Since(pstart))
+		log.Debug("Pruned transactions from mempool", "transaction count", (txCount - mempoolSlots), "time", time.Since(pstart))
 	}
 }
 
 func mempool_indexer(db *sql.DB, mempoolSlots int, txCount int, txDedup map[common.Hash]struct{}, tx *types.Transaction) []string {
 	txHash := tx.Hash()
 	if _, ok := txDedup[txHash]; !ok {
-		log15.Warn("Failed to dedup transaction", "transaction", tx)
+		log.Warn("Failed to dedup transaction", "transaction", tx)
 	}
 	var signer types.Signer
 	var accessListRLP []byte
@@ -89,7 +88,7 @@ func mempool_indexer(db *sql.DB, mempoolSlots int, txCount int, txDedup map[comm
 		txCount = mempoolSlots
 	}
 	if _, err := db.Exec(strings.Join(statements, " ; ") + ";"); err != nil {
-		log.Printf("Error on insert: %v - '%v'", err.Error(), strings.Join(statements, " ; "))
+		log.Error("Error on insert:", strings.Join(statements, " ; "), "err", err.Error())
 	}
 	txCount++
 	db.QueryRow("SELECT count(*) FROM mempool.transactions;").Scan(&txCount)

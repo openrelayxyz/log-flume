@@ -2,7 +2,7 @@ package migrations
 
 import (
 	"database/sql"
-	"log"
+	log "github.com/inconshreveable/log15"
 )
 
 const (
@@ -43,20 +43,20 @@ func MigrateBlocks(db *sql.DB, chainid uint64) error {
 		      baseFee varchar(32))`)
 
 		if _, err := db.Exec(`CREATE TABLE blocks.cardinal_offsets (partition INT, offset BIGINT, topic STRING, PRIMARY KEY (topic, partition))`); err != nil {
-			log.Printf(err.Error())
+			log.Error("Migrate Blocks CREATE TABLE blocks.cardinal_offsets error", "err", err.Error())
 		}
 		if _, err := db.Exec(`CREATE TABLE blocks.issuance (
 					startBlock     BIGINT,
 					endBlock       BIGINT,
 					value          BIGINT
 					)`); err != nil {
-						log.Printf(err.Error())
+						log.Error("Migrate Blocks error", "err", err.Error())
 					}
 
-		if _, err := db.Exec(`CREATE INDEX blocks.coinbase ON blocks(coinbase)`); err != nil { log.Printf(err.Error()) }
-		if _, err := db.Exec(`CREATE INDEX blocks.timestamp ON blocks(time)`); err != nil { log.Printf(err.Error()) }
+		if _, err := db.Exec(`CREATE INDEX blocks.coinbase ON blocks(coinbase)`); err != nil { log.Error("Migrate Blocks CREATE INDEX error", "err", err.Error()) }
+		if _, err := db.Exec(`CREATE INDEX blocks.timestamp ON blocks(time)`); err != nil { log.Error("Migrate Blocks CREATE INDEX error", "err", err.Error()) }
 		db.Exec(`UPDATE blocks.migrations SET version = 1;`)
-		log.Printf("blocks done")
+		log.Info("blocks migration done")
 
 	}
 	return nil
@@ -100,12 +100,12 @@ func MigrateTransactions(db *sql.DB, chainid uint64) error {
 		      access_list blob,
 		      gasFeeCap varchar(32),
 		      gasTipCap varchar(32))`)
-		if _, err := db.Exec(`CREATE INDEX transactions.txblock ON transactions(block)`); err != nil { log.Printf(err.Error()) }
-		if _, err := db.Exec(`CREATE INDEX transactions.recipient_partial ON transactions(recipient) WHERE recipient IS NOT NULL`); err != nil { log.Printf(err.Error()) }
-		if _, err := db.Exec(`CREATE INDEX transactions.contractAddress_partial ON transactions(contractAddress) WHERE contractAddress IS NOT NULL`); err != nil { log.Printf(err.Error()) }
-		if _, err := db.Exec(`CREATE INDEX transactions.senderNonce ON transactions(sender, nonce)`); err != nil { log.Printf(err.Error()) }
+		if _, err := db.Exec(`CREATE INDEX transactions.txblock ON transactions(block)`); err != nil { log.Error("Migrate Transactions CREATE INDEX error", "err", err.Error()) }
+		if _, err := db.Exec(`CREATE INDEX transactions.recipient_partial ON transactions(recipient) WHERE recipient IS NOT NULL`); err != nil { log.Error("Migrate Transactions CREATE INDEX error", "err", err.Error()) }
+		if _, err := db.Exec(`CREATE INDEX transactions.contractAddress_partial ON transactions(contractAddress) WHERE contractAddress IS NOT NULL`); err != nil { log.Error("Migrate Transactions CREATE INDEX error", "err", err.Error()) }
+		if _, err := db.Exec(`CREATE INDEX transactions.senderNonce ON transactions(sender, nonce)`); err != nil { log.Error("Migrate Transactions CREATE INDEX error", "err", err.Error()) }
 		db.Exec(`UPDATE transactions.migrations SET version = 1;`)
-		log.Printf("transactions done")
+		log.Info("transaction migrations done")
 
 	}
 	return nil
@@ -136,15 +136,13 @@ func MigrateLogs(db *sql.DB, chainid uint64) error {
 		      blockHash varchar(32),
 		      PRIMARY KEY (block, logIndex)
 		    )`)
-		if _, err := db.Exec(`CREATE INDEX logs.address_compound ON event_logs(address, block)`); err != nil {
-			panic(err)
-		}
-		if _, err := db.Exec(`CREATE INDEX logs.topic0_compound ON event_logs(topic0, block)`); err != nil { log.Printf(err.Error()) }
-		if _, err := db.Exec(`CREATE INDEX logs.topic1_partial ON event_logs(topic1, block) WHERE topic1 IS NOT NULL`); err != nil { log.Printf(err.Error()) }
-		if _, err := db.Exec(`CREATE INDEX logs.topic2_partial ON event_logs(topic2, block) WHERE topic2 IS NOT NULL`); err != nil { log.Printf(err.Error()) }
-		if _, err := db.Exec(`CREATE INDEX logs.topic3_partial ON event_logs(topic3, block) WHERE topic3 IS NOT NULL`); err != nil { log.Printf(err.Error()) }
+		if _, err := db.Exec(`CREATE INDEX logs.address_compound ON event_logs(address, block)`); err != nil {log.Error("Migrate Logs CREATE INDEX error", "err", err.Error())}
+		if _, err := db.Exec(`CREATE INDEX logs.topic0_compound ON event_logs(topic0, block)`); err != nil { log.Error("Migrate Logs CREATE INDEX error", "err", err.Error()) }
+		if _, err := db.Exec(`CREATE INDEX logs.topic1_partial ON event_logs(topic1, block) WHERE topic1 IS NOT NULL`); err != nil { log.Error("Migrate Logs CREATE INDEX error", "err", err.Error()) }
+		if _, err := db.Exec(`CREATE INDEX logs.topic2_partial ON event_logs(topic2, block) WHERE topic2 IS NOT NULL`); err != nil { log.Error("Migrate Logs CREATE INDEX error", "err", err.Error()) }
+		if _, err := db.Exec(`CREATE INDEX logs.topic3_partial ON event_logs(topic3, block) WHERE topic3 IS NOT NULL`); err != nil { log.Error("Migrate Logs CREATE INDEX error", "err", err.Error()) }
 		db.Exec(`UPDATE logs.migrations SET version = 1;`)
-		log.Printf("logs done")
+		log.Info("logs migrations done")
 
 		//circle back and add the new log indexes if the testing is successful
 
@@ -163,7 +161,7 @@ func MigrateMempool(db *sql.DB, chainid uint64) error {
 	var schemaVersion uint
 	db.QueryRow("SELECT version FROM mempool.migrations;").Scan(&schemaVersion)
 	if schemaVersion < 1 {
-		log.Printf("Applying mempool migration")
+		log.Info("Applying mempool migration")
 		if _, err := db.Exec(`CREATE TABLE mempool.transactions (
 			gas BIGINT,
 			gasPrice BIGINT,
@@ -180,14 +178,12 @@ func MigrateMempool(db *sql.DB, chainid uint64) error {
 			sender varchar(20),
 			type TINYINT,
 			access_list blob);`); err != nil { return err }
-		log.Printf("starting index creation")
-		if _, err := db.Exec(`CREATE INDEX mempool.sender ON transactions(sender, nonce);`); err != nil { return err }
-		log.Printf("sender index created")
-		if _, err := db.Exec(`CREATE INDEX mempool.recipient ON transactions(recipient);`); err != nil { return err }
-		log.Printf("receipeint index created")
-		if _, err := db.Exec(`CREATE INDEX mempool.gasPrice ON transactions(gasPrice);`); err != nil { return err }
-		log.Printf("all indexes created")
+		log.Info("starting index creation mempool")
+		if _, err := db.Exec(`CREATE INDEX mempool.sender ON transactions(sender, nonce);`); err != nil { log.Error("Migrate mempool CREATE INDEX error", "err", err.Error()) }
+		if _, err := db.Exec(`CREATE INDEX mempool.recipient ON transactions(recipient);`); err != nil { log.Error("Migrate Logs CREATE INDEX error", "err", err.Error()) }
+		if _, err := db.Exec(`CREATE INDEX mempool.gasPrice ON transactions(gasPrice);`); err != nil { log.Error("Migrate Logs CREATE INDEX error", "err", err.Error())}
 		db.Exec(`UPDATE mempool.migrations SET version = 1;`)
+		log.Info("mempool migrations done")
 	}
   // chainid
   return nil

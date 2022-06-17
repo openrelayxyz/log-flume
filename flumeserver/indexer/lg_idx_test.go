@@ -3,7 +3,7 @@ package indexer
 import (
 	"testing"
 
-	// log "github.com/inconshreveable/log15"
+	log "github.com/inconshreveable/log15"
 	_ "github.com/mattn/go-sqlite3"
 	_ "net/http/pprof"
 )
@@ -35,8 +35,7 @@ func TestLogIndexer(t *testing.T) {
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
-	// below is a stem of a log statement left here for future debugging
-	// log.Info("information", "test", len(batches))
+	log.Info("Log indexer test", "Decompressing batches of length:", len(batches))
 	l := NewLogIndexer()
 
 	statements := []string{}

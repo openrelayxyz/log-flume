@@ -12,7 +12,7 @@ import (
 	"github.com/klauspost/compress/zlib"
 	"io"
 	"io/ioutil"
-	"log"
+	log "github.com/inconshreveable/log15"
 	"math/big"
 	"os"
 	"sort"
@@ -213,7 +213,7 @@ func getBlocks(ctx context.Context, db *sql.DB, includeTxs bool, chainid uint64,
 		}
 		logsBloom, err := decompress(bloomBytes)
 		if err != nil {
-			log.Printf("Error decompressing data: '%#x'", bloomBytes)
+			log.Error("Error decompressing data", "err", err.Error())
 			return nil, err
 		}
 		unclesList := []common.Hash{}
@@ -374,7 +374,7 @@ func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, chainid
 func getTransactionReceiptsQuery(ctx context.Context, db *sql.DB, offset, limit int, chainid uint64, query, logsQuery string, params ...interface{}) ([]map[string]interface{}, error) {
 	logRows, err := db.QueryContext(ctx, logsQuery, params...)
 	if err != nil {
-		log.Printf("Error selecting logs : %v - '%v'", err.Error(), query)
+		log.Error("Error selecting logs", "query", query, "err", err.Error())
 		return nil, err
 	}
 	txLogs := make(map[common.Hash]sortLogs)

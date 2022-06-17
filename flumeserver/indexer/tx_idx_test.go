@@ -3,7 +3,7 @@ package indexer
 import (
 	"bytes"
 	"fmt"
-	// log "github.com/inconshreveable/log15"
+	log "github.com/inconshreveable/log15"
 	"github.com/klauspost/compress/zlib"
 	_ "github.com/mattn/go-sqlite3"
 	"io"
@@ -65,8 +65,7 @@ func TestTransacitonIndexer(t *testing.T) {
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
-	// below is a stem of a log statement left here for future debugging
-	// log.Info("information", "test", len(batches))
+	log.Info("Transaction indexer test", "decompressing batches of length:", len(batches))
 	ti := NewTxIndexer(1, 2675000, 1150000)
 
 	statements := []string{}
