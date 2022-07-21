@@ -470,6 +470,7 @@ func getERC20Holders(ctx context.Context, w http.ResponseWriter, call *rpcCall, 
 type rpcTransaction struct {
   BlockHash        *common.Hash      `json:"blockHash"`
   BlockNumber      *hexutil.Big      `json:"blockNumber"`
+  Time             *hexutil.Big      `json:"timestamp,omitempty"`
   From             common.Address    `json:"from"`
   Gas              hexutil.Uint64    `json:"gas"`
   GasPrice         *hexutil.Big      `json:"gasPrice"`
@@ -531,14 +532,18 @@ func deriveChainID(x uint64) *hexutil.Big {
 // but is more efficient when the transactions can be limited to a single
 // block.
 func getTransactionsBlock(ctx context.Context, db *sql.DB, offset, limit int, chainid uint64, whereClause string, params ...interface{}) ([]*rpcTransaction, error) {
-	query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gas, transactions.gasPrice, transactions.hash, transactions.input, transactions.nonce, transactions.recipient, transactions.transactionIndex, transactions.value, transactions.v, transactions.r, transactions.s, transactions.sender, transactions.type, transactions.access_list, blocks.baseFee, transactions.gasFeeCap, transactions.gasTipCap FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE %v ORDER BY transactions.transactionIndex LIMIT ? OFFSET ?;", whereClause)
-	return getTransactionsQuery(ctx, db, offset, limit, chainid, query, params...)
+	query := fmt.Sprintf("SELECT blocks.hash, block, blocks.time, transactions.gas, transactions.gasPrice, transactions.hash, transactions.input, transactions.nonce, transactions.recipient, transactions.transactionIndex, transactions.value, transactions.v, transactions.r, transactions.s, transactions.sender, transactions.type, transactions.access_list, blocks.baseFee, transactions.gasFeeCap, transactions.gasTipCap FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE %v ORDER BY transactions.transactionIndex LIMIT ? OFFSET ?;", whereClause)
+	ctxs, err := getTransactionsQuery(ctx, db, offset, limit, chainid, query, params...)
+  //Time field is ommitted for methods outside of the flume namespace
+  for _, txn := range ctxs {
+    txn.Time = nil
+  }
 }
 
 // getTransaction returns zero or more transactions matching the whereClause
 // sorted by blockNumber, transactionIndex
 func getTransactions(ctx context.Context, db *sql.DB, offset, limit int, chainid uint64, whereClause string, params ...interface{}) ([]*rpcTransaction, error) {
-	query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gas, transactions.gasPrice, transactions.hash, transactions.input, transactions.nonce, transactions.recipient, transactions.transactionIndex, transactions.value, transactions.v, transactions.r, transactions.s, transactions.sender, transactions.type, transactions.access_list, blocks.baseFee, transactions.gasFeeCap, transactions.gasTipCap FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE transactions.rowid IN (SELECT transactions.rowid FROM transactions INNER JOIN blocks ON transactions.block = blocks.number WHERE %v) LIMIT ? OFFSET ?;", whereClause)
+	query := fmt.Sprintf("SELECT blocks.hash, block, blocks.time, transactions.gas, transactions.gasPrice, transactions.hash, transactions.input, transactions.nonce, transactions.recipient, transactions.transactionIndex, transactions.value, transactions.v, transactions.r, transactions.s, transactions.sender, transactions.type, transactions.access_list, blocks.baseFee, transactions.gasFeeCap, transactions.gasTipCap FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE transactions.rowid IN (SELECT transactions.rowid FROM transactions INNER JOIN blocks ON transactions.block = blocks.number WHERE %v) LIMIT ? OFFSET ?;", whereClause)
 	return getTransactionsQuery(ctx, db, offset, limit, chainid, query, params...)
 }
 func getTransactionsQuery(ctx context.Context, db *sql.DB, offset, limit int, chainid uint64, query string, params ...interface{}) ([]*rpcTransaction, error) {
@@ -548,11 +553,12 @@ func getTransactionsQuery(ctx context.Context, db *sql.DB, offset, limit int, ch
   results := []*rpcTransaction{}
   for rows.Next() {
     var amount, to, from, data, blockHashBytes, txHash, r, s, cAccessListRLP, baseFeeBytes, gasFeeCapBytes, gasTipCapBytes []byte
-    var nonce, gasLimit, blockNumber, gasPrice, txIndex, v uint64
+    var nonce, gasLimit, blockNumber, time, gasPrice, txIndex, v uint64
     var txTypeRaw sql.NullInt32
     err := rows.Scan(
       &blockHashBytes,
       &blockNumber,
+      &time,
       &gasLimit,
       &gasPrice,
       &txHash,
@@ -598,6 +604,7 @@ func getTransactionsQuery(ctx context.Context, db *sql.DB, offset, limit int, ch
     results = append(results, &rpcTransaction{
       BlockHash: &blockHash,                  //*common.Hash
       BlockNumber: uintToHexBig(blockNumber), //*hexutil.Big
+      Time: uintToHexBig(time),        //*hexutil.Big
       From: bytesToAddress(from),             //common.Address
       Gas: hexutil.Uint64(gasLimit),          //hexutil.Uint64
       GasPrice:  uintToHexBig(gasPrice),      //*hexutil.Big
@@ -763,6 +770,7 @@ func getTransactionReceiptsQuery(ctx context.Context, db *sql.DB, offset, limit 
   for rows.Next() {
     var to, from, blockHash, txHash, contractAddress, bloomBytes []byte
     var blockNumber, txIndex, gasUsed, cumulativeGasUsed, status, gasPrice  uint64
+
     var txTypeRaw sql.NullInt32
     err := rows.Scan(
       &blockHash,
