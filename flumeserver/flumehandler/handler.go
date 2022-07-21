@@ -534,6 +534,7 @@ func deriveChainID(x uint64) *hexutil.Big {
 func getTransactionsBlock(ctx context.Context, db *sql.DB, offset, limit int, chainid uint64, whereClause string, params ...interface{}) ([]*rpcTransaction, error) {
 	query := fmt.Sprintf("SELECT blocks.hash, block, blocks.time, transactions.gas, transactions.gasPrice, transactions.hash, transactions.input, transactions.nonce, transactions.recipient, transactions.transactionIndex, transactions.value, transactions.v, transactions.r, transactions.s, transactions.sender, transactions.type, transactions.access_list, blocks.baseFee, transactions.gasFeeCap, transactions.gasTipCap FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE %v ORDER BY transactions.transactionIndex LIMIT ? OFFSET ?;", whereClause)
 	ctxs, err := getTransactionsQuery(ctx, db, offset, limit, chainid, query, params...)
+  //Time field is ommitted for methods outside of the flume namespace
   for _, txn := range ctxs {
     txn.Time = nil
   }
