@@ -1052,9 +1052,6 @@ func getTransactionsByRecipient(ctx context.Context, w http.ResponseWriter, call
     return
   }
   ctxs, err := getTransactions(ctx, db, offset, 1000, chainid, "recipient = ?", trimPrefix(address.Bytes()))
-  for _, txn := range ctxs {
-    txn.Time = nil
-  }
   if err != nil {
     log.Printf("Error getting txs: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
