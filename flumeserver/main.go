@@ -174,7 +174,7 @@ func main() {
     notify.SendKafkaNotifications(completionFeed, *completionTopic)
   }
   var minBlock int
-  logsdb.QueryRowContext(context.Background(), "SELECT min(blockNumber) FROM event_logs;").Scan(&minBlock)
+  logsdb.QueryRowContext(context.Background(), "SELECT min(block) FROM event_logs;").Scan(&minBlock)
   if minBlock > *minSafeBlock {
     log.Fatalf("Earliest log found on block %v. Should be less than or equal to %v", minBlock, *minSafeBlock)
   }
