@@ -470,7 +470,7 @@ func getERC20Holders(ctx context.Context, w http.ResponseWriter, call *rpcCall, 
 type rpcTransaction struct {
   BlockHash        *common.Hash      `json:"blockHash"`
   BlockNumber      *hexutil.Big      `json:"blockNumber"`
-  Time             *hexutil.Big      `json:"time,omitempty"`
+  Time             *hexutil.Big      `json:"timestamp,omitempty"`
   From             common.Address    `json:"from"`
   Gas              hexutil.Uint64    `json:"gas"`
   GasPrice         *hexutil.Big      `json:"gasPrice"`
@@ -532,8 +532,11 @@ func deriveChainID(x uint64) *hexutil.Big {
 // but is more efficient when the transactions can be limited to a single
 // block.
 func getTransactionsBlock(ctx context.Context, db *sql.DB, offset, limit int, chainid uint64, whereClause string, params ...interface{}) ([]*rpcTransaction, error) {
-	query := fmt.Sprintf("SELECT blocks.hash, block, transactions.gas, transactions.gasPrice, transactions.hash, transactions.input, transactions.nonce, transactions.recipient, transactions.transactionIndex, transactions.value, transactions.v, transactions.r, transactions.s, transactions.sender, transactions.type, transactions.access_list, blocks.baseFee, transactions.gasFeeCap, transactions.gasTipCap FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE %v ORDER BY transactions.transactionIndex LIMIT ? OFFSET ?;", whereClause)
-	return getTransactionsQuery(ctx, db, offset, limit, chainid, query, params...)
+	query := fmt.Sprintf("SELECT blocks.hash, block, blocks.time, transactions.gas, transactions.gasPrice, transactions.hash, transactions.input, transactions.nonce, transactions.recipient, transactions.transactionIndex, transactions.value, transactions.v, transactions.r, transactions.s, transactions.sender, transactions.type, transactions.access_list, blocks.baseFee, transactions.gasFeeCap, transactions.gasTipCap FROM transactions INNER JOIN blocks ON blocks.number = transactions.block WHERE %v ORDER BY transactions.transactionIndex LIMIT ? OFFSET ?;", whereClause)
+	ctxs, err := getTransactionsQuery(ctx, db, offset, limit, chainid, query, params...)
+  for _, txn := range ctxs {
+    txn.Time = nil
+  }
 }
 
 // getTransaction returns zero or more transactions matching the whereClause
@@ -970,9 +973,6 @@ func getTransactionsBySender(ctx context.Context, w http.ResponseWriter, call *r
     return
   }
   ctxs, err := getTransactions(ctx, db, offset, 1000, chainid, "sender = ?", trimPrefix(address.Bytes()))
-  for _, txn := range ctxs {
-    txn.Time = nil
-  }
   if err != nil {
     log.Printf("Error getting txs: %v", err.Error())
     handleError(w, "error reading database", call.ID, 400)
