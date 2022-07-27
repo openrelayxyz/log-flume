@@ -12,7 +12,7 @@ import (
 )
 
 func ResolveFeed(url string, db *sql.DB, kafkaRollback, finishedLimit int64, chainid uint64, timestamp int64) (DataFeed, error) {
-  if strings.HasPrefix(url, "ws://") || strings.HasPrefix(url, "wss://") {
+  if strings.HasPrefix(url, "ws://") || strings.HasPrefix(url, "wss://") || strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://")  {
     return NewETHWSFeed(url, db)
   } else if strings.HasPrefix(url, "file://") {
     parts := strings.Split(strings.TrimPrefix(url, "file://"), ";")
