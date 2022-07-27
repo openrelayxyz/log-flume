@@ -61,8 +61,9 @@ func NewCardinalDataFeed(brokerURL string, rollback, reorgThreshold, chainid, re
 	}
 	resumption := strings.Join(startOffsets, ";")
 	var lastHash, lastWeight []byte
-	var lastNumber int64
-	db.QueryRowContext(context.Background(), "SELECT max(number), hash, td FROM blocks;").Scan(&lastNumber, &lastHash, &lastWeight)
+	var lastNumber, n int64
+	db.QueryRowContext(context.Background(), "SELECT max(number) FROM blocks;").Scan(&n)
+	db.QueryRowContext(context.Background(), "SELECT number, hash, td FROM blocks WHERE number = ?;", n - 3).Scan(&lastNumber, &lastHash, &lastWeight)
 
 	trackedPrefixes := []*regexp.Regexp{
 		regexp.MustCompile("c/[0-9a-z]+/b/[0-9a-z]+/h"),
