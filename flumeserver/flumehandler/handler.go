@@ -538,6 +538,7 @@ func getTransactionsBlock(ctx context.Context, db *sql.DB, offset, limit int, ch
   for _, txn := range ctxs {
     txn.Time = nil
   }
+  return ctxs, err
 }
 
 // getTransaction returns zero or more transactions matching the whereClause
