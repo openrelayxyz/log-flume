@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"regexp"
+    "encoding/json"
 	"github.com/ethereum/go-ethereum/event"
 	gtypes "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/common"
@@ -160,7 +161,6 @@ func (d *cardinalDataFeed) subscribe() {
 	}
 }
 
-
 func (d *cardinalDataFeed) Close() {
 	d.sub.Unsubscribe()
 	d.consumer.Close()
@@ -178,7 +178,7 @@ func (d *cardinalDataFeed) Ready() <-chan struct{} {
 }
 
 type txBundle struct {
-	tx *gtypes.Transaction
+	tx *Transaction
 	rm *cardinalReceiptMeta
 	logs map[int]*gtypes.Log
 }
@@ -195,7 +195,7 @@ type cardinalReceiptMeta struct {
 
 type extblock struct {
 	Header *gtypes.Header
-	Txs    []*gtypes.Transaction
+	Txs    []*Transaction
 	Uncles []*gtypes.Header
 }
 
@@ -251,8 +251,8 @@ func (d *cardinalDataFeed) chainEventFromCardinalBatch(pb *delivery.PendingBatch
 			if _, ok := txBundles[int(txIndex)]; !ok {
 				txBundles[int(txIndex)] = &txBundle{logs: make(map[int]*gtypes.Log)}
 			}
-			tx := &gtypes.Transaction{}
-			tx.UnmarshalBinary(v)
+			tx := &Transaction{}
+            json.Unmarshal(v, &tx)
 			txBundles[int(txIndex)].tx = tx
 		case uncleRegexp.MatchString(k):
 			parts := uncleRegexp.FindSubmatch([]byte(k))
@@ -292,8 +292,8 @@ func (d *cardinalDataFeed) chainEventFromCardinalBatch(pb *delivery.PendingBatch
 		ce.Block.Uncles[i] = uncle.Hash()
 		eb.Uncles[i] = uncle
 	}
-	eb.Txs = make([]*gtypes.Transaction, len(txBundles))
-	ce.Block.Transactions = make([]*gtypes.Transaction, len(txBundles))
+	eb.Txs = make([]*Transaction, len(txBundles))
+	ce.Block.Transactions = make([]*Transaction, len(txBundles))
 	ce.logs = make(map[common.Hash][]*gtypes.Log)
 	for i, v := range txBundles {
 		txHash := v.tx.Hash()

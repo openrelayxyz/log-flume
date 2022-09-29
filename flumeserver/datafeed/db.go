@@ -92,7 +92,7 @@ func (feed *dbDataFeed) subscribe() {
         StateRoot: block.Root(),
         Timestamp: hexutil.Uint64(block.Time()),
         TotalDifficulty: hexutil.Big(*td),
-        Transactions: block.Transactions(),
+        Transactions: ethTransactionToCustomTransaction(block.Transactions()),
         TransactionsRoot: block.TxHash(),
         Uncles: make([]common.Hash, len(block.Uncles())),
         BaseFee: baseFee,
@@ -115,4 +115,12 @@ func (feed *dbDataFeed) subscribe() {
     feed.feed.Send(ce)
   })
   feed.ready <- struct{}{}
+}
+
+func ethTransactionToCustomTransaction(transactions types.Transactions) []*Transaction {
+  var customTransaction []*Transaction
+  for _, transaction := range transactions {
+    customTransaction = append(customTransaction, &Transaction{transaction.Hash()})
+  }
+  return customTransaction
 }

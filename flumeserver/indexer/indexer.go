@@ -5,7 +5,6 @@ import (
   "strings"
   "bytes"
   "context"
-  "math/big"
   // "github.com/openrelayxyz/flume/flumeserver/logfeed"
   "github.com/openrelayxyz/flume/flumeserver/datafeed"
   "github.com/openrelayxyz/flume/flumeserver/txfeed"
@@ -13,7 +12,6 @@ import (
   "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/common"
   "github.com/ethereum/go-ethereum/common/hexutil"
-  "github.com/ethereum/go-ethereum/common/math"
   "github.com/ethereum/go-ethereum/rlp"
   "github.com/ethereum/go-ethereum/event"
   "log"
@@ -128,17 +126,10 @@ func applyParameters(query string, params ...interface{}) string {
 // eip155block and homesteadBlock and contingent logic are probably unnecessary and can be eliminated
 func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *txfeed.TxFeed, db *sql.DB, quit <-chan struct{}, eip155Block, homesteadBlock uint64, mut *sync.RWMutex, mempoolSlots int) {
   log.Printf("Processing data feed")
-  txCh := make(chan *types.Transaction, 200)
-  txSub := txFeed.Subscribe(txCh)
   ch := make(chan *datafeed.ChainEvent, 10)
   sub := feed.Subscribe(ch)
   processed := false
-  pruneTicker := time.NewTicker(5 * time.Second)
-  txCount := 0
-  txDedup := make(map[common.Hash]struct{})
   defer sub.Unsubscribe()
-  defer txSub.Unsubscribe()
-  db.Exec("DELETE FROM mempool.transactions WHERE 1;")
   for {
     select {
     case <-quit:
@@ -147,86 +138,6 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *
       }
       log.Printf("Shutting down index process")
       return
-    case <- pruneTicker.C:
-      txDedup = make(map[common.Hash]struct{})
-      db.QueryRow("SELECT count(*) FROM mempool.transactions;").Scan(&txCount)
-      if txCount > mempoolSlots {
-        // pstart := time.Now()
-        if _, err := db.Exec("DELETE FROM mempool.transactions WHERE gasPrice < (SELECT gasPrice FROM mempool.transactions ORDER BY gasPrice LIMIT 1 OFFSET ?);", mempoolSlots); err != nil {
-          log.Printf("Error pruning: %v", err.Error())
-        }
-        // log.Printf("Pruned %v transactions from mempool in %v", (txCount - mempoolSlots), time.Since(pstart))
-      }
-    case tx := <-txCh:
-      txHash := tx.Hash()
-      if _, ok := txDedup[txHash]; ok {
-        continue
-      }
-      var signer types.Signer
-      var accessListRLP []byte
-      gasPrice := tx.GasPrice().Uint64()
-      switch {
-      case tx.Type() == types.AccessListTxType:
-        accessListRLP, _ = rlp.EncodeToBytes(tx.AccessList())
-        signer = types.NewEIP2930Signer(tx.ChainId())
-      case tx.Type() == types.DynamicFeeTxType:
-        signer = types.NewLondonSigner(tx.ChainId())
-        accessListRLP, _ = rlp.EncodeToBytes(tx.AccessList())
-        gasPrice = tx.GasFeeCap().Uint64()
-      default:
-        signer = types.NewEIP155Signer(tx.ChainId())
-      }
-      sender, _ := types.Sender(signer, tx)
-      var to []byte
-      if tx.To() != nil {
-        to = trimPrefix(tx.To().Bytes())
-      }
-      v, r, s := tx.RawSignatureValues()
-      statements := []string{}
-      // If this is a replacement transaction, delete any it might be replacing
-      statements = append(statements, applyParameters(
-        "DELETE FROM mempool.transactions WHERE sender = %v AND nonce = %v",
-        sender,
-        tx.Nonce(),
-      ))
-      // Insert the transaction
-      statements = append(statements, applyParameters(
-        "INSERT INTO mempool.transactions(gas, gasPrice, hash, input, nonce, recipient, `value`, v, r, s, sender, `type`, access_list, gasFeeCap, gasTipCap) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
-        tx.Gas(),
-        gasPrice,
-        txHash,
-        getCopy(compress(tx.Data())),
-        tx.Nonce(),
-        to,
-        trimPrefix(tx.Value().Bytes()),
-        v.Int64(),
-        r,
-        s,
-        sender,
-        tx.Type(),
-        compress(accessListRLP),
-        trimPrefix(tx.GasFeeCap().Bytes()),
-        trimPrefix(tx.GasTipCap().Bytes()),
-      ))
-      // Delete the transaction we just inserted if the confirmed transactions
-      // pool has a conflicting entry
-      statements = append(statements, applyParameters(
-        "DELETE FROM mempool.transactions WHERE sender = %v AND nonce = %v AND (sender, nonce) IN (SELECT sender, nonce FROM transactions)",
-        sender,
-        tx.Nonce(),
-      ))
-      if txCount > (11 * mempoolSlots / 10) {
-        // More than 10% above mempool limit, prune some.
-        statements = append(statements, applyParameters(
-          "DELETE FROM mempool.transactions WHERE gasPrice < (SELECT gasPrice FROM mempool.transactions ORDER BY gasPrice LIMIT 1 OFFSET %v)",
-          mempoolSlots,
-        ))
-        txCount = mempoolSlots
-      }
-      if _, err := db.Exec(strings.Join(statements, " ; ") + ";"); err != nil {
-        log.Printf("Error on insert: %v - '%v'", err.Error(), strings.Join(statements, " ; ") )
-      }
-      txCount++
     case chainEvent := <- ch:
       start := time.Now()
       BLOCKLOOP:
@@ -280,85 +191,8 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *
           chainEvent.Block.TotalDifficulty.ToInt().Bytes(),
           chainEvent.Block.BaseFee,
         ))
-        var signer types.Signer
-        senderMap := make(map[common.Hash]<-chan common.Address)
         for _, txwr := range chainEvent.TxWithReceipts() {
-          ch := make(chan common.Address, 1)
-          senderMap[txwr.Transaction.Hash()] = ch
-          go func(tx *types.Transaction, ch chan<- common.Address) {
-            switch {
-            case tx.Type() == types.AccessListTxType:
-              signer = types.NewEIP2930Signer(tx.ChainId())
-            case tx.Type() == types.DynamicFeeTxType:
-              signer = types.NewLondonSigner(tx.ChainId())
-            case uint64(chainEvent.Block.Number.ToInt().Int64()) > eip155Block:
-              signer = types.NewEIP155Signer(tx.ChainId())
-            case uint64(chainEvent.Block.Number.ToInt().Int64()) > homesteadBlock:
-              signer = types.HomesteadSigner{}
-            default:
-              signer = types.FrontierSigner{}
-            }
-            sender, err := types.Sender(signer, tx)
-            if err != nil {
-              log.Printf("WARN: Failed to derive sender: %v", err.Error())
-            }
-            ch <- sender
-          }(txwr.Transaction, ch)
-        }
-        for _, txwr := range chainEvent.TxWithReceipts() {
-          v, r, s := txwr.Transaction.RawSignatureValues()
           txHash := txwr.Transaction.Hash()
-          sender := <-senderMap[txHash]
-          if sender == (common.Address{}) {
-            dbtx.Rollback()
-            stats := db.Stats()
-            log.Printf("WARN: Failed to derive sender.")
-            log.Printf("SQLite Pool - Open: %v InUse: %v Idle: %v", stats.OpenConnections, stats.InUse, stats.Idle)
-            continue BLOCKLOOP
-          }
-          var to []byte
-          if txwr.Transaction.To() != nil {
-            to = trimPrefix(txwr.Transaction.To().Bytes())
-          }
-          var accessListRLP []byte
-          gasPrice := txwr.Transaction.GasPrice().Uint64()
-          switch txwr.Transaction.Type() {
-          case types.AccessListTxType:
-            accessListRLP, _ = rlp.EncodeToBytes(txwr.Transaction.AccessList())
-          case types.DynamicFeeTxType:
-            accessListRLP, _ = rlp.EncodeToBytes(txwr.Transaction.AccessList())
-            gasPrice = math.BigMin(new(big.Int).Add(txwr.Transaction.GasTipCap(), chainEvent.Block.BaseFee.ToInt()), txwr.Transaction.GasFeeCap()).Uint64()
-          }
-          // log.Printf("Inserting transaction %#x", txwr.Transaction.Hash())
-          statements = append(statements, applyParameters(
-            "DELETE FROM mempool.transactions WHERE sender = %v AND nonce = %v", sender, txwr.Transaction.Nonce(),
-          ))
-          statements = append(statements, applyParameters(
-            "INSERT INTO transactions(block, gas, gasPrice, hash, input, nonce, recipient, transactionIndex, `value`, v, r, s, sender, func, contractAddress, cumulativeGasUsed, gasUsed, logsBloom, `status`, `type`, access_list, gasFeeCap, gasTipCap) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
-            chainEvent.Block.Number.ToInt().Int64(),
-            txwr.Transaction.Gas(),
-            gasPrice,
-            txHash,
-            getCopy(compress(txwr.Transaction.Data())),
-            txwr.Transaction.Nonce(),
-            to,
-            txwr.Receipt.TransactionIndex,
-            trimPrefix(txwr.Transaction.Value().Bytes()),
-            v.Int64(),
-            r,
-            s,
-            sender,
-            getFuncSig(txwr.Transaction.Data()),
-            nullZeroAddress(txwr.Receipt.ContractAddress),
-            txwr.Receipt.CumulativeGasUsed,
-            txwr.Receipt.GasUsed,
-            getCopy(compress(txwr.Receipt.Bloom.Bytes())),
-            txwr.Receipt.Status,
-            txwr.Transaction.Type(),
-            compress(accessListRLP),
-            trimPrefix(txwr.Transaction.GasFeeCap().Bytes()),
-            trimPrefix(txwr.Transaction.GasTipCap().Bytes()),
-          ))
           for _, logRecord := range txwr.Receipt.Logs {
             statements = append(statements, applyParameters(
               "INSERT OR IGNORE INTO event_logs(address, topic0, topic1, topic2, topic3, data, block, logIndex, transactionHash, transactionIndex, blockhash) VALUES (%v, %v, %v, %v, %v, %v, %v, %v, %v, %v, %v)",
@@ -400,7 +234,6 @@ func ProcessDataFeed(feed datafeed.DataFeed, completionFeed event.Feed, txFeed *
         completionFeed.Send(chainEvent.Block.Hash)
         // log.Printf("Spent %v on commit", time.Since(cstart))
         log.Printf("Committed Block %v (%#x) in %v (age %v)", uint64(chainEvent.Block.Number.ToInt().Int64()), chainEvent.Block.Hash.Bytes(), time.Since(start), time.Since(time.Unix(int64(chainEvent.Block.Timestamp), 0)))
-        db.QueryRow("SELECT count(*) FROM mempool.transactions;").Scan(&txCount)
         break
       }
     }

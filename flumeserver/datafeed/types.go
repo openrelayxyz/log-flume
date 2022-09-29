@@ -37,10 +37,18 @@ type miniBlock struct {
   StateRoot common.Hash  `json:"stateRoot"`
   Timestamp hexutil.Uint64  `json:"timestamp"`
   TotalDifficulty hexutil.Big `json:"totalDifficulty"`
-  Transactions []*types.Transaction `json:"transactions"`
+  Transactions []*Transaction `json:"transactions"`
   TransactionsRoot common.Hash `json:"transactionsRoot"`
   Uncles []common.Hash  `json:"uncles"`
   BaseFee *hexutil.Big `json:"baseFeePerGas"`
+}
+
+type Transaction struct {
+  TxHash common.Hash `json:"hash"`
+}
+
+func (tx *Transaction) Hash() common.Hash {
+  return tx.TxHash
 }
 
 // TODO: Save the fields off the block that we actually need.
@@ -60,7 +68,7 @@ func (ce *ChainEvent) Logs() []*types.Log {
 }
 
 type TxWithReceipt struct {
-  Transaction *types.Transaction
+  Transaction *Transaction
   Receipt *types.Receipt
 }
 
@@ -94,7 +102,7 @@ func (ce *ChainEvent) Receipts() []*types.Receipt {
   return receipts
 }
 
-func (ce *ChainEvent) Transactions() types.Transactions {
+func (ce *ChainEvent) Transactions() []*Transaction {
   return ce.Block.Transactions
 }
 

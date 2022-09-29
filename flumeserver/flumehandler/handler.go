@@ -114,56 +114,56 @@ func GetHandler(db *sql.DB, chainid uint64, mut *sync.RWMutex) func(http.Respons
     switch call.Method {
     case "eth_getLogs":
       getLogs(r.Context(), w, call, db, chainid)
-    case "eth_blockNumber":
-      getBlockNumber(r.Context(), w, call, db, chainid)
-    case "eth_getTransactionByHash":
-      getTransactionByHash(r.Context(), w, call, db, chainid)
-    case "eth_getTransactionByBlockHashAndIndex":
-      getTransactionByBlockHashAndIndex(r.Context(), w, call, db, chainid)
-    case "eth_getTransactionByBlockNumberAndIndex":
-      getTransactionByBlockNumberAndIndex(r.Context(), w, call, db, chainid)
-    case "eth_getTransactionReceipt":
-      getTransactionReceipt(r.Context(), w, call, db, chainid)
-    case "eth_getBlockByNumber":
-      getBlockByNumber(r.Context(), w, call, db, chainid)
-    case "eth_getBlockByHash":
-      getBlockByHash(r.Context(), w, call, db, chainid)
-    case "eth_getBlockTransactionCountByNumber":
-      getBlockTransactionCountByNumber(r.Context(), w, call, db, chainid)
-    case "eth_getBlockTransactionCountByHash":
-      getBlockTransactionCountByHash(r.Context(), w, call, db, chainid)
-    case "eth_getUncleCountByBlockNumber":
-      getUncleCountByBlockNumber(r.Context(), w, call, db, chainid)
-    case "eth_getUncleCountByBlockHash":
-      getUncleCountByBlockHash(r.Context(), w, call, db, chainid)
-    case "eth_gasPrice":
-      gasPrice(r.Context(), w, call, db, chainid)
-    case "eth_feeHistory":
-      feeHistory(r.Context(), w, call, db, chainid)
-    case "eth_maxPriorityFeePerGas":
-      maxPriorityFeePerGas(r.Context(), w, call, db, chainid)
-    case "eth_getTransactionCount":
-      getTransactionCount(r.Context(), w, call, db, chainid)
-    case "flume_erc20ByAccount":
-      getERC20ByAccount(r.Context(), w, call, db, chainid)
-    case "flume_erc20Holders":
-      getERC20Holders(r.Context(), w, call, db, chainid)
-    case "flume_getTransactionsBySender":
-      getTransactionsBySender(r.Context(), w, call, db, chainid)
-    case "flume_getTransactionReceiptsBySender":
-      getTransactionReceiptsBySender(r.Context(), w, call, db, chainid)
-    case "flume_getTransactionsByRecipient":
-      getTransactionsByRecipient(r.Context(), w, call, db, chainid)
-    case "flume_getTransactionReceiptsByRecipient":
-      getTransactionReceiptsByRecipient(r.Context(), w, call, db, chainid)
-    case "flume_getTransactionsByParticipant":
-      getTransactionsByParticipant(r.Context(), w, call, db, chainid)
-    case "flume_getTransactionReceiptsByParticipant":
-      getTransactionReceiptsByParticipant(r.Context(), w, call, db, chainid)
-    case "flume_getTransactionReceiptsByBlockHash":
-      getTransactionReceiptsByBlockHash(r.Context(), w, call, db, chainid)
-    case "flume_getTransactionReceiptsByBlockNumber":
-      getTransactionReceiptsByBlockNumber(r.Context(), w, call, db, chainid)
+    //case "eth_blockNumber":
+    //  getBlockNumber(r.Context(), w, call, db, chainid)
+    //case "eth_getTransactionByHash":
+    //  getTransactionByHash(r.Context(), w, call, db, chainid)
+    //case "eth_getTransactionByBlockHashAndIndex":
+    //  getTransactionByBlockHashAndIndex(r.Context(), w, call, db, chainid)
+    //case "eth_getTransactionByBlockNumberAndIndex":
+    //  getTransactionByBlockNumberAndIndex(r.Context(), w, call, db, chainid)
+    //case "eth_getTransactionReceipt":
+    //  getTransactionReceipt(r.Context(), w, call, db, chainid)
+    //case "eth_getBlockByNumber":
+    //  getBlockByNumber(r.Context(), w, call, db, chainid)
+    //case "eth_getBlockByHash":
+    //  getBlockByHash(r.Context(), w, call, db, chainid)
+    //case "eth_getBlockTransactionCountByNumber":
+    //  getBlockTransactionCountByNumber(r.Context(), w, call, db, chainid)
+    //case "eth_getBlockTransactionCountByHash":
+    //  getBlockTransactionCountByHash(r.Context(), w, call, db, chainid)
+    //case "eth_getUncleCountByBlockNumber":
+    //  getUncleCountByBlockNumber(r.Context(), w, call, db, chainid)
+    //case "eth_getUncleCountByBlockHash":
+    //  getUncleCountByBlockHash(r.Context(), w, call, db, chainid)
+    //case "eth_gasPrice":
+    //  gasPrice(r.Context(), w, call, db, chainid)
+    //case "eth_feeHistory":
+    //  feeHistory(r.Context(), w, call, db, chainid)
+    //case "eth_maxPriorityFeePerGas":
+    //  maxPriorityFeePerGas(r.Context(), w, call, db, chainid)
+    //case "eth_getTransactionCount":
+    //  getTransactionCount(r.Context(), w, call, db, chainid)
+    //case "flume_erc20ByAccount":
+    //  getERC20ByAccount(r.Context(), w, call, db, chainid)
+    //case "flume_erc20Holders":
+    //  getERC20Holders(r.Context(), w, call, db, chainid)
+    //case "flume_getTransactionsBySender":
+    //  getTransactionsBySender(r.Context(), w, call, db, chainid)
+    //case "flume_getTransactionReceiptsBySender":
+    //  getTransactionReceiptsBySender(r.Context(), w, call, db, chainid)
+    //case "flume_getTransactionsByRecipient":
+    //  getTransactionsByRecipient(r.Context(), w, call, db, chainid)
+    //case "flume_getTransactionReceiptsByRecipient":
+    //  getTransactionReceiptsByRecipient(r.Context(), w, call, db, chainid)
+    //case "flume_getTransactionsByParticipant":
+    //  getTransactionsByParticipant(r.Context(), w, call, db, chainid)
+    //case "flume_getTransactionReceiptsByParticipant":
+    //  getTransactionReceiptsByParticipant(r.Context(), w, call, db, chainid)
+    //case "flume_getTransactionReceiptsByBlockHash":
+    //  getTransactionReceiptsByBlockHash(r.Context(), w, call, db, chainid)
+    //case "flume_getTransactionReceiptsByBlockNumber":
+    //  getTransactionReceiptsByBlockNumber(r.Context(), w, call, db, chainid)
     default:
       handleError(w, "unsupported method", call.ID, 400)
     }

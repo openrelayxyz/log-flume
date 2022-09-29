@@ -62,7 +62,7 @@ func ChainEventFromKafka(kce *replica.ChainEvent) *ChainEvent {
       StateRoot: kce.Block.Root(),
       Timestamp: hexutil.Uint64(kce.Block.Time()),
       TotalDifficulty: hexutil.Big(*kce.Td),
-      Transactions: kce.Block.Transactions(),
+      Transactions: ethTransactionToCustomTransaction(kce.Block.Transactions()),
       TransactionsRoot: kce.Block.TxHash(),
       Uncles: make([]common.Hash, len(kce.Block.Uncles())),
       BaseFee: baseFee,
