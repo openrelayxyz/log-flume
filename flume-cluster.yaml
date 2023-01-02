@@ -160,7 +160,7 @@ Parameters:
     Default: flume
     Type: String
   ReadOnly:
-    Type: string
+    Type: String
     Description: If true, this node will not be configured to sync from Kafka or take new backups
     AllowedValues:
       - "true"
