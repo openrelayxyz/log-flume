@@ -1880,6 +1880,7 @@ Resources:
         - Arn: !Sub ${FlumeSnapshotLambdaFunction.Arn}
           Id: !Sub "snapshot-${AWS::StackName}"
   FlumeSnapshotInvokePermission:
+    Condition: NotReadOnly
     Type: AWS::Lambda::Permission
     Properties:
       FunctionName: !Sub ${FlumeSnapshotLambdaFunction.Arn}
