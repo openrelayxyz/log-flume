@@ -1760,7 +1760,7 @@ Resources:
           - Action:
               - cloudwatch:PutMetricAlarm
             Resource:
-              - !Sub "${SnapshotAgeWarning.Arn}"
+              - !Sub "*"
             Effect: Allow
           - Action:
               - cloudformation:DescribeStacks
