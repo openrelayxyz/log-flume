@@ -159,6 +159,13 @@ Parameters:
     Description: The name of the consul service
     Default: flume
     Type: String
+  ReadOnly:
+    Type: string
+    Description: If true, this node will not be configured to sync from Kafka or take new backups
+    AllowedValues:
+      - "true"
+      - "false"
+    Default: "false"
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -334,6 +341,7 @@ Conditions:
   HasRollback: !Not [ !Equals [!Ref FlumeKafkaRollback, 0] ]
   HasUrgentWebhook: !Not [ !Equals [ !Ref UrgentAlarmWebhook, "" ]]
   HasWarningWebhook: !Not [ !Equals [ !Ref WarningAlarmWebhook, "" ]]
+  NotReadOnly: !Equals [ !Ref ReadOnly, "false" ]
 
 
 Resources:
@@ -519,6 +527,7 @@ Resources:
       Threshold: 80
       TreatMissingData: missing
   SnapshotAgeWarning:
+    Condition: NotReadOnly
     Type: AWS::CloudWatch::Alarm
     Properties:
       AlarmActions:
@@ -1862,6 +1871,7 @@ Resources:
       Runtime: python3.7
       Timeout: 30
   SnapshotSchedulerRule:
+    Condition: NotReadOnly
     Type: AWS::Events::Rule
     Properties:
       Description: !Sub "Take a daily snapshot for the ${AWS::StackName} cluster"
