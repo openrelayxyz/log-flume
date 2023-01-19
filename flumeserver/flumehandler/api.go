@@ -10,6 +10,8 @@ import (
   "github.com/ethereum/go-ethereum/common"
   "github.com/ethereum/go-ethereum/common/hexutil"
   "github.com/openrelayxyz/flume/flumeserver/tokens"
+  "github.com/openrelayxyz/cardinal-evm/rlp"
+  "github.com/openrelayxyz/cardinal-types"
   "log"
   "strings"
   "sync"
@@ -325,7 +327,7 @@ func accountBlocksMined(w http.ResponseWriter, r *http.Request, db *sql.DB) {
   // TODO: Use GROUP_CONCAT to avoid separate queries for gas usage
   rows, err := db.QueryContext(r.Context(),
     fmt.Sprintf(`SELECT
-        blocks.number, blocks.time, issuance.value, GROUP_CONCAT(transactions.gasUsed), GROUP_CONCAT(transactions.gasPrice)
+        blocks.number, blocks.time, blocks.baseFee, blocks.gasUsed, blocks.uncles, issuance.value, GROUP_CONCAT(transactions.gasUsed), GROUP_CONCAT(transactions.gasPrice)
       FROM blocks INDEXED BY coinbase
       INNER JOIN issuance on blocks.number > issuance.startBlock AND blocks.number < issuance.endBlock
       INNER JOIN transactions on transactions.block = blocks.number
@@ -334,18 +336,27 @@ func accountBlocksMined(w http.ResponseWriter, r *http.Request, db *sql.DB) {
   if handleApiError(err, w, "database error", "Error! Database error", "Error querying", 500) { return }
   result := []*minersBlock{}
   for rows.Next() {
+    var baseFeeBytes, uncles []byte
     var blockNumber uint64
-    var issuance int64
+    var issuance, gasUsed int64
     var blockTime, gasUsedConcat, gasPriceConcat string
-    if handleApiError(rows.Scan(&blockNumber, &blockTime, &issuance, &gasUsedConcat, &gasPriceConcat), w, "database error", "Error! Database error", "Error processing", 500) { return }
+    if handleApiError(rows.Scan(&blockNumber, &blockTime, &baseFeeBytes, &gasUsed, &uncles, &issuance, &gasUsedConcat, &gasPriceConcat), w, "database error", "Error! Database error", "Error processing", 500) { return }
     gasUsedList := strings.Split(gasUsedConcat, ",")
     gasPriceList := strings.Split(gasPriceConcat, ",")
     reward := big.NewInt(issuance)
+    uncleFee := new(big.Int).Div(big.NewInt(issuance), big.NewInt(32))
+    unclesList := []types.Hash{}
+    rlp.DecodeBytes(uncles, &unclesList)
+    uncleReward := new(big.Int).Mul(uncleFee, big.NewInt(int64(len(unclesList))))
+    reward.Add(reward, uncleReward)
     for i := 0; i < len(gasUsedList); i++ {
       gasUsed, _ := new(big.Int).SetString(gasUsedList[i], 10)
       gasPrice, _ := new(big.Int).SetString(gasPriceList[i], 10)
       reward.Add(reward, new(big.Int).Mul(gasUsed, gasPrice))
     }
+    baseFee := new(big.Int).SetBytes(baseFeeBytes)
+    gasUsedBlock := big.NewInt(gasUsed)
+    reward.Sub(reward, new(big.Int).Mul(baseFee, gasUsedBlock))
     result = append(result, &minersBlock{
       BlockNumber: fmt.Sprintf("%d", blockNumber),
       TimeStamp: blockTime,
