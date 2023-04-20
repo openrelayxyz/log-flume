@@ -19,7 +19,7 @@
     "gatsby-background-image": "^0.7.2",
     "gatsby-image": "^2.2.39",
     "gatsby-plugin-react-helmet": "^3.1.21",
-    "gatsby-plugin-sharp": "^2.3.13",
+    "gatsby-plugin-sharp": "^4.25.1",
     "gatsby-plugin-stripe": "^1.2.3",
     "gatsby-plugin-styled-components": "^3.1.17",
     "gatsby-plugin-transition-link": "^1.17.7",
